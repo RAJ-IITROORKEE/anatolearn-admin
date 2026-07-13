@@ -215,9 +215,9 @@ concern, not a Phase 3 code completion gate.
 
 ## Verification gaps and current risks
 
-1. The dedicated `TEST_DATABASE_URL` suite did not run; four PostgreSQL integration
-   tests were skipped, including the explicit concurrent-submission placeholder. Real
-   database concurrency/guard behavior therefore remains unverified in this run.
+1. The dedicated assessment PostgreSQL suite passed against a migrated isolated schema,
+   including real multi-client finalization and deployed immutability guards. Broader
+   database/provider integration remains incomplete.
 2. Supabase provider/auth and signed-URL integration is mocked. Authenticated content/
    media/audit/flashcard/question CRUD and full learner assessment E2E are absent.
 3. Scheduled expiry is not deployment-ready until a valid `CRON_SECRET` and Vercel cron

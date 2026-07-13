@@ -88,17 +88,22 @@ package files, migrations, environment values, and secrets were not modified.
 | `npm run prisma:deploy` | Passed; deployed `20260713090000_add_assessment_snapshot_guards` |
 | `npm run lint` | Passed |
 | `npm run typecheck` | Passed |
-| `npm run test` | Passed: 61 files, 205 tests; 4 conditional PostgreSQL tests skipped |
+| `npm run test` | Passed: 61 files, 206 tests; 4 conditional PostgreSQL tests skipped in the default run |
+| Dedicated assessment PostgreSQL suite | Passed: 4 tests against migrated isolated `anatolearn_phase5_test` schema, including concurrent finalization |
 | `npm run build` | Passed without a `CRON_SECRET` process override |
 | `npm run test:e2e` | Passed against the existing live development server: 3 passed, 1 skipped |
 | `npm run env:check` | **Failed** only for invalid `CRON_SECRET` |
 | OpenAPI structural validation | Passed; specification is valid |
 | Prisma migration status | Current |
 
-The implementation verification results are the latest supplied record and were
-reconciled with the inspected routes/tests/migration. The skipped tests are the four
-cases in `features/assessments/postgres.integration.test.ts`; they require a dedicated
-`TEST_DATABASE_URL` different from `DATABASE_URL`. Environment validation and Phase 5
+The default suite skips the four cases in
+`features/assessments/postgres.integration.test.ts` unless `TEST_DATABASE_URL` differs
+from `DATABASE_URL`. They were also run separately against a migrated isolated schema
+and all four passed. That run verified snapshot and terminal immutability, source-edit
+stability, and real multi-connection concurrent finalization. It exposed and fixed raw
+PostgreSQL serialization failures arriving as Prisma `P2010` with SQLSTATE `40001`; the
+shared assessment transaction retry now handles those alongside `P2034` and deadlock
+SQLSTATE `40P01`. Environment validation and Phase 5
 deployment configuration must not be reported as passing until `CRON_SECRET` is replaced
 with at least 32 random characters and the deployed one-minute schedule is verified. The
 regression test in `lib/env.test.ts` specifically proves that shared runtime validation
@@ -119,15 +124,12 @@ delivery remains strict. Service and DTO regression tests cover the failure path
 
 ## Phase 5 residual limitations and risks
 
-1. Dedicated PostgreSQL assessment concurrency/guard integration did not run. The
-   conditional suite skipped four tests, including the explicit multi-connection
-   concurrent-submission placeholder.
-2. Supabase provider/auth and private signed-URL integration remains mocked.
-3. Full authenticated learner assessment CRUD/lifecycle E2E is absent, as are existing
+1. Supabase provider/auth and private signed-URL integration remains mocked.
+2. Full authenticated learner assessment CRUD/lifecycle E2E is absent, as are existing
    authenticated admin content/media/flashcard/question CRUD flows.
-4. Cron processing requires deployment `CRON_SECRET` and Vercel scheduling; lazy expiry
+3. Cron processing requires deployment `CRON_SECRET` and Vercel scheduling; lazy expiry
    limits stale reads but does not configure operations.
-5. Existing media-picker/lesson-editor and process-local rate-limiter gaps remain.
+4. Existing media-picker/lesson-editor and process-local rate-limiter gaps remain.
 
 ## Next phase
 

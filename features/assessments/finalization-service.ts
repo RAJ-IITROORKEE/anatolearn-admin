@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db/prisma";
 import { AssessmentError, calculateAttemptResult, durationSeconds, hasTestExpired } from "./domain";
 
 const TRANSACTION_ATTEMPTS = 3;
+const RETRYABLE_POSTGRES_CODES = new Set(["40001", "40P01"]);
 export const attemptInclude = {
   topics: { orderBy: { topicId: "asc" as const } },
   questions: { orderBy: { displayOrder: "asc" as const } },
@@ -23,7 +24,11 @@ export async function retryAssessmentTransaction<T>(callback: (tx: Prisma.Transa
     try {
       return await prisma.$transaction(callback, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
+      const retryable = error instanceof Prisma.PrismaClientKnownRequestError && (
+        error.code === "P2034"
+        || (error.code === "P2010" && RETRYABLE_POSTGRES_CODES.has(String(error.meta?.code)))
+      );
+      if (retryable) {
         if (number < TRANSACTION_ATTEMPTS) continue;
         throw new AssessmentError("TRANSACTION_FAILED", "Assessment transaction could not be completed.", 409);
       }

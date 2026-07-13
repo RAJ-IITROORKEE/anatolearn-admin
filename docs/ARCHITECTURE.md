@@ -412,9 +412,11 @@ routes are read-only.
   preserve the current query filters while changing the page.
 - Published DTOs still expose legacy URL fields or managed media IDs rather than
   embedding signed URLs; clients must make a separate authenticated media request.
-- The dedicated PostgreSQL assessment/concurrency suite was not run because
-  `TEST_DATABASE_URL` was not configured; four integration tests were skipped. Unit
-  tests mock transaction boundaries, and no real concurrent-submit orchestration ran.
+- The dedicated PostgreSQL assessment/concurrency suite passed against the migrated
+  isolated `anatolearn_phase5_test` schema. It verifies deployed guards, source snapshot
+  stability, and multi-client concurrent finalization. The run exposed Prisma raw-query
+  `P2010`/SQLSTATE `40001` serialization errors, which are now retried with `P2034` and
+  PostgreSQL deadlocks. The suite remains conditional in ordinary local runs.
 - Supabase provider/auth and signed-URL integration is mocked. Authenticated full CRUD
   and full learner assessment browser coverage is absent.
 - Cron finalization requires a deployment `CRON_SECRET` of at least 32 characters and

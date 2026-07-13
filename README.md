@@ -134,9 +134,10 @@ npm run build
 ```
 
 Install Chromium once with `npx playwright install chromium`. The latest Phase 5 record
-is in `docs/PHASE_STATUS.md`: lint, typecheck, 61 Vitest files/205 tests, build, and
-Playwright (3 passed, 1 skipped) passed. Four PostgreSQL integration tests were skipped
-because no dedicated `TEST_DATABASE_URL` was supplied; the provider/auth signed-URL
+is in `docs/PHASE_STATUS.md`: lint, typecheck, 61 Vitest files/206 tests, build, and
+Playwright (3 passed, 1 skipped) passed. The four conditional PostgreSQL integration
+tests also passed separately against a migrated isolated schema, including concurrent
+finalization; the provider/auth signed-URL
 boundary remains mocked. The production build passed without overriding `CRON_SECRET`;
 OpenAPI validation passed and migration status is current. Playwright ran against the
 existing live development server. `npm run env:check` currently fails only because the

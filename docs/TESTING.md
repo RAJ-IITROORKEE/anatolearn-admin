@@ -116,7 +116,8 @@ Install Chromium once with `npx playwright install chromium`.
 | --- | --- |
 | `npm run lint` | Passed |
 | `npm run typecheck` | Passed |
-| `npm run test` | Passed: 61 files, 205 tests; 4 PostgreSQL integration tests skipped |
+| `npm run test` | Passed: 61 files, 206 tests; 4 conditional PostgreSQL tests skipped in the default run |
+| Dedicated assessment PostgreSQL suite | Passed: 4 tests against migrated isolated schema |
 | Migration preflight/deploy | Passed after confirming `AssessmentAttempt` count was zero; deployed `20260713090000_add_assessment_snapshot_guards` |
 | Prisma migration status | Current |
 | `npm run test:e2e` | Passed against the existing live development server: 3 passed, 1 skipped |
@@ -125,9 +126,13 @@ Install Chromium once with `npx playwright install chromium`.
 | OpenAPI structural validation | Passed |
 
 The lint/typecheck/test/build/E2E and migration results above are the latest known Phase
-5 implementation record. The four skipped tests are the conditional
-`features/assessments/postgres.integration.test.ts` cases; no dedicated
-`TEST_DATABASE_URL` was supplied. Do not report environment validation or Phase 5
+5 implementation record. The default suite conditionally skips
+`features/assessments/postgres.integration.test.ts`, but the four cases were separately
+run against a migrated isolated `anatolearn_phase5_test` schema and passed. They cover
+snapshot/terminal database guards, source-edit stability, and real multi-client
+concurrent finalization. The real concurrency run also established that raw SQL
+serialization conflicts can surface as Prisma `P2010`/SQLSTATE `40001`; regression
+coverage now verifies the production retry path. Do not report environment validation or Phase 5
 deployment configuration as complete until a valid secret of at least 32 characters is
 installed. The environment-schema regression test proves that shared runtime validation
 accepts a short cron-only value while cron-boundary validation rejects it. The failed
@@ -150,16 +155,15 @@ No current automated test proves the following end to end or against real provid
 - audit row creation, snapshot contents, and database append-only trigger
 - real flashcard/question option transactions, progress idempotency races, and internal
   selection against PostgreSQL
-- dedicated PostgreSQL concurrent attempt submission/finalization and the deployed
-  assessment guards in this environment
 - Supabase provider/auth behavior or actual private Storage signed-URL generation
 - authenticated admin UI CRUD, media, lifecycle, audit, flashcard, and question flows
 - full authenticated learner assessment start/answer/expiry/submit/result/retake E2E
 - deployed cron secret injection and one-minute scheduler invocation
 
-Most service/route transaction and provider behavior uses mocks. A conditional
-PostgreSQL suite exists but was skipped (four tests) without `TEST_DATABASE_URL`, so
-database guards and concurrency must not be reported as tested in the latest run.
+Most service/route provider behavior still uses mocks. The conditional assessment
+PostgreSQL suite has now passed separately against an isolated migrated schema; it remains
+skipped during ordinary `npm run test` invocations that do not provide
+`TEST_DATABASE_URL`.
 
 ## Required future test layers
 

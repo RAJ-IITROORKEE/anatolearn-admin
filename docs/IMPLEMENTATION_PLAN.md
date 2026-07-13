@@ -128,8 +128,10 @@ shared runtime schema no longer validates `CRON_SECRET`; only the cron boundary 
 regression coverage proves shared runtime accepts a short cron-only value while the cron
 schema rejects it. Latest lint, typecheck, 61-file/205-test suite, build without a
 `CRON_SECRET` process override, Playwright against the existing live server (3 passed, 1
-skipped), and OpenAPI validation passed; migration status is current. Four conditional
-PostgreSQL tests were skipped without `TEST_DATABASE_URL`; provider/auth signed URLs and
+skipped), and OpenAPI validation passed; migration status is current. The default suite
+passes 61 files/206 tests and conditionally skips four PostgreSQL cases. Those four tests
+also passed separately against a migrated isolated schema, including real multi-client
+concurrent finalization; provider/auth signed URLs and
 assessment E2E remain mocked/absent. `npm run env:check` intentionally still fails for
 the configured short `CRON_SECRET`, so deployment completion must not be claimed until
 the secret and schedule are configured.
@@ -148,10 +150,10 @@ the secret and schedule are configured.
 - Historical results remain stable and explanations are hidden before submission.
 
 **Delivered acceptance note:** lifecycle/unit/component coverage passes and application
-plus database guards enforce timing/snapshot behavior. Dedicated PostgreSQL concurrency
-integration and full authenticated lifecycle E2E were not run, so the original broad
-race/E2E acceptance target remains a documented hardening gap rather than an
-implementation blocker.
+plus database guards enforce timing/snapshot behavior. The dedicated PostgreSQL suite
+passes snapshot mutation rejection, terminal immutability, source-edit stability, and
+multi-client concurrent finalization against a migrated isolated schema. Full
+authenticated lifecycle E2E remains a Phase 7 hardening gap.
 
 ## Phase 6: Dashboard, feedback, and notifications
 

@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/db/prisma", () => ({ prisma: { $transaction: mocks.transaction } }));
 vi.mock("@/features/progress/projection", () => ({ refreshTopicProgressPairs: mocks.refreshPairs }));
 
-import { expireDueAttempts, finalizeDueAttemptById } from "./finalization-service";
+import { expireDueAttempts, finalizeDueAttemptById, retryAssessmentTransaction } from "./finalization-service";
 
 const now = new Date("2026-07-13T12:00:00Z");
 const question = {
@@ -62,6 +62,18 @@ describe("bounded due-attempt finalization", () => {
     mocks.transaction.mockRejectedValue(conflict);
     await expect(expireDueAttempts({ limit: 10 })).rejects.toMatchObject({ code: "TRANSACTION_FAILED", status: 409 });
     expect(mocks.transaction).toHaveBeenCalledTimes(3);
+  });
+
+  it("retries raw PostgreSQL serialization failures surfaced as P2010", async () => {
+    const conflict = new Prisma.PrismaClientKnownRequestError("raw conflict", {
+      code: "P2010",
+      clientVersion: "test",
+      meta: { code: "40001" },
+    });
+    mocks.transaction.mockRejectedValueOnce(conflict).mockResolvedValueOnce("completed");
+
+    await expect(retryAssessmentTransaction(async () => "unused")).resolves.toBe("completed");
+    expect(mocks.transaction).toHaveBeenCalledTimes(2);
   });
 
   it("locks and finalizes a specifically requested expired admin detail", async () => {
