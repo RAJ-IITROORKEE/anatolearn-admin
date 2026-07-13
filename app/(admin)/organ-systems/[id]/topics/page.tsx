@@ -1,0 +1,8 @@
+import { notFound } from "next/navigation";
+import { PageHeader } from "@/components/app-shell/page-header";
+import { EmptyState } from "@/components/shared/empty-state";
+import { ResourceCard, ResourceCards, StatusBadge } from "@/components/phase3/admin-ui";
+import { TopicForm } from "@/components/phase3/resource-forms";
+import { getAdmin, listAdmin } from "@/components/phase3/data";
+import { createResource } from "../../../phase3-actions";
+export default async function SystemTopicsPage({ params }: { params: Promise<{ id: string }> }) { const { id } = await params; let system; try { system = await getAdmin("organSystem", id); } catch { notFound(); } const result = await listAdmin("topic", { page: 1, pageSize: 100, organSystemId: id, sortBy: "displayOrder", sortOrder: "asc" }); return <><PageHeader description={`Create and review topics belonging to ${system.name}.`} eyebrow="Organ systems" title={`${system.name} topics`} /><div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.7fr)]"><section><h2 className="mb-3 text-lg font-bold">Existing topics</h2>{result.items.length ? <ResourceCards>{result.items.map((item) => <ResourceCard actions={<StatusBadge status={item.status} />} href={`/topics/${item.id}`} key={item.id} title={item.title}>{item.summary || "No summary yet."}</ResourceCard>)}</ResourceCards> : <EmptyState description="Create this organ system's first topic using the form." title="No topics yet" />}</section><section><h2 className="mb-3 text-lg font-bold">Add topic</h2><TopicForm action={createResource.bind(null, "topic")} systems={[{ id, label: system.name }]} /></section></div></>; }

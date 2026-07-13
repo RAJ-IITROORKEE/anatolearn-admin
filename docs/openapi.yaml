@@ -1,0 +1,2180 @@
+openapi: 3.1.0
+info:
+  title: AnatoLearn API
+  version: 0.5.0
+  description: Implemented API surface through Phase 5. Future-phase routes are omitted; there is no public question-bank route.
+servers:
+  - url: /api/v1
+    description: Versioned API base
+tags:
+  - name: Platform
+  - name: Auth
+  - name: Profile
+  - name: Published content
+  - name: Admin content
+  - name: Admin media
+  - name: Admin audit
+  - name: Flashcards
+  - name: Admin flashcards
+  - name: Admin questions
+  - name: Assessments
+  - name: Progress
+  - name: Admin progress
+  - name: Internal jobs
+security:
+  - bearerAuth: []
+  - cookieAuth: []
+paths:
+  /health:
+    servers: [{ url: /api }]
+    get:
+      tags: [Platform]
+      operationId: getHealth
+      security: []
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+  /meta:
+    get:
+      tags: [Platform]
+      operationId: getMeta
+      security: []
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+  /auth/register:
+    post:
+      tags: [Auth]
+      operationId: register
+      security: []
+      requestBody: { $ref: '#/components/requestBodies/JsonObject' }
+      responses:
+        '201': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /auth/login:
+    post:
+      tags: [Auth]
+      operationId: login
+      security: []
+      requestBody: { $ref: '#/components/requestBodies/JsonObject' }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      operationId: forgotPassword
+      security: []
+      requestBody: { $ref: '#/components/requestBodies/JsonObject' }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      operationId: resetPassword
+      requestBody: { $ref: '#/components/requestBodies/JsonObject' }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logout
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /auth/session:
+    get:
+      tags: [Auth]
+      operationId: getSession
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /me:
+    get:
+      tags: [Profile]
+      operationId: getMe
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    patch:
+      tags: [Profile]
+      operationId: updateMe
+      requestBody: { $ref: '#/components/requestBodies/JsonObject' }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /me/change-password:
+    post:
+      tags: [Profile]
+      operationId: changePassword
+      requestBody: { $ref: '#/components/requestBodies/JsonObject' }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /me/device-tokens:
+    post:
+      tags: [Profile]
+      operationId: upsertDeviceToken
+      requestBody: { $ref: '#/components/requestBodies/JsonObject' }
+      responses:
+        '201': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /me/device-tokens/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    delete:
+      tags: [Profile]
+      operationId: deactivateDeviceToken
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /organ-systems:
+    get:
+      tags: [Published content]
+      operationId: listPublishedOrganSystems
+      description: Returns published, active organ systems for an active profile.
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+        - { $ref: '#/components/parameters/Q' }
+        - $ref: '#/components/parameters/ContentSortBy'
+        - { $ref: '#/components/parameters/SortOrder' }
+      responses:
+        '200': { $ref: '#/components/responses/ListSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /organ-systems/{slug}:
+    parameters: [{ $ref: '#/components/parameters/Slug' }]
+    get:
+      tags: [Published content]
+      operationId: getPublishedOrganSystem
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /organ-systems/{slug}/topics:
+    parameters: [{ $ref: '#/components/parameters/Slug' }]
+    get:
+      tags: [Published content]
+      operationId: listPublishedTopics
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+        - { $ref: '#/components/parameters/Q' }
+        - { $ref: '#/components/parameters/SortOrder' }
+      responses:
+        '200': { $ref: '#/components/responses/ListSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /topics/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Published content]
+      operationId: getPublishedTopic
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /topics/{id}/content:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Published content]
+      operationId: listPublishedLessons
+      description: Returns all published lessons ordered by displayOrder then id; not paginated.
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /topics/{id}/flashcards:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Flashcards]
+      operationId: listPublishedFlashcards
+      description: Authenticated, non-paginated eligible cards ordered by displayOrder then id, with the requesting user's progress.
+      responses:
+        '200': { $ref: '#/components/responses/FlashcardListSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /flashcards/{id}/progress:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    put:
+      tags: [Flashcards]
+      operationId: updateFlashcardProgress
+      description: Idempotently records one view event for the authenticated user and optionally updates difficult/mastered flags. Cookie mode requires safe Origin.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FlashcardProgressInput' }
+      responses:
+        '200': { $ref: '#/components/responses/FlashcardProgressSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /media/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Published content]
+      operationId: getPublishedMedia
+      x-error-codes: [VALIDATION_ERROR, UNAUTHORIZED, NOT_FOUND, STORAGE_ERROR, INTERNAL_ERROR]
+      description: Returns a 300-second signed URL for eligible published media or media preserved in an attempt snapshot owned by the requester. Historical media may be archived; absent and unauthorized assets return 404.
+      responses:
+        '200': { $ref: '#/components/responses/PublishedMediaSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '502': { $ref: '#/components/responses/StorageError' }
+  /assessments/start:
+    post:
+      tags: [Assessments]
+      operationId: startAssessment
+      x-error-codes: [VALIDATION_ERROR, UNAUTHORIZED, INVALID_ORIGIN, SYSTEM_NOT_FOUND, INVALID_TOPIC_SCOPE, NO_TOPICS, INSUFFICIENT_QUESTIONS, QUESTION_UNAVAILABLE, TRANSACTION_FAILED, INVALID_QUESTION, INVALID_SNAPSHOT, INTERNAL_ERROR]
+      description: Starts an owned randomized immutable snapshot attempt. Cookie mode requires safe Origin. Omitted topicIds selects across all published topics in the system.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StartAssessmentInput' }
+      responses:
+        '201': { $ref: '#/components/responses/AttemptDetailSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /attempts:
+    get:
+      tags: [Assessments]
+      operationId: listOwnedAttempts
+      x-error-codes: [VALIDATION_ERROR, UNAUTHORIZED, TRANSACTION_FAILED, INTERNAL_ERROR]
+      description: Lists only the authenticated user's attempts, newest createdAt then id. Lazily finalizes at most 50 due tests for that user.
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+        - { $ref: '#/components/parameters/AssessmentTypeQuery' }
+        - { $ref: '#/components/parameters/AttemptStatusQuery' }
+        - { $ref: '#/components/parameters/OrganSystemIdQuery' }
+      responses:
+        '200': { $ref: '#/components/responses/AttemptListSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /attempts/{attemptId}:
+    parameters: [{ $ref: '#/components/parameters/AttemptId' }]
+    get:
+      tags: [Assessments]
+      operationId: getOwnedAttempt
+      x-error-codes: [VALIDATION_ERROR, UNAUTHORIZED, NOT_FOUND, TRANSACTION_FAILED, INVALID_SNAPSHOT, INTERNAL_ERROR]
+      description: Returns a secret-safe snapshot detail for every status and lazily auto-submits a due test. Score, correct keys, correctness, and explanations are always omitted here.
+      responses:
+        '200': { $ref: '#/components/responses/AttemptDetailSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /attempts/{attemptId}/answers/{attemptQuestionId}:
+    parameters:
+      - { $ref: '#/components/parameters/AttemptId' }
+      - { $ref: '#/components/parameters/AttemptQuestionId' }
+    put:
+      tags: [Assessments]
+      operationId: updateOwnedAttemptAnswer
+      x-error-codes: [VALIDATION_ERROR, UNAUTHORIZED, INVALID_ORIGIN, NOT_FOUND, ATTEMPT_TERMINAL, ATTEMPT_EXPIRED, INVALID_OPTION, TRANSACTION_FAILED, INTERNAL_ERROR]
+      description: Sets or clears one answer while in progress. timeSpentSeconds is monotonic. A due test is committed as auto-submitted before ATTEMPT_EXPIRED is returned. Cookie mode requires safe Origin.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AttemptAnswerInput' }
+      responses:
+        '200': { $ref: '#/components/responses/AttemptAnswerSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /attempts/{attemptId}/submit:
+    parameters: [{ $ref: '#/components/parameters/AttemptId' }]
+    post:
+      tags: [Assessments]
+      operationId: submitOwnedAttempt
+      x-error-codes: [VALIDATION_ERROR, UNAUTHORIZED, INVALID_ORIGIN, NOT_FOUND, ATTEMPT_NOT_SUBMITTED, TRANSACTION_FAILED, INVALID_SNAPSHOT, INTERNAL_ERROR]
+      description: Scores an in-progress attempt using database time. Replays of completed/auto-submitted attempts return the immutable existing result. Cookie mode requires safe Origin.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmptyMutation' }
+      responses:
+        '200': { $ref: '#/components/responses/AttemptResultSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /attempts/{attemptId}/result:
+    parameters: [{ $ref: '#/components/parameters/AttemptId' }]
+    get:
+      tags: [Assessments]
+      operationId: getOwnedAttemptResult
+      x-error-codes: [VALIDATION_ERROR, UNAUTHORIZED, NOT_FOUND, RESULT_NOT_READY, TRANSACTION_FAILED, INVALID_SNAPSHOT, INTERNAL_ERROR]
+      description: Returns score, correct keys, correctness, and snapshot explanations only for COMPLETED or AUTO_SUBMITTED attempts. Lazily auto-submits a due test.
+      responses:
+        '200': { $ref: '#/components/responses/AttemptResultSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /attempts/{attemptId}/retake:
+    parameters: [{ $ref: '#/components/parameters/AttemptId' }]
+    post:
+      tags: [Assessments]
+      operationId: retakeOwnedAttempt
+      x-error-codes: [VALIDATION_ERROR, UNAUTHORIZED, INVALID_ORIGIN, NOT_FOUND, SOURCE_NOT_SUBMITTED, SYSTEM_NOT_FOUND, INVALID_TOPIC_SCOPE, NO_TOPICS, INSUFFICIENT_QUESTIONS, QUESTION_UNAVAILABLE, TRANSACTION_FAILED, INVALID_SNAPSHOT, INTERNAL_ERROR]
+      description: Creates a fresh random attempt from the submitted source type/system/topic scope/requested count. It does not copy the old questions. Cookie mode requires safe Origin.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmptyMutation' }
+      responses:
+        '201': { $ref: '#/components/responses/AttemptDetailSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /content-lessons/{id}/progress:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    put:
+      tags: [Progress]
+      operationId: updateOwnedLessonProgress
+      x-error-codes: [VALIDATION_ERROR, UNAUTHORIZED, INVALID_ORIGIN, NOT_FOUND, TRANSACTION_FAILED, INTERNAL_ERROR]
+      description: Sets the authenticated user's absolute completion state for an accessible published lesson. Repeated completion preserves the first completedAt. Cookie mode requires safe Origin.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LessonProgressInput' }
+      responses:
+        '200': { $ref: '#/components/responses/LessonProgressSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /progress:
+    get:
+      tags: [Progress]
+      operationId: getOwnedProgress
+      x-error-codes: [UNAUTHORIZED, TRANSACTION_FAILED, INTERNAL_ERROR]
+      description: Recomputes authoritative progress for current published systems/topics. Zero denominators return 0/0 and 0%, not completion.
+      responses:
+        '200': { $ref: '#/components/responses/ProgressListSuccess' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /progress/{organSystemId}:
+    parameters: [{ $ref: '#/components/parameters/OrganSystemIdPath' }]
+    get:
+      tags: [Progress]
+      operationId: getOwnedOrganSystemProgress
+      x-error-codes: [VALIDATION_ERROR, UNAUTHORIZED, NOT_FOUND, TRANSACTION_FAILED, INTERNAL_ERROR]
+      responses:
+        '200': { $ref: '#/components/responses/ProgressSystemSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /dashboard/me:
+    get:
+      tags: [Progress]
+      operationId: getOwnedDashboard
+      x-error-codes: [UNAUTHORIZED, TRANSACTION_FAILED, INTERNAL_ERROR]
+      description: Submitted attempt totals, weighted all-question accuracy, latest 10 submitted attempts, current progress, and up to five strength/weakness topics requiring at least five answers.
+      responses:
+        '200': { $ref: '#/components/responses/UserDashboardSuccess' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /attempts/expire:
+    servers: [{ url: /api/internal, description: Internal job base }]
+    get:
+      tags: [Internal jobs]
+      operationId: expireDueAttemptsCron
+      x-error-codes: [UNAUTHORIZED, CRON_UNAVAILABLE, TRANSACTION_FAILED, INTERNAL_ERROR]
+      security: [{ cronBearer: [] }]
+      description: Vercel Cron entrypoint. Claims 50 due tests per batch with SKIP LOCKED, up to 10 batches and an 8-second loop budget.
+      responses: &cronResponses
+        '200': { $ref: '#/components/responses/CronSuccess' }
+        '401': { $ref: '#/components/responses/CronUnauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/CronUnavailable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    post:
+      tags: [Internal jobs]
+      operationId: expireDueAttemptsOperational
+      x-error-codes: [UNAUTHORIZED, CRON_UNAVAILABLE, TRANSACTION_FAILED, INTERNAL_ERROR]
+      security: [{ cronBearer: [] }]
+      description: Authenticated operational alias with the same bounded behavior as GET.
+      responses: *cronResponses
+  /admin/organ-systems:
+    get:
+      tags: [Admin content]
+      operationId: listAdminOrganSystems
+      x-required-role: ADMIN
+      parameters: &contentListParameters
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+        - { $ref: '#/components/parameters/Q' }
+        - { $ref: '#/components/parameters/PublishStatus' }
+        - { $ref: '#/components/parameters/ContentSortBy' }
+        - { $ref: '#/components/parameters/SortOrder' }
+      responses: &adminListResponses
+        '200': { $ref: '#/components/responses/ListSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Admin content]
+      operationId: createOrganSystem
+      x-required-role: ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OrganSystemInput' }
+      responses: &adminCreateResponses
+        '201': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+    patch:
+      tags: [Admin content]
+      operationId: reorderOrganSystems
+      x-required-role: ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReorderInput' }
+      responses: &adminMutationResponses
+        '200': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /admin/organ-systems/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Admin content]
+      operationId: getAdminOrganSystem
+      x-required-role: ADMIN
+      responses: &adminGetResponses
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Admin content]
+      operationId: updateAdminOrganSystem
+      x-required-role: ADMIN
+      description: Accepts a non-empty partial OrganSystemInput or exactly one status field.
+      requestBody: { $ref: '#/components/requestBodies/ContentMutation' }
+      responses: *adminMutationResponses
+    delete:
+      tags: [Admin content]
+      operationId: archiveAdminOrganSystem
+      x-required-role: ADMIN
+      description: Archives and returns the organ system; no hard delete.
+      responses: *adminMutationResponses
+  /admin/topics:
+    get:
+      tags: [Admin content]
+      operationId: listAdminTopics
+      x-required-role: ADMIN
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+        - { $ref: '#/components/parameters/Q' }
+        - { $ref: '#/components/parameters/PublishStatus' }
+        - { $ref: '#/components/parameters/OrganSystemIdQuery' }
+        - { $ref: '#/components/parameters/ContentSortBy' }
+        - { $ref: '#/components/parameters/SortOrder' }
+      responses: *adminListResponses
+    post:
+      tags: [Admin content]
+      operationId: createTopic
+      x-required-role: ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TopicInput' }
+      responses: *adminCreateResponses
+    patch:
+      tags: [Admin content]
+      operationId: reorderTopics
+      x-required-role: ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReorderInput' }
+      responses: *adminMutationResponses
+  /admin/topics/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Admin content]
+      operationId: getAdminTopic
+      x-required-role: ADMIN
+      responses: *adminGetResponses
+    patch:
+      tags: [Admin content]
+      operationId: updateAdminTopic
+      x-required-role: ADMIN
+      description: Accepts a non-empty partial TopicInput or exactly one status field.
+      requestBody: { $ref: '#/components/requestBodies/ContentMutation' }
+      responses: *adminMutationResponses
+    delete:
+      tags: [Admin content]
+      operationId: archiveAdminTopic
+      x-required-role: ADMIN
+      responses: *adminMutationResponses
+  /admin/content-lessons:
+    get:
+      tags: [Admin content]
+      operationId: listAdminContentLessons
+      x-required-role: ADMIN
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+        - { $ref: '#/components/parameters/Q' }
+        - { $ref: '#/components/parameters/PublishStatus' }
+        - { $ref: '#/components/parameters/TopicIdQuery' }
+        - { $ref: '#/components/parameters/ContentSortBy' }
+        - { $ref: '#/components/parameters/SortOrder' }
+      responses: *adminListResponses
+    post:
+      tags: [Admin content]
+      operationId: createContentLesson
+      x-required-role: ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ContentLessonInput' }
+      responses: *adminCreateResponses
+    patch:
+      tags: [Admin content]
+      operationId: reorderContentLessons
+      x-required-role: ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReorderInput' }
+      responses: *adminMutationResponses
+  /admin/content-lessons/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Admin content]
+      operationId: getAdminContentLesson
+      x-required-role: ADMIN
+      responses: *adminGetResponses
+    patch:
+      tags: [Admin content]
+      operationId: updateAdminContentLesson
+      x-required-role: ADMIN
+      description: Accepts a non-empty partial ContentLessonInput or exactly one status field.
+      requestBody: { $ref: '#/components/requestBodies/ContentMutation' }
+      responses: *adminMutationResponses
+    delete:
+      tags: [Admin content]
+      operationId: archiveAdminContentLesson
+      x-required-role: ADMIN
+      responses: *adminMutationResponses
+  /admin/flashcards:
+    get:
+      tags: [Admin flashcards]
+      operationId: listAdminFlashcards
+      x-required-role: ADMIN
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+        - { $ref: '#/components/parameters/Q' }
+        - { $ref: '#/components/parameters/PublishStatus' }
+        - { $ref: '#/components/parameters/DifficultyQuery' }
+        - { $ref: '#/components/parameters/TopicIdQuery' }
+        - { $ref: '#/components/parameters/OrganSystemIdQuery' }
+        - name: sortBy
+          in: query
+          schema: { type: string, enum: [displayOrder, frontText, difficulty, createdAt, updatedAt], default: displayOrder }
+        - { $ref: '#/components/parameters/SortOrder' }
+      responses:
+        '200': { $ref: '#/components/responses/FlashcardListSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Admin flashcards]
+      operationId: createFlashcard
+      x-required-role: ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FlashcardCreateInput' }
+      responses:
+        '201': { $ref: '#/components/responses/FlashcardAdminSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    patch:
+      tags: [Admin flashcards]
+      operationId: reorderFlashcards
+      x-required-role: ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ScopedReorderInput' }
+      responses: *adminMutationResponses
+  /admin/flashcards/bulk-status:
+    patch:
+      tags: [Admin flashcards]
+      operationId: bulkUpdateFlashcardStatus
+      x-required-role: ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FlashcardBulkStatusInput' }
+      responses: *adminMutationResponses
+  /admin/flashcards/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Admin flashcards]
+      operationId: getAdminFlashcard
+      x-required-role: ADMIN
+      responses:
+        '200': { $ref: '#/components/responses/FlashcardAdminSuccess' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Admin flashcards]
+      operationId: updateAdminFlashcard
+      x-required-role: ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - { $ref: '#/components/schemas/FlashcardUpdateInput' }
+                - { $ref: '#/components/schemas/StatusInput' }
+      responses: *adminMutationResponses
+    delete:
+      tags: [Admin flashcards]
+      operationId: archiveAdminFlashcard
+      x-required-role: ADMIN
+      description: Terminal archive; no hard delete.
+      responses: *adminMutationResponses
+  /admin/flashcards/{id}/status:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    patch:
+      tags: [Admin flashcards]
+      operationId: updateFlashcardStatus
+      x-required-role: ADMIN
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/StatusInput' } } }
+      responses: *adminMutationResponses
+  /admin/flashcards/{id}/archive:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Admin flashcards]
+      operationId: archiveAdminFlashcardAlias
+      x-required-role: ADMIN
+      responses: *adminMutationResponses
+  /admin/questions:
+    get:
+      tags: [Admin questions]
+      operationId: listAdminQuestions
+      x-required-role: ADMIN
+      description: Admin-only full question aggregates. No equivalent public question-bank operation exists.
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+        - { $ref: '#/components/parameters/Q' }
+        - { $ref: '#/components/parameters/AssessmentTypeQuery' }
+        - { $ref: '#/components/parameters/TopicIdQuery' }
+        - { $ref: '#/components/parameters/OrganSystemIdQuery' }
+        - { $ref: '#/components/parameters/DifficultyQuery' }
+        - { $ref: '#/components/parameters/PublishStatus' }
+        - name: isActive
+          in: query
+          schema: { type: string, enum: ['true', 'false'] }
+        - name: conceptTag
+          in: query
+          schema: { type: string, minLength: 1, maxLength: 100 }
+        - name: sortBy
+          in: query
+          schema: { type: string, enum: [questionText, createdAt, updatedAt], default: createdAt }
+        - name: sortOrder
+          in: query
+          schema: { type: string, enum: [asc, desc], default: desc }
+      responses:
+        '200': { $ref: '#/components/responses/QuestionListSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Admin questions]
+      operationId: createQuestion
+      x-required-role: ADMIN
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/QuestionCreateInput' } } }
+      responses:
+        '201': { $ref: '#/components/responses/QuestionSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /admin/questions/bulk-status:
+    patch:
+      tags: [Admin questions]
+      operationId: bulkUpdateQuestionStatus
+      x-required-role: ADMIN
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/QuestionBulkStatusInput' } } }
+      responses: *adminMutationResponses
+  /admin/questions/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Admin questions]
+      operationId: getAdminQuestion
+      x-required-role: ADMIN
+      responses:
+        '200': { $ref: '#/components/responses/QuestionSuccess' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    patch:
+      tags: [Admin questions]
+      operationId: updateAdminQuestion
+      x-required-role: ADMIN
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/QuestionUpdateInput' } } }
+      responses: *adminMutationResponses
+    delete:
+      tags: [Admin questions]
+      operationId: archiveAdminQuestion
+      x-required-role: ADMIN
+      description: Terminal archive; no hard delete.
+      responses: *adminMutationResponses
+  /admin/questions/{id}/status:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    patch:
+      tags: [Admin questions]
+      operationId: updateQuestionStatus
+      x-required-role: ADMIN
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/QuestionStatusInput' } } }
+      responses: *adminMutationResponses
+  /admin/questions/{id}/activity:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    patch:
+      tags: [Admin questions]
+      operationId: updateQuestionActivity
+      x-required-role: ADMIN
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/QuestionActivityInput' } } }
+      responses: *adminMutationResponses
+  /admin/questions/{id}/duplicate:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Admin questions]
+      operationId: duplicateQuestion
+      x-required-role: ADMIN
+      description: Creates a new active draft with new option IDs and answer keys.
+      responses:
+        '201': { $ref: '#/components/responses/QuestionSuccess' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /admin/questions/{id}/archive:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Admin questions]
+      operationId: archiveAdminQuestionAlias
+      x-required-role: ADMIN
+      responses: *adminMutationResponses
+  /admin/attempts:
+    get:
+      tags: [Admin progress]
+      operationId: listAdminAttempts
+      x-error-codes: [VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, TRANSACTION_FAILED, INTERNAL_ERROR]
+      x-required-role: ADMIN
+      description: Read-only attempt history. Lazily finalizes at most 50 globally due tests before querying.
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+        - { name: q, in: query, description: Trimmed learner full-name or email search., schema: { type: string, minLength: 1, maxLength: 200 } }
+        - { name: userId, in: query, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/AssessmentTypeQuery' }
+        - { $ref: '#/components/parameters/OrganSystemIdQuery' }
+        - { $ref: '#/components/parameters/TopicIdQuery' }
+        - { $ref: '#/components/parameters/AttemptStatusQuery' }
+        - { name: from, in: query, description: Inclusive startedAt lower bound; offset is required., schema: { type: string, format: date-time } }
+        - { name: to, in: query, description: Inclusive startedAt upper bound; offset is required and must not precede from., schema: { type: string, format: date-time } }
+        - name: sortBy
+          in: query
+          schema: { type: string, enum: [startedAt, completedAt, scorePercentage, durationSeconds], default: startedAt }
+        - name: sortOrder
+          in: query
+          schema: { type: string, enum: [asc, desc], default: desc }
+      responses:
+        '200': { $ref: '#/components/responses/AdminAttemptListSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /admin/attempts/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Admin progress]
+      operationId: getAdminAttempt
+      x-error-codes: [VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, TRANSACTION_FAILED, INVALID_SNAPSHOT, INTERNAL_ERROR]
+      x-required-role: ADMIN
+      description: Read-only snapshot detail. A due test is finalized first. Result secrets are omitted before submission and included afterward.
+      responses:
+        '200': { $ref: '#/components/responses/AdminAttemptDetailSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /admin/users/{id}/progress:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Admin progress]
+      operationId: getAdminUserProgress
+      x-error-codes: [VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, TRANSACTION_FAILED, INTERNAL_ERROR]
+      x-required-role: ADMIN
+      description: Narrow read-only user profile plus the same authoritative dashboard/progress report. Does not expose role or auth credentials.
+      responses:
+        '200': { $ref: '#/components/responses/AdminUserProgressSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /admin/media:
+    get:
+      tags: [Admin media]
+      operationId: listAdminMedia
+      x-required-role: ADMIN
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+        - { name: search, in: query, schema: { type: string, maxLength: 200 } }
+        - name: mimeType
+          in: query
+          schema: { type: string, enum: [image/png, image/jpeg, image/webp] }
+        - name: archived
+          in: query
+          schema: { type: string, enum: ['true', 'false'] }
+        - name: uploadedById
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { $ref: '#/components/responses/AdminMediaListSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Admin media]
+      operationId: uploadAdminMedia
+      x-required-role: ADMIN
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [file, altText]
+              properties:
+                file: { type: string, format: binary }
+                altText: { type: string, minLength: 1, maxLength: 500 }
+      responses:
+        '201': { $ref: '#/components/responses/AdminMediaSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '502': { $ref: '#/components/responses/StorageError' }
+  /admin/media/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Admin media]
+      operationId: getAdminMedia
+      x-required-role: ADMIN
+      responses:
+        '200': { $ref: '#/components/responses/AdminMediaSuccess' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '502': { $ref: '#/components/responses/StorageError' }
+    patch:
+      tags: [Admin media]
+      operationId: updateAdminMediaAltText
+      x-required-role: ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [altText]
+              properties:
+                altText: { type: string, minLength: 1, maxLength: 500 }
+      responses:
+        '200': { $ref: '#/components/responses/AdminMediaSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '502': { $ref: '#/components/responses/StorageError' }
+    delete:
+      tags: [Admin media]
+      operationId: deleteAdminMedia
+      x-required-role: ADMIN
+      description: Physical deletion is deliberately disabled. Existing assets return 409 HARD_DELETE_DISABLED; absent assets return 404.
+      responses:
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /admin/media/{id}/archive:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Admin media]
+      operationId: archiveAdminMedia
+      x-required-role: ADMIN
+      description: Idempotently sets archivedAt and returns a fresh 900-second signed URL. An eligible published reference blocks first archive with 409 REFERENCED.
+      responses:
+        '200': { $ref: '#/components/responses/AdminMediaSuccess' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '502': { $ref: '#/components/responses/StorageError' }
+  /admin/audit-logs:
+    get:
+      tags: [Admin audit]
+      operationId: listAdminAuditLogs
+      x-required-role: ADMIN
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+        - name: action
+          in: query
+          schema: { $ref: '#/components/schemas/AuditAction' }
+        - { name: entityType, in: query, schema: { type: string, minLength: 1, maxLength: 100 } }
+        - { name: entityId, in: query, schema: { type: string, minLength: 1, maxLength: 200 } }
+        - { name: actorId, in: query, schema: { type: string, format: uuid } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+      responses: *adminListResponses
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Supabase access token
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sb-session
+      description: Logical Supabase SSR session; concrete cookie names are SDK-managed.
+    cronBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: CRON_SECRET
+      description: Server-only random secret of at least 32 characters; not a Supabase user token.
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    AttemptId:
+      name: attemptId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    AttemptQuestionId:
+      name: attemptQuestionId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    OrganSystemIdPath:
+      name: organSystemId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Slug:
+      name: slug
+      in: path
+      required: true
+      schema: { type: string }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSize:
+      name: pageSize
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    Q:
+      name: q
+      in: query
+      schema: { type: string, maxLength: 200 }
+    PublishStatus:
+      name: status
+      in: query
+      schema: { $ref: '#/components/schemas/PublishStatus' }
+    ContentSortBy:
+      name: sortBy
+      in: query
+      schema: { type: string, enum: [displayOrder, name, title, createdAt, updatedAt], default: displayOrder }
+    SortOrder:
+      name: sortOrder
+      in: query
+      schema: { type: string, enum: [asc, desc], default: asc }
+    OrganSystemIdQuery:
+      name: organSystemId
+      in: query
+      schema: { type: string, format: uuid }
+    TopicIdQuery:
+      name: topicId
+      in: query
+      schema: { type: string, format: uuid }
+    DifficultyQuery:
+      name: difficulty
+      in: query
+      schema: { $ref: '#/components/schemas/Difficulty' }
+    AssessmentTypeQuery:
+      name: assessmentType
+      in: query
+      schema: { $ref: '#/components/schemas/AssessmentType' }
+    AttemptStatusQuery:
+      name: status
+      in: query
+      schema: { $ref: '#/components/schemas/AttemptStatus' }
+  requestBodies:
+    JsonObject:
+      required: true
+      content:
+        application/json:
+          schema: { type: object }
+    ContentMutation:
+      required: true
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - { $ref: '#/components/schemas/StatusInput' }
+              - type: object
+                minProperties: 1
+                description: A strict non-empty partial of the resource's create schema.
+  schemas:
+    PublishStatus: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
+    EditableStatus: { type: string, enum: [DRAFT, PUBLISHED] }
+    Difficulty: { type: string, enum: [EASY, MEDIUM, HARD] }
+    AssessmentType: { type: string, enum: [QUIZ, TEST] }
+    AttemptStatus: { type: string, enum: [IN_PROGRESS, COMPLETED, AUTO_SUBMITTED, ABANDONED] }
+    StartAssessmentInput:
+      type: object
+      additionalProperties: false
+      required: [assessmentType, organSystemId, questionCount]
+      properties:
+        assessmentType: { $ref: '#/components/schemas/AssessmentType' }
+        organSystemId: { type: string, format: uuid }
+        topicIds:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items: { type: string, format: uuid }
+        questionCount: { type: integer, minimum: 5, maximum: 50 }
+    EmptyMutation:
+      type: object
+      additionalProperties: false
+      maxProperties: 0
+    AttemptAnswerInput:
+      type: object
+      additionalProperties: false
+      required: [answeredOptionKey]
+      properties:
+        answeredOptionKey: { type: [string, 'null'], format: uuid, description: A key from this attempt question's shuffled snapshot options, or null to clear. }
+        timeSpentSeconds: { type: integer, minimum: 0, maximum: 86400, description: Monotonic telemetry; values below the stored value do not decrease it. }
+    AttemptAnswerReceipt:
+      type: object
+      additionalProperties: false
+      required: [id, answeredOptionKey, answeredAt, timeSpentSeconds]
+      properties:
+        id: { type: string, format: uuid }
+        answeredOptionKey: { type: [string, 'null'], format: uuid }
+        answeredAt: { type: [string, 'null'], format: date-time }
+        timeSpentSeconds: { type: [integer, 'null'], minimum: 0, maximum: 86400 }
+    AttemptSnapshotOption:
+      type: object
+      additionalProperties: false
+      required: [key, label, displayOrder, optionText, imageUrl, mediaId]
+      properties:
+        key: { type: string, format: uuid }
+        label: { type: string, pattern: '^[A-F]$' }
+        displayOrder: { type: integer, minimum: 1, maximum: 6 }
+        optionText: { type: string }
+        imageUrl: { type: [string, 'null'] }
+        mediaId: { type: [string, 'null'], format: uuid }
+    AttemptQuestionSafe:
+      type: object
+      description: Secret-safe for every status; correctOptionKey, isCorrect, and explanation are absent.
+      required: [id, displayOrder, questionText, imageUrl, mediaId, options, answeredOptionKey, answeredAt, timeSpentSeconds, topicId, topicTitle, difficulty, conceptTag, organSystemId, organSystemName]
+      properties:
+        id: { type: string, format: uuid }
+        displayOrder: { type: integer, minimum: 1 }
+        questionText: { type: string }
+        imageUrl: { type: [string, 'null'] }
+        mediaId: { type: [string, 'null'], format: uuid }
+        options:
+          type: array
+          minItems: 2
+          maxItems: 6
+          items: { $ref: '#/components/schemas/AttemptSnapshotOption' }
+        answeredOptionKey: { type: [string, 'null'], format: uuid }
+        answeredAt: { type: [string, 'null'], format: date-time }
+        timeSpentSeconds: { type: [integer, 'null'], minimum: 0 }
+        topicId: { type: string, format: uuid }
+        topicTitle: { type: string }
+        difficulty: { $ref: '#/components/schemas/Difficulty' }
+        conceptTag: { type: [string, 'null'] }
+        organSystemId: { type: string, format: uuid }
+        organSystemName: { type: string }
+    AttemptQuestionResult:
+      allOf:
+        - { $ref: '#/components/schemas/AttemptQuestionSafe' }
+        - type: object
+          required: [correctOptionKey, isCorrect, explanation]
+          properties:
+            correctOptionKey: { type: string, format: uuid }
+            isCorrect: { type: [boolean, 'null'] }
+            explanation: { type: string }
+    AttemptBase:
+      type: object
+      required: [id, assessmentType, organSystemId, topicIds, requestedQuestionCount, totalQuestionCount, timeLimitSeconds, startedAt, expiresAt, completedAt, status, retakeSourceId]
+      properties:
+        id: { type: string, format: uuid }
+        assessmentType: { $ref: '#/components/schemas/AssessmentType' }
+        organSystemId: { type: string, format: uuid }
+        topicIds:
+          type: array
+          items: { type: string, format: uuid }
+        requestedQuestionCount: { type: integer, minimum: 5, maximum: 50 }
+        totalQuestionCount: { type: integer, minimum: 0, maximum: 50 }
+        timeLimitSeconds: { type: [integer, 'null'], minimum: 0, description: Null for quizzes; questionCount times 60 for tests. }
+        startedAt: { type: string, format: date-time }
+        expiresAt: { type: [string, 'null'], format: date-time }
+        completedAt: { type: [string, 'null'], format: date-time }
+        status: { $ref: '#/components/schemas/AttemptStatus' }
+        retakeSourceId: { type: [string, 'null'], format: uuid }
+    AttemptDetail:
+      allOf:
+        - { $ref: '#/components/schemas/AttemptBase' }
+        - type: object
+          required: [questions]
+          properties:
+            questions:
+              type: array
+              items: { $ref: '#/components/schemas/AttemptQuestionSafe' }
+    AttemptResult:
+      allOf:
+        - { $ref: '#/components/schemas/AttemptBase' }
+        - type: object
+          required: [correctCount, incorrectCount, unansweredCount, scorePercentage, durationSeconds, questions]
+          properties:
+            correctCount: { type: integer, minimum: 0 }
+            incorrectCount: { type: integer, minimum: 0 }
+            unansweredCount: { type: integer, minimum: 0 }
+            scorePercentage: { type: number, minimum: 0, maximum: 100, multipleOf: 0.01 }
+            durationSeconds: { type: integer, minimum: 0 }
+            questions:
+              type: array
+              items: { $ref: '#/components/schemas/AttemptQuestionResult' }
+    AttemptListItem:
+      allOf:
+        - { $ref: '#/components/schemas/AttemptBase' }
+        - type: object
+          description: Result fields are present only for COMPLETED and AUTO_SUBMITTED; they are absent for IN_PROGRESS and ABANDONED.
+          properties:
+            correctCount: { type: integer, minimum: 0 }
+            incorrectCount: { type: integer, minimum: 0 }
+            unansweredCount: { type: integer, minimum: 0 }
+            scorePercentage: { type: number, minimum: 0, maximum: 100, multipleOf: 0.01 }
+            durationSeconds: { type: [integer, 'null'], minimum: 0 }
+    AdminAttemptUser:
+      type: object
+      additionalProperties: false
+      required: [id, fullName, email, isActive]
+      properties:
+        id: { type: string, format: uuid }
+        fullName: { type: string }
+        email: { type: string, format: email }
+        isActive: { type: boolean }
+    AdminAttemptListItem:
+      allOf:
+        - { $ref: '#/components/schemas/AttemptListItem' }
+        - type: object
+          required: [user]
+          properties: { user: { $ref: '#/components/schemas/AdminAttemptUser' } }
+    AdminAttemptDetail:
+      anyOf:
+        - allOf:
+            - { $ref: '#/components/schemas/AttemptDetail' }
+            - type: object
+              required: [user]
+              properties: { user: { $ref: '#/components/schemas/AdminAttemptUser' } }
+        - allOf:
+            - { $ref: '#/components/schemas/AttemptResult' }
+            - type: object
+              required: [user]
+              properties: { user: { $ref: '#/components/schemas/AdminAttemptUser' } }
+    LessonProgressInput:
+      type: object
+      additionalProperties: false
+      required: [completed]
+      properties: { completed: { type: boolean } }
+    LessonProgress:
+      type: object
+      additionalProperties: false
+      required: [contentLessonId, completed, completedAt, lastViewedAt]
+      properties:
+        contentLessonId: { type: string, format: uuid }
+        completed: { type: boolean }
+        completedAt: { type: [string, 'null'], format: date-time }
+        lastViewedAt: { type: string, format: date-time }
+    ProgressMetric:
+      type: object
+      additionalProperties: false
+      required: [numerator, denominator, percentage]
+      properties:
+        numerator: { type: integer, minimum: 0 }
+        denominator: { type: integer, minimum: 0 }
+        percentage: { type: number, minimum: 0, maximum: 100, multipleOf: 0.01, description: Zero when denominator is zero; zero does not imply completion. }
+    ProgressTopic:
+      type: object
+      additionalProperties: false
+      required: [id, title, slug, displayOrder, content, flashcards, quiz, test]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        slug: { type: string }
+        displayOrder: { type: integer }
+        content: { $ref: '#/components/schemas/ProgressMetric' }
+        flashcards: { $ref: '#/components/schemas/ProgressMetric' }
+        quiz: { $ref: '#/components/schemas/ProgressMetric' }
+        test: { $ref: '#/components/schemas/ProgressMetric' }
+    ProgressSystem:
+      type: object
+      additionalProperties: false
+      required: [id, name, slug, displayOrder, content, flashcards, quiz, test, topics]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        displayOrder: { type: integer }
+        content: { $ref: '#/components/schemas/ProgressMetric' }
+        flashcards: { $ref: '#/components/schemas/ProgressMetric' }
+        quiz: { $ref: '#/components/schemas/ProgressMetric' }
+        test: { $ref: '#/components/schemas/ProgressMetric' }
+        topics:
+          type: array
+          items: { $ref: '#/components/schemas/ProgressTopic' }
+    DashboardAttemptCounts:
+      type: object
+      additionalProperties: false
+      required: [total, quiz, test, autoSubmitted]
+      properties:
+        total: { type: integer, minimum: 0 }
+        quiz: { type: integer, minimum: 0 }
+        test: { type: integer, minimum: 0 }
+        autoSubmitted: { type: integer, minimum: 0 }
+    RecentAttempt:
+      type: object
+      additionalProperties: false
+      required: [id, assessmentType, status, startedAt, completedAt, durationSeconds, correctCount, incorrectCount, unansweredCount, totalQuestionCount, scorePercentage, organSystemId, organSystemName]
+      properties:
+        id: { type: string, format: uuid }
+        assessmentType: { $ref: '#/components/schemas/AssessmentType' }
+        status: { type: string, enum: [COMPLETED, AUTO_SUBMITTED] }
+        startedAt: { type: string, format: date-time }
+        completedAt: { type: [string, 'null'], format: date-time }
+        durationSeconds: { type: [integer, 'null'], minimum: 0 }
+        correctCount: { type: integer, minimum: 0 }
+        incorrectCount: { type: integer, minimum: 0 }
+        unansweredCount: { type: integer, minimum: 0 }
+        totalQuestionCount: { type: integer, minimum: 0 }
+        scorePercentage: { type: number, minimum: 0, maximum: 100, multipleOf: 0.01 }
+        organSystemId: { type: [string, 'null'], format: uuid }
+        organSystemName: { type: [string, 'null'] }
+    RankedTopic:
+      type: object
+      additionalProperties: false
+      required: [topicId, topicTitle, correctCount, sampleCount, accuracyPercentage]
+      properties:
+        topicId: { type: string, format: uuid }
+        topicTitle: { type: string, description: Historical snapshot title. }
+        correctCount: { type: integer, minimum: 0 }
+        sampleCount: { type: integer, minimum: 5 }
+        accuracyPercentage: { type: number, minimum: 0, maximum: 100, multipleOf: 0.01 }
+    UserDashboard:
+      type: object
+      required: [attempts, accuracy, recentAttempts, organSystems, strengths, weaknesses]
+      properties:
+        attempts: { $ref: '#/components/schemas/DashboardAttemptCounts' }
+        accuracy: { $ref: '#/components/schemas/ProgressMetric' }
+        recentAttempts:
+          type: array
+          maxItems: 10
+          items: { $ref: '#/components/schemas/RecentAttempt' }
+        organSystems:
+          type: array
+          items: { $ref: '#/components/schemas/ProgressSystem' }
+        strengths:
+          type: array
+          maxItems: 5
+          items: { $ref: '#/components/schemas/RankedTopic' }
+        weaknesses:
+          type: array
+          maxItems: 5
+          items: { $ref: '#/components/schemas/RankedTopic' }
+    AdminProgressProfile:
+      type: object
+      additionalProperties: false
+      required: [id, fullName, email, avatarUrl, isActive, createdAt, lastLoginAt]
+      properties:
+        id: { type: string, format: uuid }
+        fullName: { type: string }
+        email: { type: string, format: email }
+        avatarUrl: { type: [string, 'null'] }
+        isActive: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        lastLoginAt: { type: [string, 'null'], format: date-time }
+    AdminUserProgress:
+      allOf:
+        - { $ref: '#/components/schemas/UserDashboard' }
+        - type: object
+          required: [profile]
+          properties: { profile: { $ref: '#/components/schemas/AdminProgressProfile' } }
+    CronResult:
+      type: object
+      additionalProperties: false
+      required: [claimed, finalized, batches]
+      properties:
+        claimed: { type: integer, minimum: 0, maximum: 500 }
+        finalized: { type: integer, minimum: 0, maximum: 500 }
+        batches: { type: integer, minimum: 1, maximum: 10 }
+    AuditAction:
+      type: string
+      enum: [CREATE, UPDATE, PUBLISH, ARCHIVE, DELETE, ACTIVATE, DEACTIVATE, LOGIN, PASSWORD_CHANGE, ROLE_CHANGE, SCHEDULE, CANCEL, SEND, REVIEW, RESOLVE]
+    StatusInput:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { $ref: '#/components/schemas/PublishStatus' }
+    OrganSystemInput:
+      type: object
+      additionalProperties: false
+      required: [name, slug, shortDescription, displayOrder]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        slug: { $ref: '#/components/schemas/Slug' }
+        shortDescription: { type: string, minLength: 1, maxLength: 500 }
+        longDescription: { type: [string, 'null'], maxLength: 5000 }
+        coverMediaId: { type: [string, 'null'], format: uuid }
+        iconMediaId: { type: [string, 'null'], format: uuid }
+        displayOrder: { type: integer, minimum: 0 }
+        isActive: { type: boolean }
+    TopicInput:
+      type: object
+      additionalProperties: false
+      required: [organSystemId, title, slug, displayOrder]
+      properties:
+        organSystemId: { type: string, format: uuid }
+        title: { type: string, minLength: 1, maxLength: 160 }
+        slug: { $ref: '#/components/schemas/Slug' }
+        summary: { type: [string, 'null'], maxLength: 1000 }
+        coverMediaId: { type: [string, 'null'], format: uuid }
+        displayOrder: { type: integer, minimum: 0 }
+    ContentLessonInput:
+      type: object
+      additionalProperties: false
+      required: [topicId, title, slug, contentBlocks, estimatedReadingMinutes, displayOrder]
+      properties:
+        topicId: { type: string, format: uuid }
+        title: { type: string, minLength: 1, maxLength: 200 }
+        slug: { $ref: '#/components/schemas/Slug' }
+        summary: { type: [string, 'null'], maxLength: 1000 }
+        contentBlocks:
+          type: array
+          maxItems: 200
+          items: { $ref: '#/components/schemas/ContentBlock' }
+        estimatedReadingMinutes: { type: integer, minimum: 0, maximum: 600 }
+        displayOrder: { type: integer, minimum: 0 }
+    ContentBlock:
+      oneOf:
+        - $ref: '#/components/schemas/HeadingBlock'
+        - $ref: '#/components/schemas/ParagraphBlock'
+        - $ref: '#/components/schemas/ImageBlock'
+        - $ref: '#/components/schemas/CalloutBlock'
+        - $ref: '#/components/schemas/BulletListBlock'
+        - $ref: '#/components/schemas/NumberedListBlock'
+        - $ref: '#/components/schemas/DividerBlock'
+      discriminator: { propertyName: type }
+    HeadingBlock:
+      type: object
+      additionalProperties: false
+      required: [type, level, text]
+      properties:
+        id: { type: string, minLength: 1, maxLength: 100 }
+        type: { const: heading }
+        level: { type: integer, enum: [2, 3, 4] }
+        text: { type: string, minLength: 1, maxLength: 200 }
+    ParagraphBlock:
+      type: object
+      additionalProperties: false
+      required: [type, text]
+      properties:
+        id: { type: string, minLength: 1, maxLength: 100 }
+        type: { const: paragraph }
+        text: { type: string, minLength: 1, maxLength: 5000 }
+    ImageBlock:
+      type: object
+      additionalProperties: false
+      required: [type, mediaId, altText]
+      properties:
+        id: { type: string, minLength: 1, maxLength: 100 }
+        type: { const: image }
+        mediaId: { type: string, format: uuid }
+        altText: { type: string, minLength: 1, maxLength: 300 }
+        caption: { type: [string, 'null'], maxLength: 500 }
+    CalloutBlock:
+      type: object
+      additionalProperties: false
+      required: [type, tone, text]
+      properties:
+        id: { type: string, minLength: 1, maxLength: 100 }
+        type: { const: callout }
+        tone: { type: string, enum: [info, warning, success] }
+        title: { type: [string, 'null'], maxLength: 200 }
+        text: { type: string, minLength: 1, maxLength: 2000 }
+    BulletListBlock:
+      $ref: '#/components/schemas/ListBlock'
+    NumberedListBlock:
+      $ref: '#/components/schemas/ListBlock'
+    ListBlock:
+      type: object
+      additionalProperties: false
+      required: [type, items]
+      properties:
+        id: { type: string, minLength: 1, maxLength: 100 }
+        type: { type: string, enum: [bulletList, numberedList] }
+        items:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items: { type: string, minLength: 1, maxLength: 1000 }
+    DividerBlock:
+      type: object
+      additionalProperties: false
+      required: [type]
+      properties:
+        id: { type: string, minLength: 1, maxLength: 100 }
+        type: { const: divider }
+    Slug:
+      type: string
+      minLength: 1
+      maxLength: 100
+      pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$'
+    ReorderInput:
+      type: object
+      additionalProperties: false
+      required: [ids]
+      properties:
+        parentId: { type: string, format: uuid }
+        ids:
+          type: array
+          minItems: 1
+          maxItems: 500
+          uniqueItems: true
+          items: { type: string, format: uuid }
+    ScopedReorderInput:
+      type: object
+      additionalProperties: false
+      required: [parentId, ids]
+      properties:
+        parentId: { type: string, format: uuid }
+        ids:
+          type: array
+          minItems: 1
+          maxItems: 500
+          uniqueItems: true
+          items: { type: string, format: uuid }
+    FlashcardCreateInput:
+      type: object
+      additionalProperties: false
+      required: [topicId, frontText, backText, displayOrder]
+      properties:
+        topicId: { type: string, format: uuid }
+        frontText: { type: string, minLength: 1, maxLength: 5000 }
+        backText: { type: string, minLength: 1, maxLength: 5000 }
+        frontMediaId: { type: [string, 'null'], format: uuid }
+        backMediaId: { type: [string, 'null'], format: uuid }
+        difficulty: { $ref: '#/components/schemas/Difficulty' }
+        notes: { type: [string, 'null'], maxLength: 5000 }
+        displayOrder: { type: integer, minimum: 0 }
+    FlashcardUpdateInput:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        topicId: { type: string, format: uuid }
+        frontText: { type: string, minLength: 1, maxLength: 5000 }
+        backText: { type: string, minLength: 1, maxLength: 5000 }
+        frontMediaId: { type: [string, 'null'], format: uuid }
+        backMediaId: { type: [string, 'null'], format: uuid }
+        difficulty: { $ref: '#/components/schemas/Difficulty' }
+        notes: { type: [string, 'null'], maxLength: 5000 }
+        displayOrder: { type: integer, minimum: 0 }
+    FlashcardBulkStatusInput:
+      type: object
+      additionalProperties: false
+      required: [ids, status]
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          maxItems: 500
+          uniqueItems: true
+          items: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/PublishStatus' }
+    FlashcardProgressInput:
+      type: object
+      additionalProperties: false
+      required: [eventId]
+      properties:
+        eventId: { type: string, format: uuid, description: Idempotency identifier unique per user. }
+        isDifficult: { type: boolean }
+        isMastered: { type: boolean }
+    FlashcardProgress:
+      type: object
+      additionalProperties: false
+      required: [flashcardId, viewedCount, isDifficult, isMastered, lastViewedAt]
+      properties:
+        flashcardId: { type: string, format: uuid }
+        viewedCount: { type: integer, minimum: 0 }
+        isDifficult: { type: boolean }
+        isMastered: { type: boolean }
+        lastViewedAt: { type: [string, 'null'], format: date-time }
+    Flashcard:
+      type: object
+      required: [id, topicId, frontText, backText, frontImageUrl, frontMediaId, backImageUrl, backMediaId, difficulty, displayOrder]
+      properties:
+        id: { type: string, format: uuid }
+        topicId: { type: string, format: uuid }
+        frontText: { type: string }
+        backText: { type: string }
+        frontImageUrl: { type: [string, 'null'] }
+        frontMediaId: { type: [string, 'null'], format: uuid }
+        backImageUrl: { type: [string, 'null'] }
+        backMediaId: { type: [string, 'null'], format: uuid }
+        difficulty: { $ref: '#/components/schemas/Difficulty' }
+        displayOrder: { type: integer }
+        notes: { type: [string, 'null'] }
+        status: { $ref: '#/components/schemas/PublishStatus' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        progress:
+          oneOf:
+            - { $ref: '#/components/schemas/FlashcardProgress' }
+            - { type: 'null' }
+    QuestionOptionInput:
+      type: object
+      additionalProperties: false
+      required: [optionText, isCorrect]
+      properties:
+        id: { type: string, format: uuid, description: Update only; must belong to this question. }
+        optionText: { type: string, minLength: 1, maxLength: 1000 }
+        mediaId: { type: [string, 'null'], format: uuid }
+        isCorrect: { type: boolean }
+    QuestionOptionsInput:
+      type: array
+      minItems: 2
+      maxItems: 6
+      description: Exactly one item must have isCorrect=true; existing IDs must be unique.
+      contains:
+        type: object
+        required: [isCorrect]
+        properties: { isCorrect: { const: true } }
+      minContains: 1
+      maxContains: 1
+      items: { $ref: '#/components/schemas/QuestionOptionInput' }
+    QuestionCreateInput:
+      type: object
+      additionalProperties: false
+      required: [topicId, assessmentType, questionText, explanation, options]
+      properties:
+        topicId: { type: string, format: uuid }
+        assessmentType: { $ref: '#/components/schemas/AssessmentType' }
+        questionText: { type: string, minLength: 1, maxLength: 5000 }
+        mediaId: { type: [string, 'null'], format: uuid }
+        explanation: { type: string, minLength: 1, maxLength: 5000 }
+        difficulty: { $ref: '#/components/schemas/Difficulty' }
+        conceptTag: { type: [string, 'null'], maxLength: 100 }
+        options: { $ref: '#/components/schemas/QuestionOptionsInput' }
+    QuestionUpdateInput:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        topicId: { type: string, format: uuid }
+        assessmentType: { $ref: '#/components/schemas/AssessmentType' }
+        questionText: { type: string, minLength: 1, maxLength: 5000 }
+        mediaId: { type: [string, 'null'], format: uuid }
+        explanation: { type: string, minLength: 1, maxLength: 5000 }
+        difficulty: { $ref: '#/components/schemas/Difficulty' }
+        conceptTag: { type: [string, 'null'], maxLength: 100 }
+        options: { $ref: '#/components/schemas/QuestionOptionsInput' }
+    QuestionStatusInput:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { $ref: '#/components/schemas/EditableStatus' }
+    QuestionActivityInput:
+      type: object
+      additionalProperties: false
+      required: [isActive]
+      properties:
+        isActive: { type: boolean }
+    QuestionBulkStatusInput:
+      type: object
+      additionalProperties: false
+      required: [ids, status]
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/PublishStatus' }
+    QuestionOption:
+      type: object
+      additionalProperties: false
+      required: [id, key, label, displayOrder, optionText, imageUrl, mediaId, isCorrect]
+      properties:
+        id: { type: string, format: uuid }
+        key: { type: string, format: uuid }
+        label: { type: string, pattern: '^[A-F]$' }
+        displayOrder: { type: integer, minimum: 1, maximum: 6 }
+        optionText: { type: string }
+        imageUrl: { type: [string, 'null'] }
+        mediaId: { type: [string, 'null'], format: uuid }
+        isCorrect: { type: boolean }
+    Question:
+      type: object
+      additionalProperties: false
+      required: [id, topicId, assessmentType, questionText, imageUrl, mediaId, explanation, difficulty, conceptTag, status, isActive, options, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        topicId: { type: string, format: uuid }
+        assessmentType: { $ref: '#/components/schemas/AssessmentType' }
+        questionText: { type: string }
+        imageUrl: { type: [string, 'null'] }
+        mediaId: { type: [string, 'null'], format: uuid }
+        explanation: { type: string }
+        difficulty: { $ref: '#/components/schemas/Difficulty' }
+        conceptTag: { type: [string, 'null'] }
+        status: { $ref: '#/components/schemas/PublishStatus' }
+        isActive: { type: boolean }
+        options:
+          type: array
+          minItems: 2
+          maxItems: 6
+          items: { $ref: '#/components/schemas/QuestionOption' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    AdminMedia:
+      type: object
+      additionalProperties: false
+      required: [id, originalFilename, mimeType, byteSize, width, height, altText, archivedAt, uploadedById, createdAt, updatedAt, signedUrl, signedUrlExpiresIn]
+      properties:
+        id: { type: string, format: uuid }
+        originalFilename: { type: string }
+        mimeType: { type: string, enum: [image/png, image/jpeg, image/webp] }
+        byteSize: { type: string, pattern: '^[0-9]+$', description: Decimal serialization of the database BigInt value. }
+        width: { type: [integer, 'null'], minimum: 1 }
+        height: { type: [integer, 'null'], minimum: 1 }
+        altText: { type: string }
+        archivedAt: { type: [string, 'null'], format: date-time }
+        uploadedById: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        signedUrl: { type: [string, 'null'], format: uri, description: Null when an admin preview cannot be signed temporarily. }
+        signedUrlExpiresIn: { type: [integer, 'null'], enum: [900, null] }
+    PublishedMedia:
+      type: object
+      additionalProperties: false
+      required: [id, mimeType, width, height, altText, signedUrl, signedUrlExpiresIn]
+      properties:
+        id: { type: string, format: uuid }
+        mimeType: { type: string, enum: [image/png, image/jpeg, image/webp] }
+        width: { type: [integer, 'null'], minimum: 1 }
+        height: { type: [integer, 'null'], minimum: 1 }
+        altText: { type: string }
+        signedUrl: { type: string, format: uri }
+        signedUrlExpiresIn: { type: integer, const: 300 }
+    Pagination:
+      type: object
+      required: [page, pageSize, total, totalPages]
+      properties:
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+        totalPages: { type: integer }
+    ApiSuccess:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, const: true }
+        data: {}
+        meta:
+          type: object
+          properties:
+            requestId: { type: string, format: uuid }
+            pagination: { $ref: '#/components/schemas/Pagination' }
+    ApiError:
+      type: object
+      required: [success, error]
+      properties:
+        success: { type: boolean, const: false }
+        error:
+          type: object
+          required: [code, message, requestId]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            fieldErrors:
+              type: object
+              additionalProperties:
+                type: array
+                items: { type: string }
+            requestId: { type: string, format: uuid }
+    AdminMediaEnvelope:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/AdminMedia' }
+        meta:
+          type: object
+          properties:
+            requestId: { type: string, format: uuid }
+    AdminMediaListEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/AdminMedia' }
+        meta:
+          type: object
+          required: [requestId, pagination]
+          properties:
+            requestId: { type: string, format: uuid }
+            pagination: { $ref: '#/components/schemas/Pagination' }
+    PublishedMediaEnvelope:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/PublishedMedia' }
+        meta:
+          type: object
+          properties:
+            requestId: { type: string, format: uuid }
+    FlashcardEnvelope:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/Flashcard' }
+        meta:
+          type: object
+          properties: { requestId: { type: string, format: uuid } }
+    FlashcardListEnvelope:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, const: true }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Flashcard' }
+        meta:
+          type: object
+          properties:
+            requestId: { type: string, format: uuid }
+            pagination: { $ref: '#/components/schemas/Pagination' }
+    FlashcardProgressEnvelope:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/FlashcardProgress' }
+        meta:
+          type: object
+          properties: { requestId: { type: string, format: uuid } }
+    QuestionEnvelope:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/Question' }
+        meta:
+          type: object
+          properties: { requestId: { type: string, format: uuid } }
+    QuestionListEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Question' }
+        meta:
+          type: object
+          required: [requestId, pagination]
+          properties:
+            requestId: { type: string, format: uuid }
+            pagination: { $ref: '#/components/schemas/Pagination' }
+    AttemptDetailEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/AttemptDetail' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    AttemptResultEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/AttemptResult' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    AttemptAnswerEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/AttemptAnswerReceipt' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    AttemptListEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/AttemptListItem' }
+        meta: { $ref: '#/components/schemas/ListMeta' }
+    LessonProgressEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/LessonProgress' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    ProgressListEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/ProgressSystem' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    ProgressSystemEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/ProgressSystem' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    UserDashboardEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/UserDashboard' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    AdminAttemptListEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/AdminAttemptListItem' }
+        meta: { $ref: '#/components/schemas/ListMeta' }
+    AdminAttemptDetailEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/AdminAttemptDetail' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    AdminUserProgressEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/AdminUserProgress' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    CronEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/CronResult' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    RequestMeta:
+      type: object
+      additionalProperties: false
+      required: [requestId]
+      properties: { requestId: { type: string, format: uuid } }
+    ListMeta:
+      type: object
+      additionalProperties: false
+      required: [requestId, pagination]
+      properties:
+        requestId: { type: string, format: uuid }
+        pagination: { $ref: '#/components/schemas/Pagination' }
+  responses:
+    Success:
+      description: Successful operation
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiSuccess' }
+    ListSuccess:
+      description: Successful paginated list; pagination is nested under meta.pagination.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiSuccess' }
+    AdminMediaSuccess:
+      description: Admin media metadata with a 900-second signed URL
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AdminMediaEnvelope' }
+    AdminMediaListSuccess:
+      description: Paginated admin media DTOs with decimal-string byte sizes and 900-second signed URLs
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AdminMediaListEnvelope' }
+    PublishedMediaSuccess:
+      description: Eligible published-media metadata with a 300-second signed URL
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/PublishedMediaEnvelope' }
+    FlashcardAdminSuccess:
+      description: Admin flashcard DTO
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/FlashcardEnvelope' }
+    FlashcardListSuccess:
+      description: Published flashcards with per-user progress; admin list operations additionally include pagination metadata.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/FlashcardListEnvelope' }
+    FlashcardProgressSuccess:
+      description: Current authenticated-user progress for the flashcard
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/FlashcardProgressEnvelope' }
+    QuestionSuccess:
+      description: Admin-only full question aggregate including options, correct answer, and explanation
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/QuestionEnvelope' }
+    QuestionListSuccess:
+      description: Paginated admin-only full question aggregates
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/QuestionListEnvelope' }
+    AttemptDetailSuccess:
+      description: Secret-safe owned attempt snapshot detail; result secrets are omitted for every status
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AttemptDetailEnvelope' }
+    AttemptResultSuccess:
+      description: Immutable submitted result with correct option keys, correctness, and explanations
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AttemptResultEnvelope' }
+    AttemptAnswerSuccess:
+      description: Stored answer receipt without correctness disclosure
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AttemptAnswerEnvelope' }
+    AttemptListSuccess:
+      description: Paginated owned attempts; result fields appear only for completed or auto-submitted items
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AttemptListEnvelope' }
+    LessonProgressSuccess:
+      description: Authenticated user's absolute lesson completion state
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/LessonProgressEnvelope' }
+    ProgressListSuccess:
+      description: Authoritative progress across current published active systems
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ProgressListEnvelope' }
+    ProgressSystemSuccess:
+      description: Authoritative progress for one current published active system
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ProgressSystemEnvelope' }
+    UserDashboardSuccess:
+      description: Owned submitted-attempt and progress dashboard
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/UserDashboardEnvelope' }
+    AdminAttemptListSuccess:
+      description: Paginated read-only admin attempt history
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AdminAttemptListEnvelope' }
+    AdminAttemptDetailSuccess:
+      description: Read-only admin attempt snapshot; result secrets appear only after submission
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AdminAttemptDetailEnvelope' }
+    AdminUserProgressSuccess:
+      description: Narrow profile plus authoritative user dashboard/progress
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AdminUserProgressEnvelope' }
+    CronSuccess:
+      description: Bounded due-attempt batch result
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/CronEnvelope' }
+    BadRequest:
+      description: Request validation failed or a required reorder parent is missing
+      content: &errorContent
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+    Unauthorized:
+      description: Missing, invalid, or inactive identity
+      content: *errorContent
+    Forbidden:
+      description: Active identity lacks ADMIN role or cookie mutation origin is unsafe
+      content: *errorContent
+    NotFound:
+      description: Resource is absent or inaccessible
+      content: *errorContent
+    Conflict:
+      description: Unique, lifecycle, publication, or reference conflict
+      content: *errorContent
+    Unprocessable:
+      description: Parent, media, or reorder reference cannot be processed
+      content: *errorContent
+    RateLimited:
+      description: Too many requests
+      content: *errorContent
+    InternalError:
+      description: Unexpected failure or invalid stored lesson content
+      content: *errorContent
+    StorageError:
+      description: Supabase Storage upload or signed-read failure
+      content: *errorContent
+    CronUnavailable:
+      description: Scheduled processing is disabled because CRON_SECRET is not configured
+      content: *errorContent
+    CronUnauthorized:
+      description: Missing or invalid CRON_SECRET bearer credential
+      content: *errorContent

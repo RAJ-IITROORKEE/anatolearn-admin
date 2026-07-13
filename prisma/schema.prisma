@@ -1,0 +1,549 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  ADMIN
+  USER
+}
+
+enum PublishStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum AssessmentType {
+  QUIZ
+  TEST
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  COMPLETED
+  AUTO_SUBMITTED
+  ABANDONED
+}
+
+enum FeedbackType {
+  GENERAL
+  BUG_REPORT
+  QUESTION_REQUEST
+  IMPROVEMENT
+}
+
+enum FeedbackStatus {
+  NEW
+  REVIEWED
+  RESOLVED
+}
+
+enum NotificationType {
+  DAILY_STUDY
+  TEST_REMINDER
+  ANNOUNCEMENT
+}
+
+enum NotificationStatus {
+  DRAFT
+  SCHEDULED
+  SENT
+  CANCELLED
+}
+
+enum NotificationDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+enum DevicePlatform {
+  IOS
+  ANDROID
+}
+
+enum StorageVisibility {
+  PRIVATE
+  PUBLIC
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  PUBLISH
+  ARCHIVE
+  DELETE
+  ACTIVATE
+  DEACTIVATE
+  LOGIN
+  PASSWORD_CHANGE
+  ROLE_CHANGE
+  SCHEDULE
+  CANCEL
+  SEND
+  REVIEW
+  RESOLVE
+}
+
+model Profile {
+  id                     String                  @id @db.Uuid
+  fullName               String
+  email                  String
+  emailNormalized        String                  @unique
+  role                   UserRole                @default(USER)
+  avatarUrl              String?
+  avatarMediaId          String?                 @db.Uuid
+  avatarMedia            MediaAsset?             @relation("ProfileAvatar", fields: [avatarMediaId], references: [id], onDelete: Restrict)
+  isActive               Boolean                 @default(true)
+  lastLoginAt            DateTime?               @db.Timestamptz(3)
+  createdAt              DateTime                @default(now()) @db.Timestamptz(3)
+  updatedAt              DateTime                @updatedAt @db.Timestamptz(3)
+  lessonProgress         ContentLessonProgress[]
+  attempts               AssessmentAttempt[]
+  flashcardProgress      FlashcardProgress[]
+  flashcardViewEvents    FlashcardViewEvent[]
+  topicProgress          TopicProgress[]
+  submittedFeedback      Feedback[]              @relation("FeedbackSubmitter")
+  reviewedFeedback       Feedback[]              @relation("FeedbackReviewer")
+  notificationCampaigns  NotificationCampaign[]
+  notificationRecipients NotificationRecipient[]
+  deviceTokens           DeviceToken[]
+  uploadedMedia          MediaAsset[]            @relation("MediaUploader")
+  auditLogs              AuditLog[]
+
+  @@index([role, isActive])
+  @@index([createdAt])
+}
+
+model OrganSystem {
+  id               String              @id @default(uuid()) @db.Uuid
+  name             String              @unique
+  slug             String              @unique
+  shortDescription String
+  longDescription  String?
+  coverImageUrl    String?
+  coverMediaId     String?             @db.Uuid
+  coverMedia       MediaAsset?         @relation("OrganSystemCover", fields: [coverMediaId], references: [id], onDelete: Restrict)
+  iconImageUrl     String?
+  iconMediaId      String?             @db.Uuid
+  iconMedia        MediaAsset?         @relation("OrganSystemIcon", fields: [iconMediaId], references: [id], onDelete: Restrict)
+  displayOrder     Int
+  status           PublishStatus       @default(DRAFT)
+  isActive         Boolean             @default(true)
+  createdAt        DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime            @updatedAt @db.Timestamptz(3)
+  topics           Topic[]
+  attempts         AssessmentAttempt[]
+
+  @@index([status, isActive, displayOrder, id])
+}
+
+model Topic {
+  id            String                   @id @default(uuid()) @db.Uuid
+  organSystemId String                   @db.Uuid
+  organSystem   OrganSystem              @relation(fields: [organSystemId], references: [id], onDelete: Restrict)
+  title         String
+  slug          String
+  summary       String?
+  coverImageUrl String?
+  coverMediaId  String?                  @db.Uuid
+  coverMedia    MediaAsset?              @relation("TopicCover", fields: [coverMediaId], references: [id], onDelete: Restrict)
+  displayOrder  Int
+  status        PublishStatus            @default(DRAFT)
+  createdAt     DateTime                 @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime                 @updatedAt @db.Timestamptz(3)
+  lessons       ContentLesson[]
+  flashcards    Flashcard[]
+  questions     Question[]
+  attemptTopics AssessmentAttemptTopic[]
+  progress      TopicProgress[]
+
+  @@unique([organSystemId, slug])
+  @@index([organSystemId, status, displayOrder, id])
+}
+
+model ContentLesson {
+  id                      String                  @id @default(uuid()) @db.Uuid
+  topicId                 String                  @db.Uuid
+  topic                   Topic                   @relation(fields: [topicId], references: [id], onDelete: Restrict)
+  title                   String
+  slug                    String
+  summary                 String?
+  contentBlocks           Json
+  estimatedReadingMinutes Int
+  displayOrder            Int
+  status                  PublishStatus           @default(DRAFT)
+  createdAt               DateTime                @default(now()) @db.Timestamptz(3)
+  updatedAt               DateTime                @updatedAt @db.Timestamptz(3)
+  progress                ContentLessonProgress[]
+
+  @@unique([topicId, slug])
+  @@index([topicId, status, displayOrder, id])
+}
+
+model ContentLessonProgress {
+  id              String        @id @default(uuid()) @db.Uuid
+  userId          String        @db.Uuid
+  user            Profile       @relation(fields: [userId], references: [id], onDelete: Restrict)
+  contentLessonId String        @db.Uuid
+  contentLesson   ContentLesson @relation(fields: [contentLessonId], references: [id], onDelete: Restrict)
+  completedAt     DateTime?     @db.Timestamptz(3)
+  lastViewedAt    DateTime      @default(now()) @db.Timestamptz(3)
+  createdAt       DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime      @updatedAt @db.Timestamptz(3)
+
+  @@unique([userId, contentLessonId])
+  @@index([userId, completedAt])
+  @@index([contentLessonId])
+}
+
+model Flashcard {
+  id            String               @id @default(uuid()) @db.Uuid
+  topicId       String               @db.Uuid
+  topic         Topic                @relation(fields: [topicId], references: [id], onDelete: Restrict)
+  frontText     String
+  backText      String
+  frontImageUrl String?
+  frontMediaId  String?              @db.Uuid
+  frontMedia    MediaAsset?          @relation("FlashcardFront", fields: [frontMediaId], references: [id], onDelete: Restrict)
+  backImageUrl  String?
+  backMediaId   String?              @db.Uuid
+  backMedia     MediaAsset?          @relation("FlashcardBack", fields: [backMediaId], references: [id], onDelete: Restrict)
+  difficulty    Difficulty           @default(MEDIUM)
+  notes         String?
+  displayOrder  Int
+  status        PublishStatus        @default(DRAFT)
+  createdAt     DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime             @updatedAt @db.Timestamptz(3)
+  progress      FlashcardProgress[]
+  viewEvents    FlashcardViewEvent[]
+
+  @@index([topicId, status, difficulty, displayOrder, id])
+  @@index([frontMediaId])
+  @@index([backMediaId])
+  @@index([status, difficulty, updatedAt, id])
+}
+
+model Question {
+  id               String            @id @default(uuid()) @db.Uuid
+  topicId          String            @db.Uuid
+  topic            Topic             @relation(fields: [topicId], references: [id], onDelete: Restrict)
+  assessmentType   AssessmentType
+  questionText     String
+  imageUrl         String?
+  mediaId          String?           @db.Uuid
+  media            MediaAsset?       @relation("QuestionMedia", fields: [mediaId], references: [id], onDelete: Restrict)
+  explanation      String
+  difficulty       Difficulty        @default(MEDIUM)
+  conceptTag       String?
+  status           PublishStatus     @default(DRAFT)
+  isActive         Boolean           @default(true)
+  createdAt        DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime          @updatedAt @db.Timestamptz(3)
+  options          QuestionOption[]
+  attemptQuestions AttemptQuestion[]
+
+  @@index([assessmentType, topicId, difficulty, status, isActive, id])
+  @@index([mediaId])
+  @@index([assessmentType, status, isActive, updatedAt, id])
+}
+
+model QuestionOption {
+  id           String      @id @default(uuid()) @db.Uuid
+  questionId   String      @db.Uuid
+  question     Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  key          String      @db.Uuid
+  label        String
+  displayOrder Int
+  optionText   String
+  imageUrl     String?
+  mediaId      String?     @db.Uuid
+  media        MediaAsset? @relation("QuestionOptionMedia", fields: [mediaId], references: [id], onDelete: Restrict)
+  isCorrect    Boolean     @default(false)
+  createdAt    DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime    @updatedAt @db.Timestamptz(3)
+
+  @@unique([questionId, key])
+  @@unique([questionId, label])
+  @@unique([questionId, displayOrder])
+  @@index([mediaId])
+}
+
+model AssessmentAttempt {
+  id                     String                   @id @default(uuid()) @db.Uuid
+  userId                 String                   @db.Uuid
+  user                   Profile                  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  assessmentType         AssessmentType
+  organSystemId          String                   @db.Uuid
+  organSystem            OrganSystem              @relation(fields: [organSystemId], references: [id], onDelete: Restrict)
+  requestedQuestionCount Int
+  totalQuestionCount     Int
+  correctCount           Int                      @default(0)
+  incorrectCount         Int                      @default(0)
+  unansweredCount        Int
+  scorePercentage        Decimal                  @default(0) @db.Decimal(5, 2)
+  durationSeconds        Int?
+  timeLimitSeconds       Int?
+  startedAt              DateTime                 @default(now()) @db.Timestamptz(3)
+  expiresAt              DateTime?                @db.Timestamptz(3)
+  completedAt            DateTime?                @db.Timestamptz(3)
+  status                 AttemptStatus            @default(IN_PROGRESS)
+  retakeSourceId         String?                  @db.Uuid
+  retakeSource           AssessmentAttempt?       @relation("AttemptRetakes", fields: [retakeSourceId], references: [id], onDelete: Restrict)
+  retakes                AssessmentAttempt[]      @relation("AttemptRetakes")
+  createdAt              DateTime                 @default(now()) @db.Timestamptz(3)
+  updatedAt              DateTime                 @updatedAt @db.Timestamptz(3)
+  topics                 AssessmentAttemptTopic[]
+  questions              AttemptQuestion[]
+
+  @@index([userId, assessmentType, completedAt, id])
+  @@index([userId, createdAt, id])
+  @@index([organSystemId])
+  @@index([status, expiresAt])
+  @@index([retakeSourceId])
+}
+
+model AssessmentAttemptTopic {
+  attemptId String            @db.Uuid
+  attempt   AssessmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+  topicId   String            @db.Uuid
+  topic     Topic             @relation(fields: [topicId], references: [id], onDelete: Restrict)
+
+  @@id([attemptId, topicId])
+  @@index([topicId])
+}
+
+model AttemptQuestion {
+  id                       String            @id @default(uuid()) @db.Uuid
+  attemptId                String            @db.Uuid
+  attempt                  AssessmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+  sourceQuestionId         String?           @db.Uuid
+  sourceQuestion           Question?         @relation(fields: [sourceQuestionId], references: [id], onDelete: Restrict)
+  sourceQuestionSnapshotId String            @db.Uuid
+  displayOrder             Int
+  questionTextSnapshot     String
+  imageUrlSnapshot         String?
+  mediaIdSnapshot          String?           @db.Uuid
+  explanationSnapshot      String
+  optionsSnapshot          Json
+  correctOptionKey         String            @db.Uuid
+  topicIdSnapshot          String            @db.Uuid
+  topicTitleSnapshot       String
+  difficultySnapshot       Difficulty
+  conceptTagSnapshot       String?
+  organSystemIdSnapshot    String            @db.Uuid
+  organSystemNameSnapshot  String
+  answeredOptionKey        String?           @db.Uuid
+  isCorrect                Boolean?
+  answeredAt               DateTime?         @db.Timestamptz(3)
+  timeSpentSeconds         Int?
+  createdAt                DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt                DateTime          @updatedAt @db.Timestamptz(3)
+
+  @@unique([attemptId, displayOrder])
+  @@unique([attemptId, sourceQuestionSnapshotId])
+  @@index([sourceQuestionId])
+  @@index([topicIdSnapshot, difficultySnapshot])
+  @@index([organSystemIdSnapshot, difficultySnapshot])
+}
+
+model FlashcardProgress {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @db.Uuid
+  user         Profile   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  flashcardId  String    @db.Uuid
+  flashcard    Flashcard @relation(fields: [flashcardId], references: [id], onDelete: Restrict)
+  viewedCount  Int       @default(0)
+  isDifficult  Boolean   @default(false)
+  isMastered   Boolean   @default(false)
+  lastViewedAt DateTime? @db.Timestamptz(3)
+  createdAt    DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@unique([userId, flashcardId])
+  @@index([flashcardId])
+}
+
+model FlashcardViewEvent {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @db.Uuid
+  user        Profile   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  flashcardId String    @db.Uuid
+  flashcard   Flashcard @relation(fields: [flashcardId], references: [id], onDelete: Restrict)
+  eventId     String    @db.Uuid
+  viewedAt    DateTime  @default(now()) @db.Timestamptz(3)
+
+  @@unique([userId, eventId])
+  @@index([flashcardId, viewedAt])
+}
+
+model TopicProgress {
+  id                         String   @id @default(uuid()) @db.Uuid
+  userId                     String   @db.Uuid
+  user                       Profile  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  topicId                    String   @db.Uuid
+  topic                      Topic    @relation(fields: [topicId], references: [id], onDelete: Restrict)
+  contentCompletionPercent   Decimal  @default(0) @db.Decimal(5, 2)
+  flashcardCompletionPercent Decimal  @default(0) @db.Decimal(5, 2)
+  quizAccuracyPercent        Decimal  @default(0) @db.Decimal(5, 2)
+  testAccuracyPercent        Decimal  @default(0) @db.Decimal(5, 2)
+  updatedAt                  DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([userId, topicId])
+  @@index([topicId])
+}
+
+model Feedback {
+  id                String         @id @default(uuid()) @db.Uuid
+  userId            String?        @db.Uuid
+  user              Profile?       @relation("FeedbackSubmitter", fields: [userId], references: [id], onDelete: Restrict)
+  type              FeedbackType
+  subject           String
+  message           String
+  attachmentMediaId String?        @db.Uuid
+  attachmentMedia   MediaAsset?    @relation("FeedbackAttachment", fields: [attachmentMediaId], references: [id], onDelete: Restrict)
+  status            FeedbackStatus @default(NEW)
+  reviewedById      String?        @db.Uuid
+  reviewedBy        Profile?       @relation("FeedbackReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
+  reviewedAt        DateTime?      @db.Timestamptz(3)
+  adminNotes        String?
+  createdAt         DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime       @updatedAt @db.Timestamptz(3)
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+  @@index([reviewedById])
+  @@index([attachmentMediaId])
+}
+
+model NotificationCampaign {
+  id           String                  @id @default(uuid()) @db.Uuid
+  type         NotificationType
+  title        String
+  message      String
+  targetFilter Json
+  scheduledAt  DateTime?               @db.Timestamptz(3)
+  sentAt       DateTime?               @db.Timestamptz(3)
+  status       NotificationStatus      @default(DRAFT)
+  createdById  String                  @db.Uuid
+  createdBy    Profile                 @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt    DateTime                @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime                @updatedAt @db.Timestamptz(3)
+  recipients   NotificationRecipient[]
+
+  @@index([status, scheduledAt])
+  @@index([createdById])
+}
+
+model NotificationRecipient {
+  id         String                 @id @default(uuid()) @db.Uuid
+  campaignId String                 @db.Uuid
+  campaign   NotificationCampaign   @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  userId     String                 @db.Uuid
+  user       Profile                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  readAt     DateTime?              @db.Timestamptz(3)
+  createdAt  DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime               @updatedAt @db.Timestamptz(3)
+  deliveries NotificationDelivery[]
+
+  @@unique([campaignId, userId])
+  @@index([userId, readAt, createdAt])
+}
+
+model NotificationDelivery {
+  id                String                     @id @default(uuid()) @db.Uuid
+  recipientId       String                     @db.Uuid
+  recipient         NotificationRecipient      @relation(fields: [recipientId], references: [id], onDelete: Restrict)
+  deviceTokenId     String?                    @db.Uuid
+  deviceToken       DeviceToken?               @relation(fields: [deviceTokenId], references: [id], onDelete: SetNull)
+  tokenSnapshot     String
+  status            NotificationDeliveryStatus @default(PENDING)
+  providerReceiptId String?
+  providerErrorCode String?
+  sentAt            DateTime?                  @db.Timestamptz(3)
+  failedAt          DateTime?                  @db.Timestamptz(3)
+  createdAt         DateTime                   @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime                   @updatedAt @db.Timestamptz(3)
+
+  @@index([recipientId, status])
+  @@index([deviceTokenId])
+  @@index([providerReceiptId])
+}
+
+model DeviceToken {
+  id            String                 @id @default(uuid()) @db.Uuid
+  userId        String                 @db.Uuid
+  user          Profile                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  expoPushToken String                 @unique
+  platform      DevicePlatform
+  isActive      Boolean                @default(true)
+  lastSeenAt    DateTime               @default(now()) @db.Timestamptz(3)
+  createdAt     DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime               @updatedAt @db.Timestamptz(3)
+  deliveries    NotificationDelivery[]
+
+  @@index([userId, isActive])
+}
+
+model MediaAsset {
+  id                  String            @id @default(uuid()) @db.Uuid
+  bucket              String
+  path                String
+  visibility          StorageVisibility @default(PRIVATE)
+  originalFilename    String
+  mimeType            String
+  byteSize            BigInt
+  width               Int?
+  height              Int?
+  altText             String
+  uploadedById        String            @db.Uuid
+  uploadedBy          Profile           @relation("MediaUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+  archivedAt          DateTime?         @db.Timestamptz(3)
+  createdAt           DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime          @updatedAt @db.Timestamptz(3)
+  profileAvatars      Profile[]         @relation("ProfileAvatar")
+  organSystemCovers   OrganSystem[]     @relation("OrganSystemCover")
+  organSystemIcons    OrganSystem[]     @relation("OrganSystemIcon")
+  topicCovers         Topic[]           @relation("TopicCover")
+  flashcardFronts     Flashcard[]       @relation("FlashcardFront")
+  flashcardBacks      Flashcard[]       @relation("FlashcardBack")
+  questionMedia       Question[]        @relation("QuestionMedia")
+  questionOptionMedia QuestionOption[]  @relation("QuestionOptionMedia")
+  feedbackAttachments Feedback[]        @relation("FeedbackAttachment")
+
+  @@unique([bucket, path])
+  @@index([mimeType])
+  @@index([uploadedById])
+  @@index([archivedAt])
+}
+
+model AuditLog {
+  id             String      @id @default(uuid()) @db.Uuid
+  actorId        String?     @db.Uuid
+  actor          Profile?    @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  action         AuditAction
+  entityType     String
+  entityId       String
+  beforeSnapshot Json?
+  afterSnapshot  Json?
+  ipHash         String?
+  userAgent      String?
+  requestId      String?
+  createdAt      DateTime    @default(now()) @db.Timestamptz(3)
+
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId, createdAt])
+}
