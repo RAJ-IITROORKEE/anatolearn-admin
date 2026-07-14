@@ -20,8 +20,8 @@ describe("admin attempt label lookup", () => {
       topicIds: ["topic-1", "topic-1", "topic-missing"],
     });
 
-    expect(mocks.systems).toHaveBeenCalledWith({ where: { id: { in: ["system-1"] } }, select: { id: true, name: true } });
-    expect(mocks.topics).toHaveBeenCalledWith({ where: { id: { in: ["topic-1", "topic-missing"] } }, select: { id: true, title: true } });
+    expect(mocks.systems).toHaveBeenCalledWith({ where: { id: { in: ["system-1"] }, trashedAt: null }, select: { id: true, name: true } });
+    expect(mocks.topics).toHaveBeenCalledWith({ where: { id: { in: ["topic-1", "topic-missing"] }, trashedAt: null, organSystem: { trashedAt: null } }, select: { id: true, title: true } });
     expect(result.systemLabels.get("system-1")).toBe("Cardiovascular");
     expect(result.topicLabels.get("topic-missing")).toBeUndefined();
   });

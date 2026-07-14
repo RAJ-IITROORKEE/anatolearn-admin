@@ -1,6 +1,7 @@
 import { mediaError } from "@/features/media/http";
 import { mediaUpdateSchema } from "@/features/media/schemas";
-import { deleteMedia, getMedia, updateMedia } from "@/features/media/service";
+import { getMedia, updateMedia } from "@/features/media/service";
+import { moveToTrash } from "@/features/trash/service";
 import { requireAdmin } from "@/lib/api/admin";
 import { apiError, apiSuccess } from "@/lib/api/response";
 
@@ -20,5 +21,5 @@ export async function PATCH(request: Request, context: Context) {
 
 export async function DELETE(request: Request, context: Context) {
   const auth = await requireAdmin(request, true); if ("response" in auth) return auth.response;
-  try { await deleteMedia((await context.params).id, auth.identity.profile.id, auth.id); return apiSuccess({ deleted: true }, { requestId: auth.id }); } catch (error) { return mediaError(error, auth.id); }
+  try { return apiSuccess(await moveToTrash("media-asset", (await context.params).id, { actorId: auth.identity.profile.id, requestId: auth.id }), { requestId: auth.id }); } catch (error) { return mediaError(error, auth.id); }
 }

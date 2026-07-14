@@ -59,13 +59,13 @@ export async function uploadMedia(file: File, altText: string, actorId: string, 
 }
 
 export async function listMedia(input: { page: number; pageSize: number; search?: string; mimeType?: string; archived?: boolean; uploadedById?: string }) {
-  const where: Prisma.MediaAssetWhereInput = { ...(input.search && { OR: [{ originalFilename: { contains: input.search, mode: "insensitive" } }, { altText: { contains: input.search, mode: "insensitive" } }] }), ...(input.mimeType && { mimeType: input.mimeType }), ...(input.uploadedById && { uploadedById: input.uploadedById }), ...(input.archived !== undefined && { archivedAt: input.archived ? { not: null } : null }) };
+  const where: Prisma.MediaAssetWhereInput = { trashedAt: null, ...(input.search && { OR: [{ originalFilename: { contains: input.search, mode: "insensitive" } }, { altText: { contains: input.search, mode: "insensitive" } }] }), ...(input.mimeType && { mimeType: input.mimeType }), ...(input.uploadedById && { uploadedById: input.uploadedById }), ...(input.archived !== undefined && { archivedAt: input.archived ? { not: null } : null }) };
   const [assets, total] = await prisma.$transaction([prisma.mediaAsset.findMany({ where, orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: (input.page - 1) * input.pageSize, take: input.pageSize, select }), prisma.mediaAsset.count({ where })]);
   return { items: await Promise.all(assets.map((asset) => withSignedUrl(asset))), pagination: { page: input.page, pageSize: input.pageSize, total, totalPages: Math.ceil(total / input.pageSize) } };
 }
 
 export async function getMedia(id: string) {
-  const asset = await prisma.mediaAsset.findUnique({ where: { id }, select });
+  const asset = await prisma.mediaAsset.findFirst({ where: { id, trashedAt: null }, select });
   if (!asset) throw new MediaServiceError("NOT_FOUND", "Media asset was not found.");
   return withSignedUrl(asset);
 }
@@ -94,16 +94,16 @@ export async function getAdminMediaMap(ids: readonly string[]) {
 
 async function getPublishedMediaInTransaction(tx: Prisma.TransactionClient, id: string) {
   const asset = await tx.mediaAsset.findFirst({
-    where: { id, archivedAt: null },
+    where: { id, archivedAt: null, trashedAt: null },
     select: {
       ...select,
-      organSystemCovers: { where: { status: "PUBLISHED", isActive: true }, select: { id: true } },
-      organSystemIcons: { where: { status: "PUBLISHED", isActive: true }, select: { id: true } },
-      topicCovers: { where: { status: "PUBLISHED", organSystem: { status: "PUBLISHED", isActive: true } }, select: { id: true } },
-      flashcardFronts: { where: { status: "PUBLISHED", topic: { status: "PUBLISHED", organSystem: { status: "PUBLISHED", isActive: true } } }, select: { id: true } },
-      flashcardBacks: { where: { status: "PUBLISHED", topic: { status: "PUBLISHED", organSystem: { status: "PUBLISHED", isActive: true } } }, select: { id: true } },
-      questionMedia: { where: { status: "PUBLISHED", isActive: true, topic: { status: "PUBLISHED", organSystem: { status: "PUBLISHED", isActive: true } } }, select: { id: true } },
-      questionOptionMedia: { where: { question: { status: "PUBLISHED", isActive: true, topic: { status: "PUBLISHED", organSystem: { status: "PUBLISHED", isActive: true } } } }, select: { id: true } },
+      organSystemCovers: { where: { trashedAt: null, status: "PUBLISHED", isActive: true }, select: { id: true } },
+      organSystemIcons: { where: { trashedAt: null, status: "PUBLISHED", isActive: true }, select: { id: true } },
+      topicCovers: { where: { trashedAt: null, status: "PUBLISHED", organSystem: { trashedAt: null, status: "PUBLISHED", isActive: true } }, select: { id: true } },
+      flashcardFronts: { where: { trashedAt: null, status: "PUBLISHED", topic: { trashedAt: null, status: "PUBLISHED", organSystem: { trashedAt: null, status: "PUBLISHED", isActive: true } } }, select: { id: true } },
+      flashcardBacks: { where: { trashedAt: null, status: "PUBLISHED", topic: { trashedAt: null, status: "PUBLISHED", organSystem: { trashedAt: null, status: "PUBLISHED", isActive: true } } }, select: { id: true } },
+      questionMedia: { where: { trashedAt: null, status: "PUBLISHED", isActive: true, topic: { trashedAt: null, status: "PUBLISHED", organSystem: { trashedAt: null, status: "PUBLISHED", isActive: true } } }, select: { id: true } },
+      questionOptionMedia: { where: { question: { trashedAt: null, status: "PUBLISHED", isActive: true, topic: { trashedAt: null, status: "PUBLISHED", organSystem: { trashedAt: null, status: "PUBLISHED", isActive: true } } } }, select: { id: true } },
     },
   });
   if (!asset) return null;
@@ -112,7 +112,10 @@ async function getPublishedMediaInTransaction(tx: Prisma.TransactionClient, id: 
     FROM "ContentLesson" lesson
     JOIN "Topic" topic ON topic."id" = lesson."topicId"
     JOIN "OrganSystem" system ON system."id" = topic."organSystemId"
-    WHERE lesson."status" = 'PUBLISHED'::"PublishStatus"
+    WHERE lesson."trashedAt" IS NULL
+      AND topic."trashedAt" IS NULL
+      AND system."trashedAt" IS NULL
+      AND lesson."status" = 'PUBLISHED'::"PublishStatus"
       AND topic."status" = 'PUBLISHED'::"PublishStatus"
       AND system."status" = 'PUBLISHED'::"PublishStatus"
       AND system."isActive" = true
@@ -179,7 +182,7 @@ export async function getPublishedMedia(id: string, userId: string) {
 
 export async function updateMedia(id: string, altText: string, actorId: string, requestId: string) {
   const asset = await prisma.$transaction(async (tx) => {
-    const before = await tx.mediaAsset.findUnique({ where: { id }, select });
+    const before = await tx.mediaAsset.findFirst({ where: { id, trashedAt: null }, select });
     if (!before) throw new MediaServiceError("NOT_FOUND", "Media asset was not found.");
     const updated = await tx.mediaAsset.update({ where: { id }, data: { altText }, select });
     await tx.auditLog.create({ data: { actorId, action: "UPDATE", entityType: "MediaAsset", entityId: id, beforeSnapshot: { altText: before.altText }, afterSnapshot: { altText }, requestId } });
@@ -190,8 +193,8 @@ export async function updateMedia(id: string, altText: string, actorId: string, 
 
 export async function archiveMedia(id: string, actorId: string, requestId: string) {
   const asset = await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "MediaAsset" WHERE "id"::text = ${id} FOR UPDATE`);
-    const before = await tx.mediaAsset.findUnique({ where: { id }, select });
+    await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "MediaAsset" WHERE "id"::text = ${id} AND "trashedAt" IS NULL FOR UPDATE`);
+    const before = await tx.mediaAsset.findFirst({ where: { id, trashedAt: null }, select });
     if (!before) throw new MediaServiceError("NOT_FOUND", "Media asset was not found.");
     if (before.archivedAt) return before;
     if (await getPublishedMediaInTransaction(tx, id)) throw new MediaServiceError("REFERENCED", "Media used by published content cannot be archived.");
@@ -204,7 +207,7 @@ export async function archiveMedia(id: string, actorId: string, requestId: strin
 
 export async function deleteMedia(id: string, actorId: string, requestId: string) {
   void actorId; void requestId;
-  const exists = await prisma.mediaAsset.findUnique({ where: { id }, select: { id: true } });
+  const exists = await prisma.mediaAsset.findFirst({ where: { id, trashedAt: null }, select: { id: true } });
   if (!exists) throw new MediaServiceError("NOT_FOUND", "Media asset was not found.");
   throw new MediaServiceError("HARD_DELETE_DISABLED", "Physical media deletion is disabled; archive the asset instead.");
 }

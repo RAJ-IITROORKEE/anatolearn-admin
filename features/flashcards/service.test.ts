@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => {
   const tx = {
     flashcard: { findFirst: vi.fn(), findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
-    topic: { findUnique: vi.fn() },
+    topic: { findFirst: vi.fn() },
     flashcardViewEvent: { findUnique: vi.fn(), create: vi.fn() },
     flashcardProgress: { findUnique: vi.fn(), upsert: vi.fn() },
     auditLog: { create: vi.fn() },
@@ -24,7 +24,7 @@ vi.mock("@/lib/db/prisma", () => ({ prisma: mocks.prisma }));
 vi.mock("@/features/progress/projection", () => ({ refreshTopicProgress: mocks.refreshTopicProgress }));
 
 import { Prisma } from "@prisma/client";
-import { bulkSetFlashcardStatus, setFlashcardStatus, updateFlashcard, updateFlashcardProgress } from "./service";
+import { bulkSetFlashcardStatus, reorderFlashcards, setFlashcardStatus, updateFlashcard, updateFlashcardProgress } from "./service";
 
 const userId = "10000000-0000-4000-8000-000000000001";
 const flashcardId = "20000000-0000-4000-8000-000000000002";
@@ -140,13 +140,13 @@ describe("flashcard mutation locks", () => {
     mocks.prisma.$transaction.mockImplementation((callback: (client: typeof mocks.tx) => unknown) => callback(mocks.tx));
     mocks.tx.$queryRaw.mockResolvedValue([{ id: flashcardId }]);
     mocks.tx.flashcard.findUnique.mockResolvedValue(card);
-    mocks.tx.topic.findUnique.mockResolvedValue({ status: "PUBLISHED", organSystem: { status: "PUBLISHED", isActive: true } });
+    mocks.tx.topic.findFirst.mockResolvedValue({ status: "PUBLISHED", organSystem: { status: "PUBLISHED", isActive: true } });
     mocks.tx.flashcard.update.mockImplementation(({ data }: { data: object }) => Promise.resolve({ ...card, ...data }));
   });
 
   it("locks the UUID row before updating it", async () => {
     await updateFlashcard(flashcardId, { frontText: "Updated" }, { actorId: userId, requestId: eventId });
-    expect(mocks.tx.$queryRaw).toHaveBeenCalledOnce();
+    expect(mocks.tx.$queryRaw).toHaveBeenCalledTimes(2);
     expect(mocks.tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(mocks.tx.flashcard.findUnique.mock.invocationCallOrder[0]);
     expect(mocks.tx.$queryRaw.mock.calls[0][0].values).toContain(flashcardId);
   });
@@ -183,5 +183,30 @@ describe("flashcard bulk lifecycle", () => {
     await bulkSetFlashcardStatus([flashcardId, otherId], "ARCHIVED", { actorId: userId, requestId: eventId });
     expect(mocks.tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(mocks.tx.flashcard.findMany.mock.invocationCallOrder[0]);
     expect(mocks.tx.$queryRaw.mock.calls[0][0].values).toEqual([otherId, flashcardId]);
+  });
+});
+
+describe("flashcard reorder locking", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mocks.prisma.$transaction.mockImplementation((callback: (client: typeof mocks.tx) => unknown) => callback(mocks.tx));
+  });
+
+  it("locks untrashed ancestors and selected rows in UUID order", async () => {
+    const otherId = "10000000-0000-4000-8000-000000000001";
+    mocks.tx.$queryRaw
+      .mockResolvedValueOnce([{ id: card.topicId }])
+      .mockResolvedValueOnce([
+        { id: otherId, displayOrder: 1, status: "DRAFT" },
+        { id: flashcardId, displayOrder: 0, status: "DRAFT" },
+      ]);
+
+    await reorderFlashcards(card.topicId, [flashcardId, otherId], { actorId: userId, requestId: eventId });
+
+    expect(mocks.tx.$queryRaw.mock.calls[0][0].strings.join(" ")).toContain("FOR SHARE OF topic, system");
+    const selected = mocks.tx.$queryRaw.mock.calls[1][0];
+    expect(selected.strings.join(" ")).toContain("FOR UPDATE");
+    expect(selected.values).toEqual([otherId, flashcardId, card.topicId]);
+    expect(mocks.tx.flashcard.findMany).not.toHaveBeenCalled();
   });
 });

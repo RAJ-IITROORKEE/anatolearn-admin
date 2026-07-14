@@ -32,12 +32,13 @@ export async function getEligibleQuestions(input: {
 }, db: Prisma.TransactionClient | PrismaClient = prisma) {
   const rows = await db.question.findMany({
     where: {
+      trashedAt: null,
       assessmentType: input.assessmentType,
       status: "PUBLISHED",
       isActive: true,
       difficulty: input.difficulty,
       topicId: input.topicIds?.length ? { in: input.topicIds } : undefined,
-      topic: { status: "PUBLISHED", organSystemId: input.organSystemId, organSystem: { status: "PUBLISHED", isActive: true } },
+      topic: { trashedAt: null, status: "PUBLISHED", organSystemId: input.organSystemId, organSystem: { trashedAt: null, status: "PUBLISHED", isActive: true } },
     },
     include: {
       media: { select: { archivedAt: true } },

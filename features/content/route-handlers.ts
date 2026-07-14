@@ -4,6 +4,7 @@ import { hasRole, resolveRequestIdentity } from "@/lib/auth/request";
 import { hasSafeOrigin } from "@/lib/security/origin";
 import { contentLessonCreateSchema, contentLessonUpdateSchema, listQuerySchema, organSystemCreateSchema, organSystemUpdateSchema, reorderSchema, statusUpdateSchema, topicCreateSchema, topicUpdateSchema } from "./schemas";
 import { createContent, getAdmin, listAdmin, reorderContent, setStatus, updateContent } from "./service";
+import { moveToTrash } from "@/features/trash/service";
 
 export type Resource = "organSystem" | "topic" | "contentLesson";
 const schemas = {
@@ -62,7 +63,7 @@ export function adminItemHandlers(resource: Resource) {
     }),
     DELETE: (request: Request, { params }: { params: Promise<{ id: string }> }) => withApiErrors(async (id) => {
       const auth = await admin(request, id, true); if (auth.error || !auth.identity) return auth.error!;
-      const result = await setStatus(resource, (await params).id, "ARCHIVED", context(request, auth.identity.profile.id, id));
+      const result = await moveToTrash(resource === "organSystem" ? "organ-system" : resource === "contentLesson" ? "content-lesson" : "topic", (await params).id, context(request, auth.identity.profile.id, id));
       return apiSuccess(result, { requestId: id });
     }),
   };

@@ -7,6 +7,10 @@
     {
       "path": "/api/internal/notifications/process",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/internal/trash/purge",
+      "schedule": "0 3 * * *"
     }
   ]
 }

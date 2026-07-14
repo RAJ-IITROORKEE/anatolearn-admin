@@ -86,7 +86,8 @@ untrusted. The Next.js server is the authorization boundary.
 - Publishing flashcards/questions checks parent hierarchy and acquires shared locks on
   all referenced media. Question selection additionally requires active status and
   rejects archived question/option media.
-- Archived learning items are terminal. Question activity is server-controlled;
+- Trashed learning items are hidden immediately and recoverable only within the database-
+  clock 30-day window. Question activity is server-controlled;
   deactivation excludes a published question from selection without changing status.
 
 ## Assessment and progress controls
@@ -233,8 +234,8 @@ routes are scheduled every minute.
 - Protected admin attempt pages batch-sign snapshot media, including archived history,
   for 900 seconds. Both paths omit Storage bucket and object path.
 - Required alt text is enforced by request validation and a database check.
-- Physical deletion is disabled and returns `409 HARD_DELETE_DISABLED` for every
-  existing asset. Archive is supported, but returns `409 REFERENCED` while eligible
+- Physical deletion through the legacy media DELETE endpoint remains disabled. The media
+  archive action moves the asset to Trash and returns `409 REFERENCED` while eligible
   published content references the asset.
 
 Current limitations:
@@ -247,14 +248,20 @@ Current limitations:
 
 ## Lifecycle and deletion controls
 
-- Systems, topics, and lessons use `DRAFT`, `PUBLISHED`, and terminal `ARCHIVED`
-  states. API `DELETE` archives these resources rather than removing rows.
+- Six resource types use recoverable Trash metadata: systems, topics, lessons, flashcards,
+  questions, and media. DELETE/archive aliases set `trashedAt`, `purgeAfter` (30 days by
+  database clock), and hide the resource. Restore clears metadata and returns content to
+  DRAFT; it never republishes.
 - Topic/lesson publication checks parent publication; system active status also gates
   child visibility.
 - Parent archive/deactivation does not mutate descendants but removes them from
   published reads through query constraints.
 - Managed media supports archive but not physical deletion. Published-reference checks
   run transactionally before first archive.
+- Purge is protected by exact `Bearer CRON_SECRET`, scheduled daily at `0 3 * * *`, and
+  leaf-first/dependency-aware. Attempts, progress, audits, and notification evidence are
+  preserved. Media storage jobs retry after failures and are deleted only after provider
+  confirmation; legacy `ARCHIVED` rows without Trash metadata are not auto-purged.
 
 ## Audit controls
 
@@ -327,7 +334,7 @@ concern, not a Phase 3 code completion gate.
 2. Supabase provider/auth and signed-URL integration is mocked. Authenticated content/
    media/audit/flashcard/question CRUD and full learner assessment E2E are absent.
 3. Scheduled expiry is not deployment-ready until a valid `CRON_SECRET` and both Vercel cron
-   are configured. The current `npm run env:check` intentionally fails only on the
+   are configured. The current `npm run env:check` passes locally; the
    invalid configured secret; ordinary runtime and production build are isolated from it.
 4. Expo request/receipt handling is unit-tested but has not been verified with real
    credentials/devices. Notification leases lack a real PostgreSQL multi-worker test,

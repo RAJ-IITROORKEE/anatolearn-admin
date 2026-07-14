@@ -127,7 +127,8 @@ The following collections implement `GET`, `POST`, and `PATCH`; item routes impl
 - `/api/v1/admin/content-lessons`
 
 All require **Admin**. `POST` returns `201`; other successful operations return `200`.
-`DELETE` archives and returns the updated DTO; it does not hard-delete.
+`DELETE` moves the resource to recoverable Trash and returns the updated DTO. Archive
+aliases use the same Trash action; this is not a hard delete.
 
 ### List query
 
@@ -275,7 +276,7 @@ mutations also require a safe same-origin request.
 | `PATCH /api/v1/admin/flashcards` | Reorder selected cards within `parentId` topic; IDs 1-500 |
 | `GET /api/v1/admin/flashcards/{id}` | Admin DTO |
 | `PATCH /api/v1/admin/flashcards/{id}` | Strict non-empty partial update, or exact `{ "status": ... }` |
-| `DELETE /api/v1/admin/flashcards/{id}` | Terminal archive; no hard delete |
+| `DELETE /api/v1/admin/flashcards/{id}` | Moves the flashcard to Trash |
 | `PATCH /api/v1/admin/flashcards/{id}/status` | Exact status body |
 | `POST /api/v1/admin/flashcards/{id}/archive` | Terminal archive alias |
 | `PATCH /api/v1/admin/flashcards/bulk-status` | Atomic `{ "ids": [1-500 unique UUIDs], "status": ... }` |
@@ -291,7 +292,7 @@ timestamps. Learner DTOs omit those fields and add progress (`viewedCount`,
 List search covers front, back, and notes. Sort values are `displayOrder`, `frontText`,
 `difficulty`, `createdAt`, or `updatedAt`; ID is the stable tie-breaker. Reorder is
 topic-scoped and rejects archived cards. Publish requires an eligible parent hierarchy
-and unarchived media. Archive is terminal; individual and bulk no-op status changes do
+and unarchived media. Trash retention is 30 days by database clock; individual and bulk no-op status changes do
 not create another audit event.
 
 Progress body is strict:
@@ -316,7 +317,7 @@ immutable snapshots created by the assessment engine's internal selection servic
 | `POST /api/v1/admin/questions` | Create a draft question and options atomically; `201` |
 | `GET /api/v1/admin/questions/{id}` | Full aggregate including correct answer/explanation |
 | `PATCH /api/v1/admin/questions/{id}` | Strict non-empty partial update; supplied options replace the aggregate atomically |
-| `DELETE /api/v1/admin/questions/{id}` | Terminal archive |
+| `DELETE /api/v1/admin/questions/{id}` | Moves the question to Trash |
 | `PATCH /api/v1/admin/questions/{id}/status` | `{ "status": "DRAFT"|"PUBLISHED" }` |
 | `POST /api/v1/admin/questions/{id}/archive` | Terminal archive alias |
 | `PATCH /api/v1/admin/questions/{id}/activity` | `{ "isActive": boolean }` |
@@ -671,6 +672,27 @@ attempts with bounded backoff, and receipt failure after 20 polls or 23 hours. A
 after provider acceptance but before persistence leaves an unavoidable at-least-once
 duplicate-send window.
 
+## Trash and protected purge job
+
+`GET /api/v1/admin/trash` lists heterogeneous Trash for the six supported types:
+`organ-system`, `topic`, `content-lesson`, `flashcard`, `question`, and `media-asset`.
+It is admin-only, paginated, and supports `q`, `type`, `expiry`, `eligibility`, and
+`sort`. `POST /api/v1/admin/trash/{type}/{id}/restore` is admin-only and succeeds only
+before the 30-day deadline measured by the database clock. Restored content is `DRAFT`
+and is not republished; media is unarchived. A trashed child cannot be restored while a
+parent remains unavailable.
+
+`GET` and `POST /api/internal/trash/purge` require the exact `Authorization: Bearer
+<CRON_SECRET>` header. Vercel invokes GET daily at `0 3 * * *`; POST is an authenticated
+operational alias. The worker runs at most four batches of 25 within eight seconds,
+purges leaf resources before parents, and preserves attempts, progress, audits, and
+notification evidence. Blocked rows remain in Trash and are retried. Media metadata is
+removed only after a `MediaPurgeJob` storage deletion is confirmed; storage failures
+retry with a released lease and never report false success. Legacy `ARCHIVED` rows with
+no Trash metadata are not auto-purged.
+
+Normal editor block deletion is separate and requires confirmation before saving.
+
 ## Internal attempt-expiry job
 
 `GET` and `POST /api/internal/attempts/expire` are outside `/api/v1`. They require
@@ -728,7 +750,7 @@ eligible or appears in an attempt they own; unauthorized history returns `404`.
 | `GET /api/v1/admin/media/{id}` | Asset metadata and fresh signed URL, including archived assets |
 | `PATCH /api/v1/admin/media/{id}` | JSON `{ "altText": "..." }`, 1-500 trimmed characters |
 | `POST /api/v1/admin/media/{id}/archive` | Idempotent archive; already archived returns current asset; eligible published references return `409` |
-| `DELETE /api/v1/admin/media/{id}` | Physical deletion is deliberately disabled; an existing ID always returns `409 HARD_DELETE_DISABLED` |
+| `DELETE /api/v1/admin/media/{id}` | Legacy physical deletion remains disabled; use archive to move the asset to Trash |
 
 List `mimeType` is one of `image/png`, `image/jpeg`, or `image/webp`; `archived` is
 the string `true` or `false`. `search` matches original filename or alt text. Listing
@@ -747,7 +769,7 @@ and do not use the client filename.
 | `400 INVALID_FILE` | Empty/oversized/malformed/disallowed image or MIME mismatch |
 | `404 NOT_FOUND` | Media metadata absent |
 | `409 REFERENCED` | Archive blocked because eligible published content references the asset |
-| `409 HARD_DELETE_DISABLED` | Physical deletion is disabled; use archive |
+| `409 HARD_DELETE_DISABLED` | Legacy physical deletion is disabled; use the Trash archive action |
 | `502 STORAGE_ERROR` | Upload or signed URL creation failed |
 
 Upload, alt-text update, and first archive are audited. Archiving an already archived
@@ -812,8 +834,9 @@ table labels, breadcrumbs, responsive overflow, noindex metadata, and robots beh
 
 ## Externally unverified delivery gates
 
-The 104-operation contract and Phase 7 repository implementation are complete. Real
+The 108-operation contract and Phase 7 repository implementation are complete. Real
 Expo/EAS device delivery, production Upstash, authenticated admin Playwright flows, real
 Supabase Auth email/redirect/private Storage, both deployed cron schedules, backup/
 restore, and production deployment remain unverified. There is no public question-bank
-API by design. The local `CRON_SECRET` is invalid, so `env:check` intentionally fails.
+API by design. The local environment passes `env:check`; deployment still requires
+deployment-scoped cron and rate-limit values.

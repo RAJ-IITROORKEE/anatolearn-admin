@@ -20,6 +20,7 @@ import {
   setFlashcardStatus,
   updateFlashcard,
 } from "./service";
+import { moveToTrash } from "@/features/trash/service";
 
 async function requireAdmin(request: Request, requestId: string, mutation = false) {
   const identity = await resolveRequestIdentity(request);
@@ -79,7 +80,7 @@ export const adminFlashcardItemHandlers = {
   DELETE: (request: Request, { params }: { params: Promise<{ id: string }> }) => withApiErrors(async (requestId) => {
     const auth = await requireAdmin(request, requestId, true);
     if (auth.error || !auth.identity) return auth.error!;
-    return apiSuccess(await setFlashcardStatus(await routeId(params), "ARCHIVED", context(request, auth.identity.profile.id, requestId)), { requestId });
+    return apiSuccess(await moveToTrash("flashcard", await routeId(params), context(request, auth.identity.profile.id, requestId)), { requestId });
   }),
 };
 
@@ -105,6 +106,6 @@ export function adminFlashcardArchiveHandler(request: Request, { params }: { par
   return withApiErrors(async (requestId) => {
     const auth = await requireAdmin(request, requestId, true);
     if (auth.error || !auth.identity) return auth.error!;
-    return apiSuccess(await setFlashcardStatus(await routeId(params), "ARCHIVED", context(request, auth.identity.profile.id, requestId)), { requestId });
+    return apiSuccess(await moveToTrash("flashcard", await routeId(params), context(request, auth.identity.profile.id, requestId)), { requestId });
   });
 }

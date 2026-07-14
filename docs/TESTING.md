@@ -47,7 +47,7 @@ Install Chromium once with `npx playwright install chromium`.
 - every supported lesson block is accepted
 - raw HTML and malformed image blocks are rejected
 - page-size cap and unique reorder IDs
-- draft/published transitions and terminal archive behavior
+- draft/published transitions and recoverable Trash behavior
 - published-state invariant validation for systems, topics, and lessons
 
 ### Media and audit
@@ -164,7 +164,7 @@ Install Chromium once with `npx playwright install chromium`.
 ### Contract and database access hardening
 
 - OpenAPI validation discovers route methods and proves exact parity, resolvable refs,
-  104 unique operation IDs, reusable response headers, strict empty-body contracts,
+  108 unique operation IDs, reusable response headers, strict empty-body contracts,
   documented rate limits, and representative DTO privacy
 - isolated PostgreSQL role tests prove `anon` and `authenticated` cannot read or write
   application tables while the normal Prisma role remains operational
@@ -172,20 +172,31 @@ Install Chromium once with `npx playwright install chromium`.
   secret-redaction, and exit behavior
 - axe runs on public pages and is wired into authenticated desktop/mobile projects
 
+### Recoverable Trash
+
+- Trash schemas, DTO retention/eligibility states, restore deadline/parent checks, six
+  resource types, audit actions, purge ordering, dependency blockers, and storage retry
+  semantics are covered by unit/route tests.
+- The PostgreSQL Trash suite passed 4/4 in an isolated schema, covering direct-delete
+  protection, the exact database-clock restore deadline, MediaPurgeJob access control,
+  and a representative foreign-key blocker. The default conditional DB run skips these
+  cases when `TEST_DATABASE_URL` is absent.
+- The normal editor block-delete confirmation is tested separately from resource Trash.
+
 ## Final Phase 7 verification record
 
 | Command | Result |
 | --- | --- |
 | `npm run lint` | Passed |
 | `npm run typecheck` | Passed |
-| `npm run test` | Passed: 129 files, 2 skipped; 412 tests, 9 skipped |
+| `npm run test` | Passed: 139 files, 3 skipped; 442 tests, 13 skipped |
 | Isolated `TEST_DATABASE_URL` run | Passed: 2 files/9 tests (4 assessment lifecycle + 5 direct database access) |
 | `npm run prisma:deploy` | Passed; both Phase 7 RLS/revoke migrations deployed to configured development DB |
-| Prisma migration status | Current: all seven migrations |
+| Prisma migration status | Current: all nine migrations, including both Trash migrations |
 | `npm run test:e2e` | 17 passed, 14 skipped |
 | `npm run build` | Passed: 40 static-generation units under dynamic nonce CSP output; all routes included |
-| `npm run env:check` | **Failed** only for invalid `CRON_SECRET`; configuration gate remains open |
-| `npm run openapi:validate` | Passed: 104 operations and 104 unique operation IDs with exact route parity |
+| `npm run env:check` | Passed locally; production deployment values remain an external gate |
+| `npm run openapi:validate` | Passed: 108 operations and 108 unique operation IDs with exact route parity |
 | `npm audit` | 0 high/critical; 2 moderate PostCSS findings through Next.js remain |
 | `git diff --check` | Passed; line-ending conversion warnings only |
 
@@ -200,7 +211,7 @@ The default Vitest suite conditionally skips isolated database files without a d
 `TEST_DATABASE_URL`. The separate 9-test run covered the four assessment lifecycle cases
 and five `anon`/`authenticated` direct-access/Prisma-operability cases. The access-control
 migrations are deployed to configured development, not production. The failed
-`env:check` remains intentional until the local `CRON_SECRET` is replaced; production
+`env:check` passes locally; production
 validation additionally requires both Upstash values.
 
 The Phase 6 migrations are split because PostgreSQL requires newly added enum values to

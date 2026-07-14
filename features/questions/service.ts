@@ -15,6 +15,7 @@ import type {
   QuestionListInput,
   QuestionUpdateInput,
 } from "./schemas";
+import { moveToTrash } from "@/features/trash/service";
 
 type MutationContext = { actorId: string; requestId: string; userAgent?: string | null };
 const includeOptions = { options: { orderBy: { displayOrder: "asc" as const } } };
@@ -43,8 +44,15 @@ async function audit(
 }
 
 async function getParent(tx: Prisma.TransactionClient, topicId: string) {
-  const topic = await tx.topic.findUnique({
-    where: { id: topicId },
+  const locked = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT topic."id" FROM "Topic" topic
+    JOIN "OrganSystem" system ON system."id" = topic."organSystemId"
+    WHERE topic."id" = ${topicId}::uuid AND topic."trashedAt" IS NULL AND system."trashedAt" IS NULL
+    FOR SHARE OF topic, system
+  `);
+  if (!locked.length) throw new QuestionError("PARENT_NOT_FOUND", "Topic was not found.", 422);
+  const topic = await tx.topic.findFirst({
+    where: { id: topicId, trashedAt: null, organSystem: { trashedAt: null } },
     select: { status: true, organSystem: { select: { status: true, isActive: true } } },
   });
   if (!topic) throw new QuestionError("PARENT_NOT_FOUND", "Topic was not found.", 422);
@@ -56,7 +64,7 @@ async function validateMedia(tx: Prisma.TransactionClient, ids: Array<string | n
   if (!unique.length) return;
   const rows = await tx.$queryRaw<Array<{ id: string; archivedAt: Date | null }>>(Prisma.sql`
     SELECT "id", "archivedAt" FROM "MediaAsset"
-    WHERE "id" IN (${Prisma.join(unique)}) FOR SHARE
+    WHERE "id" IN (${Prisma.join(unique)}) AND "trashedAt" IS NULL FOR SHARE
   `);
   if (rows.length !== unique.length || rows.some((row) => row.archivedAt !== null)) {
     throw new QuestionError("INVALID_MEDIA_REFERENCE", "A question media reference is absent or archived.", 422);
@@ -100,13 +108,14 @@ function scalarUpdateData(input: QuestionUpdateInput): Prisma.QuestionUncheckedU
 
 export async function listQuestions(input: QuestionListInput) {
   const where: Prisma.QuestionWhereInput = {
+    trashedAt: null,
     assessmentType: input.assessmentType,
     topicId: input.topicId,
     difficulty: input.difficulty,
     status: input.status,
     isActive: input.isActive,
     conceptTag: input.conceptTag ? { equals: input.conceptTag, mode: "insensitive" } : undefined,
-    topic: input.organSystemId ? { organSystemId: input.organSystemId } : undefined,
+    topic: input.organSystemId ? { organSystemId: input.organSystemId, trashedAt: null, organSystem: { trashedAt: null } } : { trashedAt: null, organSystem: { trashedAt: null } },
     ...(input.q ? { OR: [
       { questionText: { contains: input.q, mode: "insensitive" } },
       { explanation: { contains: input.q, mode: "insensitive" } },
@@ -134,7 +143,7 @@ export async function listQuestions(input: QuestionListInput) {
 }
 
 export async function getQuestion(id: string) {
-  const row = await prisma.question.findUnique({ where: { id }, include: includeOptions });
+  const row = await prisma.question.findFirst({ where: { id, trashedAt: null, topic: { trashedAt: null, organSystem: { trashedAt: null } } }, include: includeOptions });
   if (!row) throw new QuestionError("NOT_FOUND", "Question was not found.", 404);
   return questionDto(row);
 }
@@ -154,8 +163,8 @@ export async function createQuestion(input: QuestionCreateInput, context: Mutati
 
 export async function updateQuestion(id: string, input: QuestionUpdateInput, context: MutationContext) {
   return prisma.$transaction(async (tx) => {
-    await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Question" WHERE "id" = ${id}::uuid FOR UPDATE`);
-    const before = await tx.question.findUnique({ where: { id }, include: includeOptions });
+    await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Question" WHERE "id" = ${id}::uuid AND "trashedAt" IS NULL FOR UPDATE`);
+    const before = await tx.question.findFirst({ where: { id, trashedAt: null, topic: { trashedAt: null, organSystem: { trashedAt: null } } }, include: includeOptions });
     if (!before) throw new QuestionError("NOT_FOUND", "Question was not found.", 404);
     if (before.status === "ARCHIVED") throw new QuestionError("ARCHIVED", "Archived questions cannot be edited.", 409);
 
@@ -190,16 +199,19 @@ async function setStatusInTransaction(
   status: PublishStatus,
   context: MutationContext,
 ) {
-  await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Question" WHERE "id" = ${id}::uuid FOR UPDATE`);
-  const before = await tx.question.findUnique({ where: { id }, include: includeOptions });
+  await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Question" WHERE "id" = ${id}::uuid AND "trashedAt" IS NULL FOR UPDATE`);
+  const before = await tx.question.findFirst({ where: { id, trashedAt: null, topic: { trashedAt: null, organSystem: { trashedAt: null } } }, include: includeOptions });
   if (!before) throw new QuestionError("NOT_FOUND", "Question was not found.", 404);
+  const parent = await getParent(tx, before.topicId);
   assertQuestionStatusTransition(before.status, status);
   if (before.status === status) return before;
   if (status === "PUBLISHED") {
-    await validateCandidate(tx, {
-      topicId: before.topicId,
-      status,
-      mediaId: before.mediaId,
+    await validateMedia(tx, [before.mediaId, ...before.options.map((option) => option.mediaId)]);
+    assertQuestionPublishable({
+      topicStatus: parent.status,
+      organSystemStatus: parent.organSystem.status,
+      organSystemIsActive: parent.organSystem.isActive,
+      mediaEligible: true,
       options: before.options,
     });
   }
@@ -214,23 +226,32 @@ export async function setQuestionStatus(id: string, status: PublishStatus, conte
 }
 
 export async function archiveQuestion(id: string, context: MutationContext) {
-  return setQuestionStatus(id, "ARCHIVED", context);
+  return moveToTrash("question", id, context);
 }
 
 export async function bulkSetQuestionStatus(ids: string[], status: PublishStatus, context: MutationContext) {
   const rows = await prisma.$transaction(async (tx) => {
-    const updated = [];
-    for (const id of ids) updated.push(await setStatusInTransaction(tx, id, status, context));
-    return updated;
+    const sortedIds = [...ids].sort();
+    const locked = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT "id" FROM "Question"
+      WHERE "id" IN (${Prisma.join(sortedIds.map((id) => Prisma.sql`CAST(${id} AS UUID)`) )})
+        AND "trashedAt" IS NULL
+      ORDER BY "id" FOR UPDATE
+    `);
+    if (locked.length !== ids.length) throw new QuestionError("NOT_FOUND", "One or more questions were not found.", 404);
+    const byId = new Map<string, Awaited<ReturnType<typeof setStatusInTransaction>>>();
+    for (const id of sortedIds) byId.set(id, await setStatusInTransaction(tx, id, status, context));
+    return ids.map((id) => byId.get(id)!);
   });
   return { items: rows.map(questionDto), count: rows.length };
 }
 
 export async function setQuestionActivity(id: string, isActive: boolean, context: MutationContext) {
   return prisma.$transaction(async (tx) => {
-    await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Question" WHERE "id" = ${id}::uuid FOR UPDATE`);
-    const before = await tx.question.findUnique({ where: { id }, include: includeOptions });
+    await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Question" WHERE "id" = ${id}::uuid AND "trashedAt" IS NULL FOR UPDATE`);
+    const before = await tx.question.findFirst({ where: { id, trashedAt: null, topic: { trashedAt: null, organSystem: { trashedAt: null } } }, include: includeOptions });
     if (!before) throw new QuestionError("NOT_FOUND", "Question was not found.", 404);
+    await getParent(tx, before.topicId);
     if (before.status === "ARCHIVED") throw new QuestionError("ARCHIVED", "Archived question activity cannot be changed.", 409);
     if (before.isActive === isActive) return questionDto(before);
     const after = await tx.question.update({ where: { id }, data: { isActive }, include: includeOptions });
@@ -241,7 +262,11 @@ export async function setQuestionActivity(id: string, isActive: boolean, context
 
 export async function duplicateQuestion(id: string, context: MutationContext) {
   return prisma.$transaction(async (tx) => {
-    const source = await tx.question.findUnique({ where: { id }, include: includeOptions });
+    const locked = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT "id" FROM "Question" WHERE "id" = ${id}::uuid AND "trashedAt" IS NULL FOR SHARE
+    `);
+    if (!locked.length) throw new QuestionError("NOT_FOUND", "Question was not found.", 404);
+    const source = await tx.question.findFirst({ where: { id, trashedAt: null, topic: { trashedAt: null, organSystem: { trashedAt: null } } }, include: includeOptions });
     if (!source) throw new QuestionError("NOT_FOUND", "Question was not found.", 404);
     const options = buildReplacementOptions(source.options.map((option) => ({
       optionText: option.optionText,

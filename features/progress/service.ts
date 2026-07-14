@@ -83,21 +83,22 @@ async function readAssessmentAggregate(userId: string): Promise<AssessmentAggreg
 
 function readSystems(userId: string, organSystemId?: string) {
   return prisma.organSystem.findMany({
-    where: { id: organSystemId, status: "PUBLISHED", isActive: true },
+    where: { id: organSystemId, trashedAt: null, status: "PUBLISHED", isActive: true },
     select: {
       id: true, name: true, slug: true, displayOrder: true,
       topics: {
-        where: { status: "PUBLISHED" },
+        where: { trashedAt: null, status: "PUBLISHED" },
         select: {
           id: true, title: true, slug: true, displayOrder: true,
           lessons: {
-            where: { status: "PUBLISHED" },
+            where: { trashedAt: null, status: "PUBLISHED" },
             select: { id: true, progress: { where: { userId, completedAt: { not: null } }, select: { completedAt: true }, take: 1 } },
             orderBy: [{ displayOrder: "asc" as const }, { id: "asc" as const }],
           },
           flashcards: {
             where: {
               status: "PUBLISHED",
+              trashedAt: null,
               AND: [
                 { OR: [{ frontMediaId: null }, { frontMedia: { archivedAt: null } }] },
                 { OR: [{ backMediaId: null }, { backMedia: { archivedAt: null } }] },

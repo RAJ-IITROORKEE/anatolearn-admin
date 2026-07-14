@@ -10,6 +10,7 @@ import { archiveQuestion, bulkSetQuestionStatus, createQuestion, duplicateQuesti
 import { questionActivitySchema, questionBulkStatusSchema, questionCreateSchema, questionStatusSchema, questionUpdateSchema } from "@/features/questions/schemas";
 import { requireAdminPage } from "@/lib/auth/session";
 import { phase4ActionError } from "./phase4-action-errors";
+import { moveToTrash } from "@/features/trash/service";
 
 const value = (data: FormData, key: string) => String(data.get(key) ?? "").trim();
 const nullable = (data: FormData, key: string) => value(data, key) || null;
@@ -131,6 +132,16 @@ export async function changeQuestionStatusAction(id: string, status: string, _st
     revalidatePath("/questions", "layout");
     return { success: `Question ${status.toLowerCase()}.` };
   } catch (error) { return phase4ActionError(error); }
+}
+
+export async function trashFlashcardAction(id: string, _state: ActionState): Promise<ActionState> {
+  void _state;
+  try { await moveToTrash("flashcard", id, await context()); revalidatePath("/flashcards"); return { success: "Moved to Trash." }; } catch (error) { return phase4ActionError(error); }
+}
+
+export async function trashQuestionAction(id: string, _state: ActionState): Promise<ActionState> {
+  void _state;
+  try { await moveToTrash("question", id, await context()); revalidatePath("/questions", "layout"); return { success: "Moved to Trash." }; } catch (error) { return phase4ActionError(error); }
 }
 
 export async function changeQuestionActivityAction(id: string, isActive: boolean, _state: ActionState): Promise<ActionState> {

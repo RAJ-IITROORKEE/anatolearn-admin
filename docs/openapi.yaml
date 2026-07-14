@@ -787,6 +787,68 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
+  /admin/trash:
+    get:
+      tags: [Admin content]
+      operationId: listAdminTrash
+      x-required-role: ADMIN
+      description: Strict paginated heterogeneous trash listing. Storage bucket and path are never returned.
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+        - { name: q, in: query, schema: { type: string, minLength: 1, maxLength: 100 } }
+        - { name: type, in: query, schema: { $ref: '#/components/schemas/TrashType' } }
+        - { name: expiry, in: query, schema: { type: string, enum: [all, restorable, expired], default: all } }
+        - { name: eligibility, in: query, schema: { type: string, enum: [all, pending, eligible, blocked], default: all } }
+        - { name: sort, in: query, schema: { $ref: '#/components/schemas/TrashSort' } }
+      responses:
+        '200': { $ref: '#/components/responses/TrashListSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /admin/trash/{type}/{id}/restore:
+    parameters:
+      - { name: type, in: path, required: true, schema: { $ref: '#/components/schemas/TrashType' } }
+      - { $ref: '#/components/parameters/Id' }
+    post:
+      tags: [Admin content]
+      operationId: restoreAdminTrashItem
+      x-required-role: ADMIN
+      description: Restores strictly before the database-clock deadline. Cookie requests require the configured exact Origin. Parent resources must exist and not be trashed.
+      requestBody:
+        required: false
+        content: { application/json: { schema: { $ref: '#/components/schemas/EmptyMutation' } } }
+      responses:
+        '200': { $ref: '#/components/responses/TrashRestoreSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /trash/purge:
+    servers: [{ url: /api/internal, description: Internal job base }]
+    get:
+      tags: [Internal jobs]
+      operationId: purgeTrashCron
+      security: [{ cronBearer: [] }]
+      description: Exact cron-bearer authenticated, bounded trash and storage-job processing using database-time eligibility and leases.
+      responses: &trashCronResponses
+        '200': { $ref: '#/components/responses/TrashPurgeSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/CronUnauthorized' }
+        '503': { $ref: '#/components/responses/CronUnavailable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    post:
+      tags: [Internal jobs]
+      operationId: purgeTrashOperational
+      security: [{ cronBearer: [] }]
+      description: Operational alias for the bounded purge worker. Body must be absent or an empty JSON object.
+      requestBody:
+        required: false
+        content: { application/json: { schema: { $ref: '#/components/schemas/EmptyMutation' } } }
+      responses: *trashCronResponses
   /notifications/process:
     servers: [{ url: /api/internal, description: Internal job base }]
     get:
@@ -907,7 +969,7 @@ paths:
       tags: [Admin content]
       operationId: archiveAdminOrganSystem
       x-required-role: ADMIN
-      description: Archives and returns the organ system; no hard delete.
+      description: Moves the organ system to recoverable Trash and returns its DTO. The database-clock retention window is 30 days.
       responses: *adminMutationResponses
   /admin/topics:
     get:
@@ -1103,7 +1165,7 @@ paths:
       tags: [Admin flashcards]
       operationId: archiveAdminFlashcard
       x-required-role: ADMIN
-      description: Terminal archive; no hard delete.
+      description: Moves the flashcard to recoverable Trash; restore is available for 30 days by database clock.
       responses: *adminMutationResponses
   /admin/flashcards/{id}/status:
     parameters: [{ $ref: '#/components/parameters/Id' }]
@@ -1202,7 +1264,7 @@ paths:
       tags: [Admin questions]
       operationId: archiveAdminQuestion
       x-required-role: ADMIN
-      description: Terminal archive; no hard delete.
+      description: Moves the question to recoverable Trash; restore is available for 30 days by database clock.
       responses: *adminMutationResponses
   /admin/questions/{id}/status:
     parameters: [{ $ref: '#/components/parameters/Id' }]
@@ -1391,7 +1453,7 @@ paths:
       tags: [Admin media]
       operationId: deleteAdminMedia
       x-required-role: ADMIN
-      description: Physical deletion is deliberately disabled. Existing assets return 409 HARD_DELETE_DISABLED; absent assets return 404.
+      description: Legacy physical deletion remains disabled. Use the media archive action to move the asset to recoverable Trash; absent assets return 404.
       responses:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -2351,9 +2413,85 @@ components:
         claimed: { type: integer, minimum: 0, maximum: 500 }
         finalized: { type: integer, minimum: 0, maximum: 500 }
         batches: { type: integer, minimum: 1, maximum: 10 }
+    TrashType:
+      type: string
+      enum: [organ-system, topic, content-lesson, flashcard, question, media-asset]
+    TrashSort:
+      type: string
+      default: trashedAt-desc
+      enum: [trashedAt-desc, trashedAt-asc, purgeAfter-desc, purgeAfter-asc, label-asc, label-desc, type-asc, type-desc]
+    TrashBlocker:
+      type: object
+      additionalProperties: false
+      required: [reason, count]
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 160 }
+        count: { type: integer, minimum: 1, maximum: 9999 }
+    TrashItem:
+      type: object
+      additionalProperties: false
+      required: [id, type, displayLabel, trashedAt, purgeAfter, nextPurgeAttemptAt, retentionState, eligibility, blocker]
+      properties:
+        id: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/TrashType' }
+        displayLabel: { type: string }
+        trashedAt: { type: string, format: date-time }
+        purgeAfter: { type: string, format: date-time }
+        nextPurgeAttemptAt: { type: string, format: date-time }
+        retentionState: { type: string, enum: [RESTORABLE, EXPIRED] }
+        eligibility: { type: string, enum: [PENDING, ELIGIBLE, BLOCKED] }
+        blocker:
+          oneOf:
+            - { $ref: '#/components/schemas/TrashBlocker' }
+            - { type: 'null' }
+    TrashRestoreResult:
+      type: object
+      additionalProperties: false
+      required: [id, type, restored]
+      properties:
+        id: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/TrashType' }
+        restored: { type: boolean, const: true }
+        status: { type: string, enum: [DRAFT] }
+    TrashPurgeResult:
+      type: object
+      additionalProperties: false
+      required: [claimed, purged, blocked, storageClaimed, storageRemoved, storageRetried, batches]
+      properties:
+        claimed: { type: integer, minimum: 0, maximum: 100 }
+        purged: { type: integer, minimum: 0, maximum: 100 }
+        blocked: { type: integer, minimum: 0, maximum: 100 }
+        storageClaimed: { type: integer, minimum: 0, maximum: 100 }
+        storageRemoved: { type: integer, minimum: 0, maximum: 100 }
+        storageRetried: { type: integer, minimum: 0, maximum: 100 }
+        batches: { type: integer, minimum: 1, maximum: 4 }
+    TrashListEnvelope:
+      type: object
+      additionalProperties: false
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { type: array, items: { $ref: '#/components/schemas/TrashItem' } }
+        meta: { $ref: '#/components/schemas/ListMeta' }
+    TrashRestoreEnvelope:
+      type: object
+      additionalProperties: false
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/TrashRestoreResult' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    TrashPurgeEnvelope:
+      type: object
+      additionalProperties: false
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/TrashPurgeResult' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
     AuditAction:
       type: string
-      enum: [CREATE, UPDATE, PUBLISH, ARCHIVE, DELETE, ACTIVATE, DEACTIVATE, LOGIN, PASSWORD_CHANGE, ROLE_CHANGE, SCHEDULE, CANCEL, SEND, REVIEW, RESOLVE]
+      enum: [CREATE, UPDATE, PUBLISH, ARCHIVE, DELETE, ACTIVATE, DEACTIVATE, LOGIN, PASSWORD_CHANGE, ROLE_CHANGE, SCHEDULE, CANCEL, SEND, REVIEW, RESOLVE, TRASH, RESTORE, PURGE]
     StatusInput:
       type: object
       additionalProperties: false
@@ -3467,6 +3605,24 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/AdminUserProgressEnvelope' }
+    TrashListSuccess:
+      description: Paginated safe heterogeneous trash items without storage coordinates
+      headers: *privateResponseHeaders
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/TrashListEnvelope' }
+    TrashRestoreSuccess:
+      description: Restored resource receipt; publishable resources return to DRAFT
+      headers: *privateResponseHeaders
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/TrashRestoreEnvelope' }
+    TrashPurgeSuccess:
+      description: Bounded metadata purge and provider-confirmed storage processing result
+      headers: *privateResponseHeaders
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/TrashPurgeEnvelope' }
     CronSuccess:
       description: Bounded due-attempt batch result
       headers: *privateResponseHeaders

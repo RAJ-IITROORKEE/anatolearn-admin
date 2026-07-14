@@ -6,7 +6,7 @@ Prisma, and PostgreSQL.
 
 ## Current status
 
-Phases 0-7 are implemented in the repository. All seven migrations are current in the
+Phases 0-7 are implemented in the repository. All nine migrations are current in the
 configured development database, including the two Phase 7 direct-database-access
 hardening migrations. Production deployment readiness is still externally gated; this
 is not a claim that the product is deployed. The current application includes:
@@ -41,6 +41,8 @@ is not a claim that the product is deployed. The current application includes:
 - A secret-authenticated notification worker at `/api/internal/notifications/process`,
   also scheduled every minute; provider tickets remain `TICKETED` until a receipt confirms
   `SENT`, and campaign outcomes distinguish `PROCESSING`, `PARTIAL`, and `FAILED`
+- A protected Trash purge worker at `/api/internal/trash/purge`, scheduled daily at
+  `0 3 * * *` with exact `Bearer CRON_SECRET` authentication and storage-job retries
 - Validated PNG/JPEG/WebP uploads, 15-minute admin URLs, and 5-minute eligible
   published or owned historical-attempt media URLs
 - Exact-origin cookie CSRF checks, nonce-based CSP, production HSTS, security headers,
@@ -50,6 +52,10 @@ is not a claim that the product is deployed. The current application includes:
   fallback only in development/test; authentication uses separate client and account keys
 - A seven-block visual lesson editor with validated preview, keyboard/button reordering,
   deletion confirmation, and dirty-navigation protection
+- Recoverable Trash for organ systems, topics, lessons, flashcards, questions, and media:
+  DELETE/archive aliases hide items immediately, use a 30-day database-clock retention
+  window, and restore content as unpublished DRAFT. Settings > Trash provides filtered,
+  paginated restore controls.
 - Searchable/paginated managed-media pickers integrated into system, topic, lesson,
   flashcard, question, and option forms
 - Accessibility, metadata/robots, password visibility, pagination, dialog, table, and
@@ -110,7 +116,7 @@ Supabase `anon`/`authenticated`, while retaining schema `USAGE` without `CREATE`
 ## Implemented content workflows
 
 - Organ systems, topics, and lessons support create, read, update, reorder, publish,
-  draft rollback, and terminal archive workflows.
+  draft rollback, and recoverable Trash workflows.
 - Lesson content is JSON made from validated `heading`, `paragraph`, `image`,
   `callout`, `bulletList`, `numberedList`, and `divider` blocks. Raw HTML is rejected.
 - Media uploads require non-empty alt text and valid image bytes. Client filenames do
@@ -122,8 +128,8 @@ Supabase `anon`/`authenticated`, while retaining schema `USAGE` without `CREATE`
   for eligible published media or media preserved in one of that user's attempt
   snapshots (including archived history). Admin media DTOs use 900-second URLs and
   serialize `byteSize` as a decimal string.
-- Physical media deletion is deliberately disabled and returns `409`; archive is the
-  supported lifecycle action, but media referenced by eligible published content
+- Physical media deletion through the legacy media DELETE endpoint remains deliberately
+  disabled; the media archive action moves the asset to Trash. Media referenced by eligible published content
   cannot be archived.
 - Flashcards support filtered/paginated admin CRUD, reorder, publish/draft/archive,
   bulk status changes, live preview, and grid/list views. Active users can read all
@@ -132,7 +138,7 @@ Supabase `anon`/`authenticated`, while retaining schema `USAGE` without `CREATE`
   preview workflows. Option replacement is transactional, preserves supplied option
   IDs/keys belonging to the question, relabels options `A` onward, and enforces 2-6
   options with exactly one correct answer.
-- Question lifecycle includes publish/draft, terminal archive, active/inactive,
+- Question lifecycle includes publish/draft, recoverable Trash, active/inactive,
   duplicate-to-draft, and transactional bulk status operations. Questions are exposed
   only to the internal assessment selection service; there is intentionally no public
   question-bank endpoint.
@@ -200,9 +206,10 @@ lint, typecheck, and build passed; the default Vitest run passed 129 files (2 sk
 assessment lifecycle and five direct-access cases); Playwright passed 17 and skipped 14.
 Authenticated admin tests did **not** run because `E2E_ADMIN_EMAIL` and
 `E2E_ADMIN_PASSWORD` were absent: the 14 skips comprise auth setup, 12 authenticated
-tests, and one existing intentional skip. OpenAPI has 104 implemented, unique, parity-
+tests, and one existing intentional skip. OpenAPI has 108 implemented, unique, parity-
 checked operations. The build completed 40 static-generation units under dynamic nonce
-CSP output and included all routes. All seven migrations are current in development.
+CSP output and included all routes. All nine migrations are current in development,
+including `20260714140000_add_trash_audit_actions` and `20260714141000_add_safe_trash`.
 
 `npm audit` reports zero high/critical findings. Two moderate PostCSS findings remain
 through Next.js; there is no safe stable fix, and `npm audit fix --force` would downgrade

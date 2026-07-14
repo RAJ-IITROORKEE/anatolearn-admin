@@ -9,6 +9,7 @@ import { archiveMedia, updateMedia, uploadMedia } from "@/features/media/service
 import { mediaUpdateSchema, mediaUploadSchema } from "@/features/media/schemas";
 import type { ActionState } from "@/components/phase3/action-form";
 import { phase3ActionError } from "./phase3-action-errors";
+import { moveToTrash, restoreFromTrash } from "@/features/trash/service";
 
 type Resource = "organSystem" | "topic" | "contentLesson";
 const value = (data: FormData, key: string) => String(data.get(key) ?? "").trim();
@@ -65,4 +66,19 @@ export async function updateMediaAction(id: string, _state: ActionState, data: F
 export async function archiveMediaAction(id: string, _state: ActionState): Promise<ActionState> {
   void _state;
   try { const ctx = await context(); await archiveMedia(id, ctx.actorId, ctx.requestId); revalidatePath("/media"); return { success: "Media archived." }; } catch (error) { return phase3ActionError(error); }
+}
+
+export async function trashMediaAction(id: string, _state: ActionState): Promise<ActionState> {
+  void _state;
+  try { const ctx = await context(); await moveToTrash("media-asset", id, ctx); revalidatePath("/media"); revalidatePath("/settings/trash"); return { success: "Moved to Trash." }; } catch (error) { return phase3ActionError(error); }
+}
+
+export async function trashResourceAction(type: "organ-system" | "topic" | "content-lesson" | "media-asset", id: string, _state: ActionState): Promise<ActionState> {
+  void _state;
+  try { const ctx = await context(); await moveToTrash(type, id, ctx); revalidatePath("/"); return { success: "Moved to Trash." }; } catch (error) { return phase3ActionError(error); }
+}
+
+export async function restoreTrashAction(type: "organ-system" | "topic" | "content-lesson" | "flashcard" | "question" | "media-asset", id: string, _state: ActionState): Promise<ActionState> {
+  void _state;
+  try { const ctx = await context(); await restoreFromTrash(type, id, ctx); revalidatePath("/"); revalidatePath("/settings/trash"); return { success: "Restored successfully." }; } catch (error) { return phase3ActionError(error); }
 }

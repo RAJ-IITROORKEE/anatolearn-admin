@@ -36,7 +36,7 @@ async function validateMedia(tx: Prisma.TransactionClient, ids: Array<string | n
   if (!unique.length) return true;
   const rows = await tx.$queryRaw<Array<{ id: string; archivedAt: Date | null }>>(Prisma.sql`
     SELECT "id", "archivedAt" FROM "MediaAsset"
-    WHERE "id" IN (${Prisma.join(unique)}) FOR SHARE
+    WHERE "id" IN (${Prisma.join(unique)}) AND "trashedAt" IS NULL FOR SHARE
   `);
   const eligible = rows.length === unique.length && rows.every((row) => row.archivedAt === null);
   if (!eligible) throw new FlashcardError("INVALID_MEDIA_REFERENCE", "A media reference is absent or archived.", 422);
@@ -46,7 +46,7 @@ async function validateMedia(tx: Prisma.TransactionClient, ids: Array<string | n
 async function lockFlashcard(tx: Prisma.TransactionClient, id: string) {
   return tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
     SELECT "id" FROM "Flashcard"
-    WHERE "id" = CAST(${id} AS UUID)
+    WHERE "id" = CAST(${id} AS UUID) AND "trashedAt" IS NULL
     FOR UPDATE
   `);
 }
@@ -55,15 +55,22 @@ async function lockFlashcards(tx: Prisma.TransactionClient, ids: string[]) {
   const sortedIds = [...ids].sort();
   return tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
     SELECT "id" FROM "Flashcard"
-    WHERE "id" IN (${Prisma.join(sortedIds.map((id) => Prisma.sql`CAST(${id} AS UUID)`) )})
+    WHERE "id" IN (${Prisma.join(sortedIds.map((id) => Prisma.sql`CAST(${id} AS UUID)`) )}) AND "trashedAt" IS NULL
     ORDER BY "id"
     FOR UPDATE
   `);
 }
 
 async function getParent(tx: Prisma.TransactionClient, topicId: string): Promise<Parent> {
-  const parent = await tx.topic.findUnique({
-    where: { id: topicId },
+  const locked = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT topic."id" FROM "Topic" topic
+    JOIN "OrganSystem" system ON system."id" = topic."organSystemId"
+    WHERE topic."id" = ${topicId}::uuid AND topic."trashedAt" IS NULL AND system."trashedAt" IS NULL
+    FOR SHARE OF topic, system
+  `);
+  if (!locked.length) throw new FlashcardError("PARENT_NOT_FOUND", "Topic was not found.", 422);
+  const parent = await tx.topic.findFirst({
+    where: { id: topicId, trashedAt: null, organSystem: { trashedAt: null } },
     select: { status: true, organSystem: { select: { status: true, isActive: true } } },
   });
   if (!parent) throw new FlashcardError("PARENT_NOT_FOUND", "Topic was not found.", 422);
@@ -81,10 +88,11 @@ function assertPublishable(parent: Parent, mediaEligible: boolean) {
 
 export async function listAdminFlashcards(input: FlashcardListInput) {
   const where: Prisma.FlashcardWhereInput = {
+    trashedAt: null,
+    topic: input.organSystemId ? { organSystemId: input.organSystemId, trashedAt: null, organSystem: { trashedAt: null } } : { trashedAt: null, organSystem: { trashedAt: null } },
     status: input.status,
     difficulty: input.difficulty,
     topicId: input.topicId,
-    ...(input.organSystemId ? { topic: { organSystemId: input.organSystemId } } : {}),
     ...(input.q ? { OR: [
       { frontText: { contains: input.q, mode: "insensitive" } },
       { backText: { contains: input.q, mode: "insensitive" } },
@@ -103,7 +111,7 @@ export async function listAdminFlashcards(input: FlashcardListInput) {
 }
 
 export async function getAdminFlashcard(id: string) {
-  const row = await prisma.flashcard.findUnique({ where: { id } });
+  const row = await prisma.flashcard.findFirst({ where: { id, trashedAt: null, topic: { trashedAt: null, organSystem: { trashedAt: null } } } });
   if (!row) throw new FlashcardError("NOT_FOUND", "Flashcard was not found.", 404);
   return flashcardDto(row, true);
 }
@@ -156,7 +164,21 @@ export async function setFlashcardStatus(id: string, status: PublishStatus, cont
 
 export async function reorderFlashcards(parentId: string, ids: string[], context: MutationContext) {
   await prisma.$transaction(async (tx) => {
-    const rows = await tx.flashcard.findMany({ where: { id: { in: ids }, topicId: parentId }, select: { id: true, displayOrder: true, status: true } });
+    const parent = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT topic."id" FROM "Topic" topic
+      JOIN "OrganSystem" system ON system."id" = topic."organSystemId"
+      WHERE topic."id" = ${parentId}::uuid
+        AND topic."trashedAt" IS NULL AND system."trashedAt" IS NULL
+      FOR SHARE OF topic, system
+    `);
+    if (!parent.length) throw new FlashcardError("INVALID_REORDER_SCOPE", "The topic is unavailable or in trash.", 422);
+    const sortedIds = [...ids].sort();
+    const rows = await tx.$queryRaw<Array<{ id: string; displayOrder: number; status: PublishStatus }>>(Prisma.sql`
+      SELECT "id", "displayOrder", "status" FROM "Flashcard"
+      WHERE "id" IN (${Prisma.join(sortedIds.map((id) => Prisma.sql`CAST(${id} AS UUID)`) )})
+        AND "topicId" = ${parentId}::uuid AND "trashedAt" IS NULL
+      ORDER BY "id" FOR UPDATE
+    `);
     if (rows.length !== ids.length) throw new FlashcardError("INVALID_REORDER_SCOPE", "All IDs must exist in the requested topic.", 422);
     rows.forEach((row) => assertFlashcardMutable(row.status));
     for (const [displayOrder, id] of ids.entries()) {
@@ -172,7 +194,7 @@ export async function bulkSetFlashcardStatus(ids: string[], status: PublishStatu
     const locked = await lockFlashcards(tx, ids);
     if (locked.length !== ids.length) throw new FlashcardError("NOT_FOUND", "One or more flashcards were not found.", 404);
     const rows = await tx.flashcard.findMany({
-      where: { id: { in: ids } },
+      where: { id: { in: ids }, trashedAt: null, topic: { trashedAt: null, organSystem: { trashedAt: null } } },
       include: { topic: { select: { status: true, organSystem: { select: { status: true, isActive: true } } } } },
     });
     if (rows.length !== ids.length) throw new FlashcardError("NOT_FOUND", "One or more flashcards were not found.", 404);
@@ -200,8 +222,9 @@ export async function bulkSetFlashcardStatus(ids: string[], status: PublishStatu
 const publicCardWhere = (id?: string, topicId?: string): Prisma.FlashcardWhereInput => ({
   id,
   topicId,
+  trashedAt: null,
   status: "PUBLISHED",
-  topic: { status: "PUBLISHED", organSystem: { status: "PUBLISHED", isActive: true } },
+  topic: { trashedAt: null, status: "PUBLISHED", organSystem: { trashedAt: null, status: "PUBLISHED", isActive: true } },
   AND: [
     { OR: [{ frontMediaId: null }, { frontMedia: { archivedAt: null } }] },
     { OR: [{ backMediaId: null }, { backMedia: { archivedAt: null } }] },
@@ -209,7 +232,7 @@ const publicCardWhere = (id?: string, topicId?: string): Prisma.FlashcardWhereIn
 });
 
 export async function listPublishedFlashcards(topicId: string, userId: string) {
-  const topic = await prisma.topic.findFirst({ where: { id: topicId, status: "PUBLISHED", organSystem: { status: "PUBLISHED", isActive: true } }, select: { id: true } });
+  const topic = await prisma.topic.findFirst({ where: { id: topicId, trashedAt: null, status: "PUBLISHED", organSystem: { trashedAt: null, status: "PUBLISHED", isActive: true } }, select: { id: true } });
   if (!topic) throw new FlashcardError("NOT_FOUND", "Topic was not found.", 404);
   const rows = await prisma.flashcard.findMany({
     where: publicCardWhere(undefined, topicId),

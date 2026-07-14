@@ -15,7 +15,7 @@ function parsedOptions(value: Prisma.JsonValue): SnapshotOption[] {
 async function validateScope(tx: Prisma.TransactionClient, input: StartAssessmentInput) {
   const systems = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
     SELECT "id" FROM "OrganSystem"
-    WHERE "id" = ${input.organSystemId}::uuid AND "status" = 'PUBLISHED' AND "isActive" = true
+    WHERE "id" = ${input.organSystemId}::uuid AND "trashedAt" IS NULL AND "status" = 'PUBLISHED' AND "isActive" = true
     ORDER BY "id"
     FOR SHARE
   `);
@@ -23,6 +23,7 @@ async function validateScope(tx: Prisma.TransactionClient, input: StartAssessmen
   const topics = await tx.topic.findMany({
     where: {
       organSystemId: input.organSystemId,
+      trashedAt: null,
       status: "PUBLISHED",
       ...(input.topicIds ? { id: { in: input.topicIds } } : {}),
     },
@@ -33,7 +34,7 @@ async function validateScope(tx: Prisma.TransactionClient, input: StartAssessmen
   }
   if (!topics.length) throw new AssessmentError("NO_TOPICS", "No published topics are available for this organ system.", 422);
   const topicIds = topics.map((topic) => topic.id).sort();
-  await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Topic" WHERE "id" = ANY(ARRAY[${Prisma.join(topicIds)}]::uuid[]) ORDER BY "id" FOR SHARE`);
+  await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Topic" WHERE "id" = ANY(ARRAY[${Prisma.join(topicIds)}]::uuid[]) AND "trashedAt" IS NULL ORDER BY "id" FOR SHARE`);
   return topicIds;
 }
 
@@ -51,7 +52,7 @@ async function createAttemptInTransaction(
   }
   const selected = fisherYates(eligible, random).slice(0, input.questionCount);
   const selectedIds = selected.map((question) => question.id).sort();
-  await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Question" WHERE "id" = ANY(ARRAY[${Prisma.join(selectedIds)}]::uuid[]) ORDER BY "id" FOR SHARE`);
+  await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Question" WHERE "id" = ANY(ARRAY[${Prisma.join(selectedIds)}]::uuid[]) AND "trashedAt" IS NULL ORDER BY "id" FOR SHARE`);
   const eligibleAfterLock = await getEligibleQuestions({ ...input, topicIds }, tx);
   const eligibleById = new Map(eligibleAfterLock.map((question) => [question.id, question]));
   const revalidated = selected.flatMap((question) => {

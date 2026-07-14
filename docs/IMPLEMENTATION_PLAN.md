@@ -133,8 +133,8 @@ passes 61 files/206 tests and conditionally skips four PostgreSQL cases. Those f
 also passed separately against a migrated isolated schema, including real multi-client
 concurrent finalization; provider/auth signed URLs and
 assessment E2E remain mocked/absent. `npm run env:check` intentionally still fails for
-the configured short `CRON_SECRET`, so deployment completion must not be claimed until
-the secret and schedule are configured.
+    the configured `CRON_SECRET`; deployment completion must not be claimed until the
+    deployment secret and schedule are configured.
 
 **Work**
 
@@ -168,8 +168,8 @@ transaction compatibility; all five migrations were current at the Phase 6 close
 historical Phase 6 gates were:
 lint/typecheck/build passed, 319 tests passed with four conditional PostgreSQL skips, and
 migration deploy passed. Playwright was not rerun for Phase 6; the prior anonymous result
-remains 3 passed/1 skipped. `env:check` intentionally fails on the invalid local
-`CRON_SECRET`, and real Expo/device delivery is not verified.
+    remains 3 passed/1 skipped. The local environment passes `env:check`, and real
+    Expo/device delivery is not verified.
 
 **Work**
 
@@ -200,16 +200,19 @@ memory fallback; dual client/account auth quotas; registration enumeration resis
 and compensation; permanent notification-failure handling; Prisma 6.19.3; deployed
 development RLS/revoke migrations with isolated role tests; visual seven-block lesson
 editing and managed-media pickers; accessibility/responsive/metadata/robots/password/
-pagination/dialog/table fixes; strict 104-operation OpenAPI route parity; non-destructive
-seed/bootstrap tests; and axe/Playwright foundations.
+pagination/dialog/table fixes; strict 108-operation OpenAPI route parity; recoverable
+Trash lifecycle and protected purge worker; non-destructive seed/bootstrap tests; and
+axe/Playwright foundations.
 
-Final gates passed: lint, typecheck, default Vitest (129 files passed, 2 skipped; 412
-tests passed, 9 skipped), isolated database run (2 files/9 tests), build (40 static-
-generation units with nonce dynamic CSP output), and OpenAPI validation (104 unique parity-
+Final gates passed: lint, typecheck, default Vitest (139 files passed, 3 skipped; 442
+tests passed, 13 skipped), isolated database run (2 files/9 tests), build (42 static-
+generation units with nonce dynamic CSP output), and OpenAPI validation (108 unique parity-
 checked operations). Playwright was 17 passed/14 skipped; authenticated admin coverage did
-not run because its two credentials were absent. Seven migrations are current in the
-configured development database. `env:check` fails only for the invalid local
-`CRON_SECRET`; production additionally requires paired Upstash values.
+not run because its two credentials were absent. Nine migrations are current in the
+configured development database. `env:check` passes locally; production additionally
+requires paired Upstash values. Trash PostgreSQL
+acceptance passed 4/4 in isolation; the default database run skips it without
+`TEST_DATABASE_URL`.
 
 **Work**
 

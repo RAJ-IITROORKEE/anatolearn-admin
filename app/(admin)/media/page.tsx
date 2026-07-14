@@ -18,7 +18,7 @@ import { UploadMediaForm } from "@/components/media/upload-media-form";
 
 export const metadata: Metadata = { title: "Media library" };
 import {
-  archiveMediaAction,
+  trashMediaAction,
   updateMediaAction,
   uploadMediaAction,
 } from "../phase3-actions";
@@ -110,10 +110,10 @@ export default async function MediaPage({
                   {!item.archivedAt && (
                     <div className="mt-3">
                       <InlineAction
-                        action={archiveMediaAction.bind(null, item.id)}
-                        confirmMessage="Archive this media asset?"
+                        action={trashMediaAction.bind(null, item.id)}
+                        confirmMessage="This hides the media from normal pickers. It can be restored from Settings > Trash for 30 days. Continue?"
                       >
-                        Archive
+                        Delete
                       </InlineAction>
                     </div>
                   )}

@@ -61,7 +61,7 @@ export const navigation: NavigationGroup[] = [
     label: "System",
     items: [
       { label: "Audit logs", href: "/audit-logs", icon: ScrollText },
-      { label: "Settings", href: "/settings/profile", icon: Settings },
+      { label: "Settings", href: "/settings", icon: Settings },
     ],
   },
 ] as const;

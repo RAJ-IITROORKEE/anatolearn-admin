@@ -2,7 +2,7 @@
 
 ## Status
 
-Phases 0-7 are implemented in the repository and all seven migrations are current in the
+Phases 0-7 are implemented in the repository and all nine migrations are current in the
 configured development database. Production readiness remains externally gated by cron,
 Upstash, provider, authenticated-E2E, backup/restore, and deployment work. This document
 describes current behavior; it does not claim a production deployment.
@@ -86,6 +86,7 @@ app/api/v1/{organ-systems,topics,media}/  authenticated published-content handle
 app/api/v1/{assessments,attempts,progress,dashboard}/ learner assessment/progress handlers
 app/api/internal/attempts/expire/ secret-authenticated GET/POST expiry worker
 app/api/internal/notifications/process/ secret-authenticated GET/POST delivery worker
+app/api/internal/trash/purge/             secret-authenticated daily Trash/storage worker
 components/phase3/             list cards, forms, statuses, and action feedback
 components/{flashcards,questions,admin}/ Phase 4 forms, previews, lists, bulk actions
 components/lessons/             seven-block visual editor and learner preview
@@ -116,7 +117,7 @@ envelope/status mapping.
 Admin handlers and Server Components share the flashcard service. Admin lists are
 paginated and filter by search text, status, difficulty, topic, and organ system. The
 service provides create/read/update, scoped reorder, individual and bulk status
-changes, and terminal archive. Publishing requires a published topic beneath a
+   changes, and recoverable Trash. Publishing requires a published topic beneath a
 published active organ system and unarchived referenced media.
 
 `GET /api/v1/topics/{id}/flashcards` is an authenticated learner read, not an anonymous
@@ -137,7 +138,7 @@ retained options preserve stable IDs and answer keys, while all options are rela
 stored cardinality, correct-answer count, labels, and ordering and fails closed.
 
 Question operations include filtered/paginated list, create/read/update, publish/draft,
-terminal archive, active/inactive, duplicate as a new active draft with new option
+recoverable Trash, active/inactive, duplicate as a new active draft with new option
 IDs/keys, and transactional bulk status. There is deliberately no learner/public
 question-bank route.
 
@@ -385,8 +386,14 @@ and flashcard lists are ordered by `displayOrder`, then ID; they are not paginat
   from authoritative lesson, flashcard, and attempt data.
 
 Content starts as `DRAFT`. Draft and published content may move between those states.
-`ARCHIVED` is terminal. API `DELETE` on systems/topics/lessons is an archive operation
-and returns the archived DTO; it does not hard-delete or cascade child status.
+Trash is the recoverable lifecycle for six resource types: organ systems, topics, lessons,
+flashcards, questions, and media. DELETE/archive aliases set archive state and Trash
+metadata using the database clock, hide the item immediately, and set a 30-day
+`purgeAfter`. Restore is allowed only before that deadline; restored content is DRAFT and
+is never republished automatically. Parent restore requires an available parent.
+
+Normal lesson-editor block deletion is separate from resource Trash and is confirmed
+before the lesson is saved.
 
 Publishing a topic requires its organ system to be published and active. Publishing a
 lesson requires a published topic, a published/active organ system, and at least one
@@ -451,9 +458,10 @@ MIME, archive state, and uploader. Alt-text updates are audited. Archive is idem
 an already archived asset is returned without another audit row. An unarchived asset
 referenced by an eligible published system cover/icon, topic cover, or published
 lesson, eligible flashcard side, active published question, or its option cannot be
-archived and returns `409 REFERENCED`. Physical deletion is
-deliberately disabled: `DELETE` returns `404` for an absent ID and otherwise returns
-`409 HARD_DELETE_DISABLED` with guidance to archive.
+archived and returns `409 REFERENCED`. The legacy physical-media DELETE endpoint remains
+disabled; the media archive action is the Trash entry point. Trash purge is dependency-
+aware and leaf-first, preserving attempts, progress, audits, and notification evidence;
+blocked expired rows are retried later rather than deleted.
 
 `GET /api/v1/media/{id}` requires an active cookie or bearer identity. It returns a
 minimal DTO with a 300-second signed URL for either an unarchived eligible published
@@ -500,6 +508,16 @@ functions, and establishes matching default privileges. The second grants schema
 `USAGE` but revokes schema `CREATE`. Both resolve `current_schema()`, refuse `auth` or
 `storage`, and are deployed only to the configured development database. Isolated role
 tests prove `anon`/`authenticated` reads and writes fail while Prisma remains operational.
+
+`20260714140000_add_trash_audit_actions` adds `TRASH`, `RESTORE`, and `PURGE` audit
+actions. `20260714141000_add_safe_trash` adds retention metadata, database-clock guards,
+dependency-safe purge support, and `MediaPurgeJob`. Both migrations are deployed and
+current in the configured development database. The protected `GET`/`POST
+/api/internal/trash/purge` worker requires the exact `Authorization: Bearer <CRON_SECRET>`
+value, runs at `0 3 * * *`, and is bounded to four batches of 25 or eight seconds.
+Storage removal is confirmed before a `MediaPurgeJob` is deleted; failures release the
+lease and retry after one day. Legacy `ARCHIVED` rows without Trash metadata are not
+automatically purged.
 
 ## Pagination, filtering, and sorting
 
@@ -564,7 +582,8 @@ audit events.
 - Cron finalization requires a deployment `CRON_SECRET` of at least 32 characters and
   the Vercel schedule to be deployed. Cron-only validation is isolated from shared
   runtime startup, and the production build passes without a `CRON_SECRET` override, but
-  the current environment check intentionally fails on the invalid configured secret.
+  the current environment check passes locally; deployment still requires configured
+  production secrets.
   Phase 5 is therefore implementation-complete but not configuration-complete.
 - Distributed limiting is implemented, but production requires provisioned and verified
   paired Upstash credentials. Development/test intentionally use process memory when the

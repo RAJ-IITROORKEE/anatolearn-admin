@@ -20,7 +20,7 @@ function objectKeys(value: unknown, path = "data"): string[] {
 
 describe("OpenAPI/runtime contract", () => {
   it("has exact route parity, resolvable refs, unique IDs, and complete JSON response headers", () => {
-    expect(validateOpenApiContract()).toEqual({ operations: 104, operationIds: 104 });
+    expect(validateOpenApiContract()).toEqual({ operations: 108, operationIds: 108 });
   });
 
   it("matches representative runtime statuses and schemas to response components", async () => {
@@ -40,6 +40,15 @@ describe("OpenAPI/runtime contract", () => {
     });
     expect(getOpenApiOperationContract("POST /attempts/{attemptId}/submit")?.responses).toMatchObject({
       "200": "AttemptResultSuccess", "400": "BadRequest",
+    });
+    expect(getOpenApiOperationContract("GET /admin/trash")?.responses).toMatchObject({
+      "200": "TrashListSuccess", "400": "BadRequest", "401": "Unauthorized", "403": "Forbidden",
+    });
+    expect(getOpenApiOperationContract("POST /admin/trash/{type}/{id}/restore")?.responses).toMatchObject({
+      "200": "TrashRestoreSuccess", "404": "NotFound", "409": "Conflict",
+    });
+    expect(getOpenApiOperationContract("GET /trash/purge")?.responses).toMatchObject({
+      "200": "TrashPurgeSuccess", "401": "CronUnauthorized", "503": "CronUnavailable",
     });
 
     const health = getHealth();

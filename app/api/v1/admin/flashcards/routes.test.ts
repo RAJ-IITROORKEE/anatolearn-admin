@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   setFlashcardStatus: vi.fn(),
   updateFlashcard: vi.fn(),
   resolveRequestIdentity: vi.fn(),
+  moveToTrash: vi.fn(),
 }));
 
 vi.mock("@/features/flashcards/service", () => ({
@@ -21,6 +22,7 @@ vi.mock("@/lib/auth/request", () => ({
   hasRole: (identity: { profile: { role: string } }, role: string) => identity.profile.role === role,
   resolveRequestIdentity: mocks.resolveRequestIdentity,
 }));
+vi.mock("@/features/trash/service", () => ({ moveToTrash: mocks.moveToTrash }));
 
 import { GET as itemGet, PATCH as itemPatch } from "./[id]/route";
 import { POST as archivePost } from "./[id]/archive/route";
@@ -69,10 +71,11 @@ describe("admin flashcard item and lifecycle routes", () => {
 
   it("dispatches explicit status and archive actions", async () => {
     mocks.setFlashcardStatus.mockResolvedValue({ id });
+    mocks.moveToTrash.mockResolvedValue({ id });
     expect((await statusPatch(mutation(`https://admin.example/api/v1/admin/flashcards/${id}/status`, { status: "PUBLISHED" }), context)).status).toBe(200);
     expect((await archivePost(mutation(`https://admin.example/api/v1/admin/flashcards/${id}/archive`, {}), context)).status).toBe(200);
     expect(mocks.setFlashcardStatus).toHaveBeenNthCalledWith(1, id, "PUBLISHED", expect.objectContaining({ actorId: "user-id" }));
-    expect(mocks.setFlashcardStatus).toHaveBeenNthCalledWith(2, id, "ARCHIVED", expect.objectContaining({ actorId: "user-id" }));
+    expect(mocks.moveToTrash).toHaveBeenCalledWith("flashcard", id, expect.objectContaining({ actorId: "user-id" }));
   });
 
   it("validates and dispatches bulk status atomically", async () => {

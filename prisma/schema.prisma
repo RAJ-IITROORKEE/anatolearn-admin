@@ -100,6 +100,9 @@ enum AuditAction {
   SEND
   REVIEW
   RESOLVE
+  TRASH
+  RESTORE
+  PURGE
 }
 
 model Profile {
@@ -136,47 +139,53 @@ model Profile {
 }
 
 model OrganSystem {
-  id               String              @id @default(uuid()) @db.Uuid
-  name             String              @unique
-  slug             String              @unique
-  shortDescription String
-  longDescription  String?
-  coverImageUrl    String?
-  coverMediaId     String?             @db.Uuid
-  coverMedia       MediaAsset?         @relation("OrganSystemCover", fields: [coverMediaId], references: [id], onDelete: Restrict)
-  iconImageUrl     String?
-  iconMediaId      String?             @db.Uuid
-  iconMedia        MediaAsset?         @relation("OrganSystemIcon", fields: [iconMediaId], references: [id], onDelete: Restrict)
-  displayOrder     Int
-  status           PublishStatus       @default(DRAFT)
-  isActive         Boolean             @default(true)
-  createdAt        DateTime            @default(now()) @db.Timestamptz(3)
-  updatedAt        DateTime            @updatedAt @db.Timestamptz(3)
-  topics           Topic[]
-  attempts         AssessmentAttempt[]
+  id                 String              @id @default(uuid()) @db.Uuid
+  name               String              @unique
+  slug               String              @unique
+  shortDescription   String
+  longDescription    String?
+  coverImageUrl      String?
+  coverMediaId       String?             @db.Uuid
+  coverMedia         MediaAsset?         @relation("OrganSystemCover", fields: [coverMediaId], references: [id], onDelete: Restrict)
+  iconImageUrl       String?
+  iconMediaId        String?             @db.Uuid
+  iconMedia          MediaAsset?         @relation("OrganSystemIcon", fields: [iconMediaId], references: [id], onDelete: Restrict)
+  displayOrder       Int
+  status             PublishStatus       @default(DRAFT)
+  isActive           Boolean             @default(true)
+  createdAt          DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime            @updatedAt @db.Timestamptz(3)
+  trashedAt          DateTime?           @db.Timestamptz(3)
+  purgeAfter         DateTime?           @db.Timestamptz(3)
+  nextPurgeAttemptAt DateTime?           @db.Timestamptz(3)
+  topics             Topic[]
+  attempts           AssessmentAttempt[]
 
   @@index([status, isActive, displayOrder, id])
 }
 
 model Topic {
-  id            String                   @id @default(uuid()) @db.Uuid
-  organSystemId String                   @db.Uuid
-  organSystem   OrganSystem              @relation(fields: [organSystemId], references: [id], onDelete: Restrict)
-  title         String
-  slug          String
-  summary       String?
-  coverImageUrl String?
-  coverMediaId  String?                  @db.Uuid
-  coverMedia    MediaAsset?              @relation("TopicCover", fields: [coverMediaId], references: [id], onDelete: Restrict)
-  displayOrder  Int
-  status        PublishStatus            @default(DRAFT)
-  createdAt     DateTime                 @default(now()) @db.Timestamptz(3)
-  updatedAt     DateTime                 @updatedAt @db.Timestamptz(3)
-  lessons       ContentLesson[]
-  flashcards    Flashcard[]
-  questions     Question[]
-  attemptTopics AssessmentAttemptTopic[]
-  progress      TopicProgress[]
+  id                 String                   @id @default(uuid()) @db.Uuid
+  organSystemId      String                   @db.Uuid
+  organSystem        OrganSystem              @relation(fields: [organSystemId], references: [id], onDelete: Restrict)
+  title              String
+  slug               String
+  summary            String?
+  coverImageUrl      String?
+  coverMediaId       String?                  @db.Uuid
+  coverMedia         MediaAsset?              @relation("TopicCover", fields: [coverMediaId], references: [id], onDelete: Restrict)
+  displayOrder       Int
+  status             PublishStatus            @default(DRAFT)
+  createdAt          DateTime                 @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime                 @updatedAt @db.Timestamptz(3)
+  trashedAt          DateTime?                @db.Timestamptz(3)
+  purgeAfter         DateTime?                @db.Timestamptz(3)
+  nextPurgeAttemptAt DateTime?                @db.Timestamptz(3)
+  lessons            ContentLesson[]
+  flashcards         Flashcard[]
+  questions          Question[]
+  attemptTopics      AssessmentAttemptTopic[]
+  progress           TopicProgress[]
 
   @@unique([organSystemId, slug])
   @@index([organSystemId, status, displayOrder, id])
@@ -195,6 +204,9 @@ model ContentLesson {
   status                  PublishStatus           @default(DRAFT)
   createdAt               DateTime                @default(now()) @db.Timestamptz(3)
   updatedAt               DateTime                @updatedAt @db.Timestamptz(3)
+  trashedAt               DateTime?               @db.Timestamptz(3)
+  purgeAfter              DateTime?               @db.Timestamptz(3)
+  nextPurgeAttemptAt      DateTime?               @db.Timestamptz(3)
   progress                ContentLessonProgress[]
 
   @@unique([topicId, slug])
@@ -218,25 +230,28 @@ model ContentLessonProgress {
 }
 
 model Flashcard {
-  id            String               @id @default(uuid()) @db.Uuid
-  topicId       String               @db.Uuid
-  topic         Topic                @relation(fields: [topicId], references: [id], onDelete: Restrict)
-  frontText     String
-  backText      String
-  frontImageUrl String?
-  frontMediaId  String?              @db.Uuid
-  frontMedia    MediaAsset?          @relation("FlashcardFront", fields: [frontMediaId], references: [id], onDelete: Restrict)
-  backImageUrl  String?
-  backMediaId   String?              @db.Uuid
-  backMedia     MediaAsset?          @relation("FlashcardBack", fields: [backMediaId], references: [id], onDelete: Restrict)
-  difficulty    Difficulty           @default(MEDIUM)
-  notes         String?
-  displayOrder  Int
-  status        PublishStatus        @default(DRAFT)
-  createdAt     DateTime             @default(now()) @db.Timestamptz(3)
-  updatedAt     DateTime             @updatedAt @db.Timestamptz(3)
-  progress      FlashcardProgress[]
-  viewEvents    FlashcardViewEvent[]
+  id                 String               @id @default(uuid()) @db.Uuid
+  topicId            String               @db.Uuid
+  topic              Topic                @relation(fields: [topicId], references: [id], onDelete: Restrict)
+  frontText          String
+  backText           String
+  frontImageUrl      String?
+  frontMediaId       String?              @db.Uuid
+  frontMedia         MediaAsset?          @relation("FlashcardFront", fields: [frontMediaId], references: [id], onDelete: Restrict)
+  backImageUrl       String?
+  backMediaId        String?              @db.Uuid
+  backMedia          MediaAsset?          @relation("FlashcardBack", fields: [backMediaId], references: [id], onDelete: Restrict)
+  difficulty         Difficulty           @default(MEDIUM)
+  notes              String?
+  displayOrder       Int
+  status             PublishStatus        @default(DRAFT)
+  createdAt          DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime             @updatedAt @db.Timestamptz(3)
+  trashedAt          DateTime?            @db.Timestamptz(3)
+  purgeAfter         DateTime?            @db.Timestamptz(3)
+  nextPurgeAttemptAt DateTime?            @db.Timestamptz(3)
+  progress           FlashcardProgress[]
+  viewEvents         FlashcardViewEvent[]
 
   @@index([topicId, status, difficulty, displayOrder, id])
   @@index([frontMediaId])
@@ -245,23 +260,26 @@ model Flashcard {
 }
 
 model Question {
-  id               String            @id @default(uuid()) @db.Uuid
-  topicId          String            @db.Uuid
-  topic            Topic             @relation(fields: [topicId], references: [id], onDelete: Restrict)
-  assessmentType   AssessmentType
-  questionText     String
-  imageUrl         String?
-  mediaId          String?           @db.Uuid
-  media            MediaAsset?       @relation("QuestionMedia", fields: [mediaId], references: [id], onDelete: Restrict)
-  explanation      String
-  difficulty       Difficulty        @default(MEDIUM)
-  conceptTag       String?
-  status           PublishStatus     @default(DRAFT)
-  isActive         Boolean           @default(true)
-  createdAt        DateTime          @default(now()) @db.Timestamptz(3)
-  updatedAt        DateTime          @updatedAt @db.Timestamptz(3)
-  options          QuestionOption[]
-  attemptQuestions AttemptQuestion[]
+  id                 String            @id @default(uuid()) @db.Uuid
+  topicId            String            @db.Uuid
+  topic              Topic             @relation(fields: [topicId], references: [id], onDelete: Restrict)
+  assessmentType     AssessmentType
+  questionText       String
+  imageUrl           String?
+  mediaId            String?           @db.Uuid
+  media              MediaAsset?       @relation("QuestionMedia", fields: [mediaId], references: [id], onDelete: Restrict)
+  explanation        String
+  difficulty         Difficulty        @default(MEDIUM)
+  conceptTag         String?
+  status             PublishStatus     @default(DRAFT)
+  isActive           Boolean           @default(true)
+  createdAt          DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime          @updatedAt @db.Timestamptz(3)
+  trashedAt          DateTime?         @db.Timestamptz(3)
+  purgeAfter         DateTime?         @db.Timestamptz(3)
+  nextPurgeAttemptAt DateTime?         @db.Timestamptz(3)
+  options            QuestionOption[]
+  attemptQuestions   AttemptQuestion[]
 
   @@index([assessmentType, topicId, difficulty, status, isActive, id])
   @@index([mediaId])
@@ -554,6 +572,9 @@ model MediaAsset {
   archivedAt          DateTime?         @db.Timestamptz(3)
   createdAt           DateTime          @default(now()) @db.Timestamptz(3)
   updatedAt           DateTime          @updatedAt @db.Timestamptz(3)
+  trashedAt           DateTime?         @db.Timestamptz(3)
+  purgeAfter          DateTime?         @db.Timestamptz(3)
+  nextPurgeAttemptAt  DateTime?         @db.Timestamptz(3)
   profileAvatars      Profile[]         @relation("ProfileAvatar")
   organSystemCovers   OrganSystem[]     @relation("OrganSystemCover")
   organSystemIcons    OrganSystem[]     @relation("OrganSystemIcon")
@@ -568,6 +589,22 @@ model MediaAsset {
   @@index([mimeType])
   @@index([uploadedById])
   @@index([archivedAt])
+}
+
+model MediaPurgeJob {
+  id            String    @id @default(uuid()) @db.Uuid
+  mediaAssetId  String    @db.Uuid
+  bucket        String
+  path          String
+  attemptCount  Int       @default(0)
+  nextAttemptAt DateTime  @default(now()) @db.Timestamptz(3)
+  leaseToken    String?   @db.Uuid
+  leaseUntil    DateTime? @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+
+  @@unique([bucket, path])
+  @@index([nextAttemptAt, leaseUntil, id])
+  @@index([mediaAssetId])
 }
 
 model AuditLog {

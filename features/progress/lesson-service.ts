@@ -18,8 +18,9 @@ export async function updateLessonProgress(
     const lesson = await tx.contentLesson.findFirst({
       where: {
         id: contentLessonId,
+        trashedAt: null,
         status: "PUBLISHED",
-        topic: { status: "PUBLISHED", organSystem: { status: "PUBLISHED", isActive: true } },
+        topic: { trashedAt: null, status: "PUBLISHED", organSystem: { trashedAt: null, status: "PUBLISHED", isActive: true } },
       },
       select: { id: true, topicId: true },
     });

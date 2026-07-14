@@ -6,9 +6,9 @@
 
 Date: 2026-07-14
 
-Phases 0-7 are implemented and all seven migrations are current in the configured
+Phases 0-7 are implemented and all nine migrations are current in the configured
 development database. The product is not claimed as fully deployed or production-ready.
-`npm run env:check` currently fails only for the invalid local `CRON_SECRET`; production
+`npm run env:check` passes locally; production
 also requires paired Upstash credentials. Provider, authenticated E2E, backup/restore,
 cron, and production deployment acceptance remain external gates.
 
@@ -44,11 +44,16 @@ cron, and production deployment acceptance remain external gates.
 - Completed accessibility/responsive fixes across password toggles, pagination, dialogs,
   breadcrumbs, tables, labels, overflow, metadata, and robots; established axe-enabled
   public and credential-gated authenticated Playwright coverage.
-- Reconciled OpenAPI to all 104 implemented route operations with unique IDs, strict
+- Reconciled OpenAPI to all 108 implemented route operations with unique IDs, strict
   empty-body, rate-limit, privacy, response-header, and route-parity tests.
 - Made canonical seeding create-if-missing/non-destructive and added tested bootstrap
   find/create/compensation/redaction behavior. Seeded anatomy content remains draft/demo
   material requiring academic review before publication.
+- Added recoverable Trash for six resource types, database-clock 30-day restore windows,
+  DRAFT-only restore, Settings > Trash, leaf-first dependency-aware purge, protected
+  daily cron, and retrying `MediaPurgeJob` storage cleanup. Attempts, progress, audits,
+  and notification evidence are preserved; legacy ARCHIVED rows without Trash metadata
+  are not auto-purged. Normal editor block deletion remains separate and confirmed.
 - Updated final README, setup, architecture, API, security, testing, plan, status, and
   machine-readable contract documentation from inspected code and diffs.
 
@@ -62,15 +67,20 @@ were not modified.
 | --- | --- |
 | `npm run lint` | Passed |
 | `npm run typecheck` | Passed |
-| `npm run test` | Passed: 129 files, 2 skipped; 412 tests, 9 skipped |
+| `npm run test` | Passed: 139 files, 3 skipped; 442 tests, 13 skipped |
 | Isolated `TEST_DATABASE_URL` | Passed: 2 files/9 tests (4 assessment lifecycle + 5 direct DB access) |
 | `npm run build` | Passed: 40 static-generation units under nonce dynamic CSP output; all routes |
 | `npm run test:e2e` | 17 passed, 14 skipped |
-| `npm run openapi:validate` | Passed: 104 operations, 104 unique operation IDs, exact route parity |
-| `npm run prisma:deploy` / status | Passed; 7 migrations current, including both Phase 7 migrations |
+| `npm run openapi:validate` | Passed: 108 operations, 108 unique operation IDs, exact route parity |
+| `npm run prisma:deploy` / status | Passed; 9 migrations current, including `20260714140000_add_trash_audit_actions` and `20260714141000_add_safe_trash` |
 | `npm audit` | 0 high/critical; 2 moderate PostCSS-through-Next findings remain |
-| `npm run env:check` | Failed only for invalid local `CRON_SECRET`; intentional deployment gate |
+| `npm run env:check` | Passed locally; production deployment values remain an external gate |
 | `git diff --check` | Passed; line-ending notices only |
+
+The isolated PostgreSQL Trash suite passed 4/4. The default conditional database run
+skips it when `TEST_DATABASE_URL` is not configured. Production gates remain external:
+valid deployment `CRON_SECRET`, daily cron verification, production RLS verification,
+real Supabase Storage purge, and authenticated E2E.
 
 The 17 Playwright passes cover desktop/mobile public, security, and accessibility checks.
 Authenticated admin tests were skipped because `E2E_ADMIN_EMAIL` and
@@ -165,7 +175,7 @@ acceptance above; do not claim full production readiness until those gates pass.
 - Added quiz/test question admin CRUD with strict atomic 2-6 option aggregates and
   exactly one correct answer. Replacement validates option ownership, preserves IDs/
   stable keys where supplied, and regenerates contiguous `A`-onward labels/order.
-- Added question publish/draft, terminal archive, active/inactive, duplicate-to-active-
+- Added question publish/draft, recoverable Trash, active/inactive, duplicate-to-active-
   draft, and atomic bulk status APIs/workflows. Stored option aggregates fail closed if
   cardinality, correctness, labels, or ordering are invalid.
 - Added admin question filters for assessment type, topic/system, difficulty, status,

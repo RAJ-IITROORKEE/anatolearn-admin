@@ -20,6 +20,9 @@ describe("lessonDto", () => {
       status: "DRAFT",
       createdAt: new Date("2026-01-01T00:00:00.000Z"),
       updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+      trashedAt: null,
+      purgeAfter: null,
+      nextPurgeAttemptAt: null,
     } as ContentLesson;
 
     expect(lessonDto(lesson).contentBlocks).toEqual(lesson.contentBlocks);
