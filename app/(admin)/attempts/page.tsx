@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+
 import { PageHeader } from "@/components/app-shell/page-header";
 import { AttemptFilterForm } from "@/components/assessments/attempt-filter-form";
 import { parseAttemptFilters, type AttemptSearchParams } from "@/components/assessments/attempt-filters";
@@ -7,6 +9,8 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { Pagination } from "@/components/shared/pagination";
 import { getAdminAttemptLabels } from "@/features/assessments/admin-label-service";
 import { listAdminAttempts } from "@/features/assessments/admin-service";
+
+export const metadata: Metadata = { title: "Assessment attempts" };
 
 export default async function AttemptsPage({ searchParams }: { searchParams: Promise<AttemptSearchParams> }) {
   const filters = parseAttemptFilters(await searchParams);

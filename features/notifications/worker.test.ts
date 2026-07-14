@@ -19,6 +19,7 @@ import {
   completeDeliveryClaim,
   claimDeliveries,
   materializeCampaign,
+  permanentProviderFailure,
   receiptPollDecision,
   renewCampaignLease,
 } from "./worker";
@@ -145,5 +146,20 @@ describe("receipt polling policy", () => {
       providerErrorCode: "RECEIPT_UNAVAILABLE",
     });
     expect(receiptPollDecision({ ticketedAt: new Date("2026-07-15T09:00:00Z"), receiptAttemptCount: 19 }, "TRANSIENT", now).status).toBe("FAILED");
+  });
+});
+
+describe("permanent provider failures", () => {
+  it("terminally fails an owned claim without scheduling another attempt", () => {
+    const now = new Date("2026-07-15T10:00:00Z");
+    expect(permanentProviderFailure(2, now)).toEqual({
+      status: "FAILED",
+      attemptCount: 3,
+      lastAttemptAt: now,
+      nextAttemptAt: null,
+      failedAt: now,
+      providerErrorCode: "PROVIDER_PERMANENT",
+      providerErrorMessage: "Notification provider permanently rejected the request.",
+    });
   });
 });

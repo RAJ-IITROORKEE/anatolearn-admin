@@ -36,6 +36,12 @@ export class ProviderTransientError extends Error {
   }
 }
 
+export class ProviderPermanentError extends Error {
+  constructor() {
+    super("Notification provider permanently rejected the request.");
+  }
+}
+
 async function providerFetch(url: string, accessToken: string, body: unknown) {
   let response: Response;
   try {
@@ -52,8 +58,14 @@ async function providerFetch(url: string, accessToken: string, body: unknown) {
     const seconds = Number(response.headers.get("retry-after"));
     throw new ProviderTransientError(Number.isFinite(seconds) ? seconds * 1000 : undefined);
   }
-  if (!response.ok) throw new Error("Notification provider rejected the request.");
-  return response.json().catch(() => { throw new Error("Notification provider returned invalid JSON."); });
+  if (!response.ok) throw new ProviderPermanentError();
+  return response.json().catch(() => { throw new ProviderPermanentError(); });
+}
+
+function parseProviderResponse<T>(schema: z.ZodType<T>, value: unknown): T {
+  const result = schema.safeParse(value);
+  if (!result.success) throw new ProviderPermanentError();
+  return result.data;
 }
 
 export class ExpoPushProvider {
@@ -62,8 +74,8 @@ export class ExpoPushProvider {
   async send(messages: Array<{ to: string; title: string; body: string }>): Promise<SendResult[]> {
     if (messages.length > 100) throw new Error("Expo batches may contain at most 100 messages.");
     if (!messages.length) return [];
-    const response = ticketResponseSchema.parse(await providerFetch("https://exp.host/--/api/v2/push/send", this.accessToken, messages));
-    if (response.data.length !== messages.length) throw new Error("Notification provider returned an invalid ticket count.");
+    const response = parseProviderResponse(ticketResponseSchema, await providerFetch("https://exp.host/--/api/v2/push/send", this.accessToken, messages));
+    if (response.data.length !== messages.length) throw new ProviderPermanentError();
     return response.data.map((ticket) => ticket.status === "ok"
       ? { status: "TICKETED", receiptId: ticket.id }
       : { status: "FAILED", code: ticket.details?.error ?? "PROVIDER_ERROR", message: ticket.message });
@@ -72,7 +84,7 @@ export class ExpoPushProvider {
   async receipts(ids: string[]): Promise<Record<string, ReceiptResult>> {
     if (ids.length > 100) throw new Error("Expo receipt batches may contain at most 100 IDs.");
     if (!ids.length) return {};
-    const response = receiptResponseSchema.parse(await providerFetch("https://exp.host/--/api/v2/push/getReceipts", this.accessToken, { ids }));
+    const response = parseProviderResponse(receiptResponseSchema, await providerFetch("https://exp.host/--/api/v2/push/getReceipts", this.accessToken, { ids }));
     return Object.fromEntries(Object.entries(response.data).map(([id, receipt]) => [id, receipt.status === "ok"
       ? { status: "SENT" }
       : { status: "FAILED", code: receipt.details?.error ?? "PROVIDER_ERROR", message: receipt.message }]));

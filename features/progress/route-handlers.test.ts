@@ -19,6 +19,7 @@ const identity = { profile: { id: "owner" }, user: {}, mode: "bearer" };
 describe("progress route handlers", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.NEXT_PUBLIC_APP_URL = "https://app.example";
     mocks.resolveRequestIdentity.mockResolvedValue(identity);
   });
 

@@ -91,8 +91,8 @@ function AttemptsTrend({ data }: { data: AdminDashboardDto }) {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <SectionHeading description="Submitted quiz and test attempts by UTC completion date." title="Attempts trend" />
         <div className="flex gap-4 text-xs font-semibold">
-          <span className="flex items-center gap-2"><span className="size-2.5 rounded-full bg-quiz" />Quiz</span>
-          <span className="flex items-center gap-2"><span className="size-2.5 rounded-full bg-test" />Test</span>
+          <span className="flex items-center gap-2"><span className="h-0.5 w-5 bg-quiz" />Quiz, solid line</span>
+          <span className="flex items-center gap-2"><span className="w-5 border-t-2 border-dashed border-test" />Test, dashed line</span>
         </div>
       </div>
       <p className="mt-4 rounded-xl bg-subtle px-4 py-3 text-sm font-semibold text-body" id="attempts-summary">{summary}</p>
@@ -100,8 +100,8 @@ function AttemptsTrend({ data }: { data: AdminDashboardDto }) {
         <div className="mt-5 overflow-hidden rounded-xl border border-border bg-subtle p-3" aria-hidden="true">
           <svg className="h-auto w-full" preserveAspectRatio="none" role="img" viewBox={`0 0 ${width} ${height}`}>
             {[0, 0.5, 1].map((position) => <line className="stroke-border" key={position} strokeWidth="1" x1="0" x2={width} y1={12 + position * (height - 24)} y2={12 + position * (height - 24)} />)}
-            <polyline className="fill-none stroke-quiz" points={points("quizAttempts")} strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" vectorEffect="non-scaling-stroke" />
-            <polyline className="fill-none stroke-test" points={points("testAttempts")} strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" vectorEffect="non-scaling-stroke" />
+            <polyline className="fill-none stroke-quiz" data-testid="quiz-trend-line" points={points("quizAttempts")} strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" vectorEffect="non-scaling-stroke" />
+            <polyline className="fill-none stroke-test" data-testid="test-trend-line" points={points("testAttempts")} strokeDasharray="10 7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" vectorEffect="non-scaling-stroke" />
           </svg>
         </div>
       )}

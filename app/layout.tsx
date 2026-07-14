@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 
+export const dynamic = "force-dynamic";
+
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
@@ -14,6 +16,7 @@ export const metadata: Metadata = {
     template: "%s | AnatoLearn Admin",
   },
   description: "Manage AnatoLearn educational content and operations.",
+  robots: { follow: false, index: false },
 };
 
 export default function RootLayout({

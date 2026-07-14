@@ -1,255 +1,149 @@
-# SETUP_GUIDE.md — AnatoLearn Admin and Backend
+# AnatoLearn Setup Guide
 
-## 1. Create the Next.js project
+This guide describes the implemented Phase 7 repository. Use Node.js 20.19 or newer,
+npm, Supabase (PostgreSQL, Auth, and private Storage), and a Vercel-compatible Next.js
+deployment. Never commit `.env.local` or print credentials.
 
-If the project already exists, skip project creation and work inside it.
+## 1. Supabase project
 
-Recommended creation settings:
+Collect the project URL, modern publishable key, server-only secret key, database
+password, pooled runtime connection string, and direct/session migration connection.
 
-- TypeScript
-- ESLint
-- Tailwind CSS
-- `src/` directory optional, but remain consistent
-- App Router
-- Import alias `@/*`
+- `DATABASE_URL`: pooled Supavisor connection used by Prisma at runtime.
+- `DIRECT_URL`: direct/session connection used by Prisma Migrate.
+- `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`: browser-safe
+  Auth configuration.
+- `SUPABASE_SECRET_KEY`: server only; never prefix it with `NEXT_PUBLIC_`.
 
-Then copy these files into the repository root:
+The application tables are server/Prisma-only. Migrations enable RLS and revoke direct
+table access from Supabase `anon` and `authenticated`; do not add permissive application-
+table policies for browser/mobile clients. Auth and Storage remain Supabase integrations.
 
-- `MASTER_BUILD_PROMPT.md`
-- `DESIGN.md`
-- `AGENTS.md`
-- `.env.example`
+## 2. Authentication
 
-Paste the master prompt into Claude Code/OpenCode from the repository root.
+Enable email/password Auth. Configure:
 
----
+- site URL: `http://localhost:3000` locally;
+- callback: `http://localhost:3000/auth/callback`;
+- password reset: `http://localhost:3000/reset-password`;
+- equivalent allowlisted production URLs before deployment.
 
-## 2. Create a Supabase project
+Admin web sessions use secure SSR cookies. Native Expo clients send a verified Supabase
+access token as `Authorization: Bearer <token>`. Native requests do not require browser
+CORS; no application CORS variable exists. CORS is not an authorization control.
 
-Create one Supabase project for development.
+## 3. Private Storage
 
-Collect:
+Create a **private** bucket named `anatomy-media`. Do not make it public. Configure an
+8 MB limit and allow PNG, JPEG, and WebP. The application validates image bytes,
+dimensions, MIME agreement, and required alt text, then serves short-lived signed URLs.
 
-- Project URL
-- Anon/publishable key
-- Service-role key
-- Database password
-- Pooled connection string
-- Direct/session connection string
+Use these exact settings in `.env.local`:
 
-Use:
-
-- Pooled URL as `DATABASE_URL`
-- Direct/session URL as `DIRECT_URL`
-- Service-role key only on the server
-
-Do not put the service-role key in a variable beginning with `NEXT_PUBLIC_`.
-
----
-
-## 3. Configure authentication
-
-In Supabase Authentication:
-
-1. Enable email/password authentication.
-2. Set the local site URL to `http://localhost:3000`.
-3. Add local redirect URLs:
-   - `http://localhost:3000/auth/callback`
-   - `http://localhost:3000/reset-password`
-4. Later add the production Vercel domain.
-5. Configure email templates and SMTP only when branded production email is needed.
-
-The admin panel should use secure SSR cookies. The future Expo app can send a Supabase access token in the API Authorization header.
-
----
-
-## 4. Create storage
-
-Create a bucket named:
-
-`anatomy-media`
-
-Recommended MVP settings:
-
-- Public bucket only for approved educational images
-- Maximum upload size 8 MB
-- Accept PNG, JPEG and WebP
-- Require alt text in the application
-- Restrict uploads to admins
-- Do not permit arbitrary file types
-
-If private media is required, switch to signed URLs and adjust the implementation consistently.
-
----
-
-## 5. Prepare environment variables
-
-Copy:
-
-```bash
-cp .env.example .env.local
+```dotenv
+SUPABASE_STORAGE_BUCKET="anatomy-media"
+SUPABASE_STORAGE_MAX_FILE_MB="8"
+SUPABASE_STORAGE_ALLOWED_MIME_TYPES="image/png,image/jpeg,image/webp"
+SUPABASE_STORAGE_VISIBILITY="private"
 ```
 
-On Windows PowerShell:
+## 4. Environment
 
 ```powershell
 Copy-Item .env.example .env.local
 ```
 
-Fill all required values:
+Replace every required placeholder. Important server-only values are `DATABASE_URL`,
+`DIRECT_URL`, `SUPABASE_SECRET_KEY`, bootstrap credentials, and `CRON_SECRET`.
+`CRON_SECRET` must be a non-placeholder random value of at least 32 characters before
+scheduled jobs are deployed.
 
-- `NEXT_PUBLIC_APP_URL`
-- `DATABASE_URL`
-- `DIRECT_URL`
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `ADMIN_BOOTSTRAP_EMAIL`
-- `ADMIN_BOOTSTRAP_PASSWORD`
-- `CRON_SECRET`
+Production also requires both variables below. They must be paired; development/test may
+leave both blank to use the bounded in-memory limiter.
 
-Optional integrations can remain empty during early development.
+```dotenv
+UPSTASH_REDIS_REST_URL="https://...upstash.io"
+UPSTASH_REDIS_REST_TOKEN="..."
+```
 
----
+Expo is optional at startup. Real delivery requires `EXPO_PUSH_ENABLED="true"` and a
+valid `EXPO_ACCESS_TOKEN`. Do not mark delivery ready until ticket, receipt, partial
+outcome, and `DeviceNotRegistered` behavior have been exercised on real EAS devices.
 
-## 6. Install and initialize
-
-The agent should install packages and create scripts, but the expected workflow is similar to:
+## 5. Install, migrate, seed, and run
 
 ```bash
 npm install
+npm run env:check
 npm run prisma:generate
-npm run prisma:migrate
+npm run prisma:deploy
 npm run db:seed
 npm run admin:bootstrap
 npm run dev
 ```
 
-Use the repository's actual package manager.
+`prisma:deploy` uses `prisma migrate deploy`; use it for controlled deployment rather
+than creating migration history in production. Seven migrations are current in the
+configured development database. The final two enable RLS/revoke direct application-
+table access and restrict schema creation for `anon`/`authenticated`.
 
-Never run a destructive reset against production.
+The seed is idempotent and **non-destructive**: canonical records are created only when
+missing (`upsert` with empty updates), so repeated runs do not overwrite editorial work.
+Seeded anatomy material is draft/demo academic content and requires qualified review
+before publication.
 
----
+`admin:bootstrap` finds an existing Auth user or creates one when a 12+ character
+temporary password is supplied, then links an active `ADMIN` profile. It compensates by
+deleting a newly created Auth user if profile persistence fails. Rotate the temporary
+password and remove `ADMIN_BOOTSTRAP_PASSWORD` after successful production bootstrap.
 
-## 7. Bootstrap the first administrator
-
-The implementation should create:
-
-`scripts/bootstrap-admin.ts`
-
-Run it explicitly after migrations and environment configuration.
-
-The script should:
-
-- Create/find the Supabase Auth account
-- Upsert the `Profile` as `ADMIN`
-- Be idempotent
-- Avoid printing the password
-- Encourage password rotation
-
-After first login:
-
-1. Change the temporary password.
-2. Remove `ADMIN_BOOTSTRAP_PASSWORD` from production environment variables.
-3. Keep only a documented recovery process.
-
----
-
-## 8. Seed data
-
-The seed should add:
-
-- Eleven organ systems
-- Demo circulatory topics
-- Sample lesson content
-- Sample flashcards
-- Sample quiz/test questions
-
-Run the seed repeatedly without duplicates.
-
-Sample educational content is for demonstration and must be reviewed by the client before production use.
-
----
-
-## 9. Local verification
-
-Expected checks:
+## 6. Verification
 
 ```bash
 npm run lint
 npm run typecheck
 npm run test
+npm run openapi:validate
 npm run build
+npm run test:e2e
 ```
 
-Then manually verify:
+Install Chromium once with `npx playwright install chromium`. Set `TEST_DATABASE_URL` to
+a migrated, isolated non-production database to run the assessment and direct-role
+PostgreSQL tests. It must not be the normal `DATABASE_URL`. Set `E2E_ADMIN_EMAIL` and
+`E2E_ADMIN_PASSWORD` to run authenticated admin projects; without them those tests skip.
 
-- Login
-- Dashboard
-- Organ-system CRUD
-- Topic CRUD
-- Content editor and preview
-- Media upload
-- Flashcard CRUD
-- Quiz/test question CRUD
-- Feedback workflow
-- Role protection
-- API health endpoint
+The current local `npm run env:check` fails only because `CRON_SECRET` is invalid. Do not
+weaken validation; install a valid secret.
 
----
+## 7. Deployment, backup, and rollback
 
-## 10. Vercel deployment
+1. Take and verify a recoverable database backup before migration.
+2. Configure production Supabase URLs/keys, private bucket, redirects, random 32+
+   `CRON_SECRET`, and both Upstash variables.
+3. Run `npm run prisma:deploy` as a controlled deployment step.
+4. Deploy the application, then verify `/api/health`, admin login, private media, and one
+   representative read/write workflow.
+5. Verify both Vercel cron jobs invoke every minute:
+   `/api/internal/attempts/expire` and `/api/internal/notifications/process`.
+6. Confirm server secrets do not appear in browser bundles or logs.
 
-1. Push the repository to the approved Git provider.
-2. Import it into Vercel.
-3. Add environment variables separately for Development, Preview and Production.
-4. Use production Supabase URLs and keys.
-5. Run migrations through a controlled deployment step or manually with:
-   `prisma migrate deploy`
-6. Add the production domain to Supabase Auth redirect allowlist.
-7. Redeploy after changing environment variables.
-8. Verify `/api/health`.
-9. Test admin login and a read/write workflow.
-10. Confirm service-role keys are not present in browser bundles.
+For rollback, roll back the application release first. Do not edit or delete applied
+migration files and do not run `prisma migrate reset`. Restore from the verified backup
+when a database rollback is required, then reconcile migration state before redeploying.
+The Phase 7 RLS/revoke migrations are verified in development and isolated role tests,
+not claimed as deployed in production.
 
-For scheduled jobs, protect cron routes using `CRON_SECRET`.
+## 8. Outstanding external gates
 
----
+- install a valid deployment `CRON_SECRET` and verify both Vercel schedules;
+- provision and verify production Upstash credentials;
+- configure a real Expo access token and test EAS devices through ticket, receipt,
+  partial, and `DeviceNotRegistered` outcomes;
+- provide E2E admin credentials and run authenticated flows;
+- test real Supabase Auth email/redirect and private Storage provider integration;
+- execute backup/restore rehearsal and production deployment;
+- optionally configure Sentry or equivalent monitoring.
 
-## 11. Mobile integration later
-
-The Expo app will use:
-
-- Supabase Auth for sign-up/login/session
-- REST API base URL from the deployed Next.js project
-- `Authorization: Bearer <access-token>`
-- Published content endpoints
-- Assessment endpoints
-- Feedback endpoint
-- Device-token endpoint for push notifications
-
-Do not put server secrets in the Expo application.
-
----
-
-## 12. Required third-party services
-
-Required:
-
-- Supabase: PostgreSQL, Auth and Storage
-- Vercel: Next.js deployment
-- GitHub/GitLab/Bitbucket: source control and deployment integration
-
-Required later for iOS mobile delivery:
-
-- Expo/EAS
-- Apple Developer account
-
-Optional:
-
-- Sentry: error monitoring
-- Resend: custom transactional email
-- Upstash Redis: stronger serverless rate limiting
-- Expo Push Service: push notifications
-
-Do not add optional services before the core MVP works.
+Repository Phase 7 is complete, but these gates prevent a claim of full production
+deployment readiness.

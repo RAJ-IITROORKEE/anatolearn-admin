@@ -17,6 +17,7 @@ export function AppShell({ children, profile }: { children: React.ReactNode; pro
 
   return (
     <div className="min-h-screen bg-background">
+      <a className="fixed left-4 top-4 z-[100] -translate-y-24 rounded-lg bg-primary px-4 py-2 font-semibold text-white shadow-lg transition-transform focus:translate-y-0 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2" href="#main-content">Skip to main content</a>
       <aside className={cn("fixed inset-y-0 left-0 z-40 hidden border-r border-border bg-surface transition-[width] duration-200 lg:flex lg:flex-col", collapsed ? "w-[76px]" : "w-[260px]")}>
         <div className={cn("flex h-16 items-center border-b border-border px-4", collapsed && "justify-center px-2")}><BrandMark compact={collapsed} /></div>
         <div className="min-h-0 flex-1 overflow-y-auto"><NavList collapsed={collapsed} /></div>
@@ -41,7 +42,7 @@ export function AppShell({ children, profile }: { children: React.ReactNode; pro
           </div>
           <ProfileMenu profile={profile} />
         </header>
-        <main className="mx-auto w-full max-w-[1600px] p-4 sm:p-6 lg:p-8">{children}</main>
+        <main className="mx-auto w-full max-w-[1600px] p-4 focus:outline-none sm:p-6 lg:p-8" id="main-content" tabIndex={-1}>{children}</main>
       </div>
     </div>
   );

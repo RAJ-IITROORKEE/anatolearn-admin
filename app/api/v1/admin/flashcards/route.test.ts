@@ -27,6 +27,7 @@ const identity = { profile: { id: "user-id", role: "ADMIN" }, user: {}, mode: "c
 
 describe("admin flashcard collection", () => {
   beforeEach(() => {
+    process.env.NEXT_PUBLIC_APP_URL = "https://admin.example";
     mocks.createFlashcard.mockReset();
     mocks.listAdminFlashcards.mockReset();
     mocks.resolveRequestIdentity.mockReset();

@@ -4,8 +4,8 @@ import { resolveRequestIdentity } from "@/lib/auth/request";
 import { prisma } from "@/lib/db/prisma";
 import { hasSafeOrigin } from "@/lib/security/origin";
 
-function profileDto(profile: { id: string; fullName: string; email: string; role: string; avatarUrl: string | null; isActive: boolean }) {
-  return { id: profile.id, fullName: profile.fullName, email: profile.email, role: profile.role, avatarUrl: profile.avatarUrl, isActive: profile.isActive };
+function profileDto(profile: { id: string; fullName: string; email: string; avatarUrl: string | null; isActive: boolean }) {
+  return { id: profile.id, fullName: profile.fullName, email: profile.email, avatarUrl: profile.avatarUrl, isActive: profile.isActive };
 }
 
 export async function GET(request: Request) {

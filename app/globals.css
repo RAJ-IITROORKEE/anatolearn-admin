@@ -66,6 +66,12 @@ a {
   -webkit-tap-highlight-color: transparent;
 }
 
+a:focus-visible {
+  border-radius: 0.375rem;
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
 ::selection {
   background: var(--primary-soft);
   color: var(--foreground);

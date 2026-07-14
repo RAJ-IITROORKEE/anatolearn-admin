@@ -1,5 +1,6 @@
 import { Plus } from "lucide-react";
 import Link from "next/link";
+import type { Metadata } from "next";
 
 import { PageHeader } from "@/components/app-shell/page-header";
 import { CampaignList } from "@/components/notifications/campaign-list";
@@ -15,6 +16,8 @@ import { getProviderConfig } from "@/features/notifications/provider";
 import { listCampaigns } from "@/features/notifications/service";
 
 type SearchParams = { page?: string; pageSize?: string; status?: string };
+
+export const metadata: Metadata = { title: "Notifications" };
 
 export default async function NotificationsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const query = await searchParams;

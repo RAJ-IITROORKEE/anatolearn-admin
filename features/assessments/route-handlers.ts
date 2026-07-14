@@ -1,9 +1,10 @@
 import { mapApiError } from "@/lib/api/handler";
+import { parseEmptyJsonBody } from "@/lib/api/body";
 import { apiError, apiSuccess, requestId } from "@/lib/api/response";
 import { resolveRequestIdentity } from "@/lib/auth/request";
 import { hasSafeOrigin } from "@/lib/security/origin";
 import { AssessmentError } from "./domain";
-import { answerInputSchema, attemptIdSchema, attemptListSchema, emptyMutationSchema, startAssessmentSchema } from "./schemas";
+import { answerInputSchema, attemptIdSchema, attemptListSchema, startAssessmentSchema } from "./schemas";
 import { getAttempt, getAttemptResult, listAttempts, retakeAttempt, startAssessment, submitAttempt, updateAttemptAnswer } from "./service";
 
 type AttemptContext = { params: Promise<{ attemptId: string }> };
@@ -26,14 +27,6 @@ async function attemptId(context: AttemptContext | AnswerContext) {
   return attemptIdSchema.parse((await context.params).attemptId);
 }
 
-async function parseEmptyMutation(request: Request) {
-  const text = await request.text();
-  if (!text.trim()) return emptyMutationSchema.parse({});
-  let body: unknown;
-  try { body = JSON.parse(text); } catch { body = null; }
-  return emptyMutationSchema.parse(body);
-}
-
 export function assessmentStartHandler(request: Request) {
   return handle(request, true, async (userId, id) => {
     const input = startAssessmentSchema.parse(await request.json().catch(() => null));
@@ -51,7 +44,7 @@ export function attemptAnswerHandler(request: Request, context: AnswerContext) {
 
 export function attemptSubmitHandler(request: Request, context: AttemptContext) {
   return handle(request, true, async (userId, id) => {
-    await parseEmptyMutation(request);
+    await parseEmptyJsonBody(request);
     return apiSuccess(await submitAttempt(await attemptId(context), userId), { requestId: id });
   });
 }
@@ -66,7 +59,7 @@ export function attemptResultHandler(request: Request, context: AttemptContext) 
 
 export function attemptRetakeHandler(request: Request, context: AttemptContext) {
   return handle(request, true, async (userId, id) => {
-    await parseEmptyMutation(request);
+    await parseEmptyJsonBody(request);
     return apiSuccess(await retakeAttempt(await attemptId(context), userId), { requestId: id }, 201);
   });
 }

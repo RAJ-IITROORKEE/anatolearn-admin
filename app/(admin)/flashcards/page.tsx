@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Grid2X2, List, Plus } from "lucide-react";
+import type { Metadata } from "next";
 
 import { BulkActionForm } from "@/components/admin/bulk-action-form";
 import { PageHeader } from "@/components/app-shell/page-header";
@@ -12,6 +13,8 @@ import { listFlashcards } from "@/components/flashcards/data";
 import { flashcardListQuerySchema } from "@/features/flashcards/schemas";
 import { cn } from "@/lib/utils";
 import { bulkFlashcardStatusAction } from "../phase4-actions";
+
+export const metadata: Metadata = { title: "Flashcards" };
 
 type Params = Record<string, string | string[] | undefined>;
 const scalar = (value: string | string[] | undefined) => typeof value === "string" ? value : undefined;

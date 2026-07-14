@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { changePasswordSchema, deviceTokenSchema, profileUpdateSchema } from "./api-schemas";
+import { changePasswordSchema, deviceTokenSchema, emailSchema, loginSchema, profileUpdateSchema, registerSchema } from "./api-schemas";
 
 describe("authentication API schemas", () => {
   it("rejects an unchanged password", () => {
@@ -14,5 +14,13 @@ describe("authentication API schemas", () => {
 
   it("does not allow account fields in profile updates", () => {
     expect(profileUpdateSchema.safeParse({ fullName: "Alex Admin", role: "ADMIN" }).success).toBe(false);
+  });
+
+  it.each([
+    [loginSchema, { email: "user@example.com", password: "valid-password", role: "ADMIN" }],
+    [registerSchema, { email: "user@example.com", password: "valid-password", fullName: "User", role: "ADMIN" }],
+    [emailSchema, { email: "user@example.com", redirectTo: "https://evil.example" }],
+  ])("rejects unknown authentication input fields", (schema, value) => {
+    expect(schema.safeParse(value).success).toBe(false);
   });
 });

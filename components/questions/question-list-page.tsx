@@ -50,7 +50,7 @@ export async function QuestionListPage({ assessmentType, searchParams }: { asses
       <div className="grid gap-4 lg:grid-cols-2">
         {result.items.map((item) => <article className={cn("rounded-2xl border bg-surface p-4 shadow-sm transition sm:p-5", quiz ? "border-quiz/20 hover:border-quiz/40" : "border-test/20 hover:border-test/40")} key={item.id}>
           <div className="flex items-start gap-3">
-            <input aria-label={`Select ${item.questionText}`} className="mt-1 size-4" name="ids" type="checkbox" value={item.id} />
+            <label className="-m-2 inline-flex size-10 shrink-0 items-center justify-center"><span className="sr-only">Select {item.questionText}</span><input className="size-4" name="ids" type="checkbox" value={item.id} /></label>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2"><span className={cn("rounded-full px-2.5 py-1 text-xs font-bold", quiz ? "bg-quiz-soft text-quiz" : "bg-test-soft text-test")}>{quiz ? "Quiz" : "Test"}</span><StatusBadge status={item.status} />{!item.isActive && <StatusBadge status="INACTIVE" />}</div>
               <Link className={cn("mt-3 block font-bold leading-6 text-foreground", quiz ? "hover:text-quiz" : "hover:text-test")} href={`/questions/${item.id}`}>{item.questionText}</Link>

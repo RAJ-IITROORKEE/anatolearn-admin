@@ -1,23 +1,28 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useRef, useState } from "react";
 
 import { PendingButton } from "@/components/shared/pending-button";
 import { ActionNotice, fieldClass } from "@/components/phase3/admin-ui";
 import type { FormAction } from "@/components/phase3/action-form";
+import { ConfirmationDialog } from "@/components/shared/confirmation-dialog";
 
 export function BulkActionForm({ action, children }: { action: FormAction; children: React.ReactNode }) {
   const [state, formAction, pending] = useActionState(action, {});
+  const [selection, setSelection] = useState({ count: 0, status: "PUBLISHED" });
+  const formRef = useRef<HTMLFormElement>(null);
+  const refreshSelection = () => {
+    if (!formRef.current) return;
+    const form = new FormData(formRef.current);
+    setSelection({ count: form.getAll("ids").length, status: String(form.get("status")) });
+  };
+  const verb = selection.status === "ARCHIVED" ? "Archive" : "Change status for";
   return (
     <form
       action={formAction}
       className="grid gap-4"
-      onSubmit={(event) => {
-        const form = new FormData(event.currentTarget);
-        const status = String(form.get("status"));
-        const count = form.getAll("ids").length;
-        if (!count || !window.confirm(`${status === "ARCHIVED" ? "Archive" : "Change status for"} ${count} selected item${count === 1 ? "" : "s"}?`)) event.preventDefault();
-      }}
+      onChange={refreshSelection}
+      ref={formRef}
     >
       <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted">Select cards below, then apply a lifecycle change.</p>
@@ -28,7 +33,9 @@ export function BulkActionForm({ action, children }: { action: FormAction; child
             <option value="DRAFT">Move to draft</option>
             <option value="ARCHIVED">Archive</option>
           </select>
-          <PendingButton pending={pending} pendingLabel="Applying" variant="outline">Apply</PendingButton>
+          <ConfirmationDialog confirmLabel={`Apply to ${selection.count} item${selection.count === 1 ? "" : "s"}`} description={`${verb} ${selection.count} selected item${selection.count === 1 ? "" : "s"}?`} onConfirm={() => formRef.current?.requestSubmit()} pending={pending} title="Confirm bulk action">
+            <PendingButton disabled={!selection.count} pending={pending} pendingLabel="Applying" type="button" variant="outline">Apply</PendingButton>
+          </ConfirmationDialog>
         </div>
       </div>
       <ActionNotice state={state} />

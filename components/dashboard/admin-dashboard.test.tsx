@@ -83,6 +83,8 @@ describe("AdminDashboard", () => {
     expect(within(table).getAllByText("2")).toHaveLength(1);
     expect(screen.getByText("8 / 10 (80%)")).toBeVisible();
     expect(screen.getByText("3 / 5 (60%)")).toBeVisible();
+    expect(screen.getByTestId("quiz-trend-line")).not.toHaveAttribute("stroke-dasharray");
+    expect(screen.getByTestId("test-trend-line")).toHaveAttribute("stroke-dasharray", "10 7");
   });
 
   it("offers only the supported dashboard ranges and marks the current one", () => {

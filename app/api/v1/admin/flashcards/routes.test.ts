@@ -43,6 +43,7 @@ function mutation(url: string, body: unknown, origin = "https://admin.example") 
 describe("admin flashcard item and lifecycle routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.NEXT_PUBLIC_APP_URL = "https://admin.example";
     mocks.resolveRequestIdentity.mockResolvedValue(admin);
   });
 

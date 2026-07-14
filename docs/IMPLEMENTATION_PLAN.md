@@ -164,7 +164,8 @@ queue workflows; immutable recipients/deliveries; learner list/read; isolated Ex
 provider readiness; receipt-truthful worker states, leases, retries, and cron route; and
 responsive accessible admin pages with dirty-form protection. The two Phase 6 migrations
 are deployed after splitting enum labels from dependent structure for PostgreSQL
-transaction compatibility; all five migrations are current. Latest known pre-doc gates:
+transaction compatibility; all five migrations were current at the Phase 6 close. The
+historical Phase 6 gates were:
 lint/typecheck/build passed, 319 tests passed with four conditional PostgreSQL skips, and
 migration deploy passed. Playwright was not rerun for Phase 6; the prior anonymous result
 remains 3 passed/1 skipped. `env:check` intentionally fails on the invalid local
@@ -191,6 +192,25 @@ existing media-picker/visual-editor gaps.
 
 ## Phase 7: Hardening and delivery
 
+**Status: repository implementation complete; production deployment externally gated.**
+Delivered exact-origin CSRF checks; nonce CSP, security headers and production HSTS;
+request-ID/private-cache/public-cache contracts; structured redacted logging; Upstash
+distributed limiting with production-required paired credentials and development/test
+memory fallback; dual client/account auth quotas; registration enumeration resistance
+and compensation; permanent notification-failure handling; Prisma 6.19.3; deployed
+development RLS/revoke migrations with isolated role tests; visual seven-block lesson
+editing and managed-media pickers; accessibility/responsive/metadata/robots/password/
+pagination/dialog/table fixes; strict 104-operation OpenAPI route parity; non-destructive
+seed/bootstrap tests; and axe/Playwright foundations.
+
+Final gates passed: lint, typecheck, default Vitest (129 files passed, 2 skipped; 412
+tests passed, 9 skipped), isolated database run (2 files/9 tests), build (40 static-
+generation units with nonce dynamic CSP output), and OpenAPI validation (104 unique parity-
+checked operations). Playwright was 17 passed/14 skipped; authenticated admin coverage did
+not run because its two credentials were absent. Seven migrations are current in the
+configured development database. `env:check` fails only for the invalid local
+`CRON_SECRET`; production additionally requires paired Upstash values.
+
 **Work**
 
 - Complete accessibility, responsive, security, performance, DTO/privacy, and
@@ -203,6 +223,13 @@ existing media-picker/visual-editor gaps.
 - Lint, typecheck, all tests, Playwright, and production build pass.
 - No critical TODO, secret exposure, undocumented endpoint, or contract drift.
 - Vercel and Supabase configuration steps are reproducible.
+
+**Acceptance boundary:** repository checks and reproducible documentation are complete.
+External acceptance remains open for valid cron secret/schedules, production Upstash,
+real Expo/EAS ticket/receipt/partial/`DeviceNotRegistered` behavior, authenticated admin
+E2E, real Supabase Auth email/redirect/private Storage, backup/restore, and production
+deployment. Optional Sentry/monitoring is not installed. RLS is deployed to configured
+development and isolated tested, not claimed in production.
 
 ## Requirement traceability
 
@@ -227,10 +254,10 @@ existing media-picker/visual-editor gaps.
 
 ## Current continuation point
 
-Phase 7 is next. Harden and verify delivery rather than adding another feature surface:
-install a valid 32+ character `CRON_SECRET`, verify both one-minute workers, configure and
-exercise real Expo credentials/devices, add PostgreSQL concurrent-worker and authenticated
-Phase 6 Playwright coverage, replace process-local limiting with a distributed adapter,
-and complete the media picker/visual lesson editor. The cron and notification provider
-schemas are isolated from ordinary runtime, so these deployment gaps do not invalidate
-the successful build. Any newly supplied SRS must be reconciled before affected work.
+Do not add another repository feature phase before external deployment acceptance. Install
+a valid random 32+ character `CRON_SECRET` and verify both one-minute jobs; provision and
+verify production Upstash; exercise real Expo/EAS devices; provide admin E2E credentials;
+test real Supabase Auth email/redirect/private Storage; and perform backup/restore plus
+production deployment. Optional monitoring may follow. These gates do not invalidate the
+completed Phase 7 repository implementation, but they prevent claiming the product is
+fully deployed or production-ready.

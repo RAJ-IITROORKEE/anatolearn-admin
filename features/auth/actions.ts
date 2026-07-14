@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 
 import { emailSchema, loginSchema, passwordSchema } from "@/features/auth/schemas";
 import { findProfileForUser } from "@/features/auth/profile-service";
@@ -8,12 +9,22 @@ import { canAccessAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db/prisma";
 import { getAuthRedirectUrls } from "@/lib/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { checkAuthRateLimits, trustedClientIdentifier } from "@/lib/rate-limit";
 
 export type AuthActionState = { error?: string; success?: string };
 
 export async function loginAction(_: AuthActionState, formData: FormData): Promise<AuthActionState> {
   const input = loginSchema.safeParse(Object.fromEntries(formData));
   if (!input.success) return { error: "Enter a valid email and password." };
+  const requestHeaders = await headers();
+  const rateLimit = await checkAuthRateLimits({
+    namespace: "auth:login",
+    accountIdentifier: input.data.email,
+    clientIdentifier: trustedClientIdentifier(requestHeaders),
+    clientLimit: 10,
+    accountLimit: 30,
+  });
+  if (!rateLimit.allowed) return { error: "Too many attempts. Please try again later." };
 
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.signInWithPassword(input.data);
@@ -40,6 +51,15 @@ export async function forgotPasswordAction(
 ): Promise<AuthActionState> {
   const input = emailSchema.safeParse(Object.fromEntries(formData));
   if (!input.success) return { error: "Enter a valid email address." };
+  const requestHeaders = await headers();
+  const rateLimit = await checkAuthRateLimits({
+    namespace: "auth:forgot-password",
+    accountIdentifier: input.data.email,
+    clientIdentifier: trustedClientIdentifier(requestHeaders),
+    clientLimit: 5,
+    accountLimit: 15,
+  });
+  if (!rateLimit.allowed) return { error: "Too many attempts. Please try again later." };
   const supabase = await createSupabaseServerClient();
   const { passwordReset } = getAuthRedirectUrls();
   await supabase.auth.resetPasswordForEmail(input.data.email, { redirectTo: passwordReset });

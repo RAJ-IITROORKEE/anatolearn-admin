@@ -1,7 +1,12 @@
 import { z } from "zod";
 
 const optionalUrl = z.preprocess((value) => (value === "" ? undefined : value), z.url().optional());
-const optionalSecret = z.preprocess((value) => (value === "" ? undefined : value), z.string().min(32).optional());
+const optionalString = z.preprocess((value) => (value === "" ? undefined : value), z.string().min(1).optional());
+const knownCronPlaceholders = /^(change[_ -]?me|your[_ -]?cron|replace[_ -]?me|example)/i;
+const optionalSecret = z.preprocess(
+  (value) => (value === "" ? undefined : value),
+  z.string().min(32).refine((value) => !knownCronPlaceholders.test(value), "CRON_SECRET must not be a placeholder.").optional(),
+);
 
 export const publicEnvSchema = z.object({
   NEXT_PUBLIC_APP_NAME: z.string().min(1).default("AnatoLearn Admin"),
@@ -33,6 +38,21 @@ export const notificationProviderEnvSchema = z.object({
   EXPO_ACCESS_TOKEN: z.preprocess((value) => value === "" ? undefined : value, z.string().min(1).optional()),
 });
 
+export const rateLimitEnvSchema = z.object({
+  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  UPSTASH_REDIS_REST_URL: optionalUrl,
+  UPSTASH_REDIS_REST_TOKEN: optionalString,
+}).superRefine((value, context) => {
+  const hasUrl = Boolean(value.UPSTASH_REDIS_REST_URL);
+  const hasToken = Boolean(value.UPSTASH_REDIS_REST_TOKEN);
+  if (hasUrl !== hasToken) {
+    context.addIssue({ code: "custom", path: [hasUrl ? "UPSTASH_REDIS_REST_TOKEN" : "UPSTASH_REDIS_REST_URL"], message: "Both Upstash variables must be configured together." });
+  }
+  if (value.NODE_ENV === "production" && (!hasUrl || !hasToken)) {
+    context.addIssue({ code: "custom", path: ["UPSTASH_REDIS_REST_URL"], message: "Distributed rate limiting is required in production." });
+  }
+});
+
 export const bootstrapEnvSchema = serverEnvSchema.extend({
   ADMIN_BOOTSTRAP_EMAIL: z.email(),
   ADMIN_BOOTSTRAP_PASSWORD: z.preprocess(
@@ -41,7 +61,10 @@ export const bootstrapEnvSchema = serverEnvSchema.extend({
   ),
 });
 
-export const envCheckSchema = bootstrapEnvSchema.and(cronEnvSchema).and(notificationProviderEnvSchema);
+export const envCheckSchema = bootstrapEnvSchema
+  .and(cronEnvSchema)
+  .and(notificationProviderEnvSchema)
+  .and(rateLimitEnvSchema);
 
 export function getPublicEnv() {
   return publicEnvSchema.parse(process.env);

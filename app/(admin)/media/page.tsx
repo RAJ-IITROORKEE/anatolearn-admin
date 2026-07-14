@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+
 import { PageHeader } from "@/components/app-shell/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Pagination } from "@/components/shared/pagination";
@@ -11,6 +13,10 @@ import {
 } from "@/components/phase3/admin-ui";
 import { listMedia } from "@/features/media/service";
 import { mediaListSchema } from "@/features/media/schemas";
+import { CopySignedUrlButton } from "@/components/media/copy-signed-url-button";
+import { UploadMediaForm } from "@/components/media/upload-media-form";
+
+export const metadata: Metadata = { title: "Media library" };
 import {
   archiveMediaAction,
   updateMediaAction,
@@ -74,6 +80,7 @@ export default async function MediaPage({
                       </div>
                     )}
                   </div>
+                  {item.signedUrl ? <CopySignedUrlButton url={item.signedUrl} /> : null}
                   <div className="flex items-start justify-between gap-2">
                     <h2 className="break-all text-sm font-bold">
                       {item.originalFilename}
@@ -130,35 +137,7 @@ export default async function MediaPage({
         <aside>
           <h2 className="mb-3 text-lg font-bold">Upload image</h2>
           <div className={panelClass}>
-            <ActionForm
-              action={uploadMediaAction}
-              label="Upload image"
-              pendingLabel="Uploading"
-            >
-              <label className={labelClass}>
-                Image file
-                <input
-                  accept="image/png,image/jpeg,image/webp"
-                  className={`${fieldClass} py-2`}
-                  name="file"
-                  required
-                  type="file"
-                />
-              </label>
-              <label className={labelClass}>
-                Alt text
-                <textarea
-                  className={`${fieldClass} min-h-24 py-3`}
-                  maxLength={500}
-                  name="altText"
-                  required
-                />
-              </label>
-              <p className="text-xs leading-5 text-muted">
-                PNG, JPEG, or WebP. The server verifies image contents and
-                configured size limits.
-              </p>
-            </ActionForm>
+            <UploadMediaForm action={uploadMediaAction} />
           </div>
         </aside>
       </div>

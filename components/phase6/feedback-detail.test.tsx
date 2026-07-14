@@ -16,4 +16,5 @@ it("shows the full message, private notes editor, and only the next feedback tra
   expect(screen.getByRole("textbox", { name: "Notes" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Mark reviewed" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /resolve feedback/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole("main")).not.toBeInTheDocument();
 });

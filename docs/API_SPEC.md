@@ -2,8 +2,8 @@
 
 ## Current contract
 
-This document covers implemented routes through Phase 6. Routes assigned to later
-phases are not part of the current API. The machine-readable equivalent is
+This document covers the implemented routes through the Phase 7 contract-hardening
+pass. Unimplemented routes are not part of the current API. The machine-readable equivalent is
 `docs/openapi.yaml`.
 
 - Base path: `/api/v1`, except liveness at `/api/health`
@@ -13,6 +13,13 @@ phases are not part of the current API. The machine-readable equivalent is
 - IDs are UUID strings unless a route uses a slug; timestamps are ISO 8601 strings
 - List defaults are `page=1`, `pageSize=20`; maximum `pageSize=100`
 - Request validation errors return `400` in the current handlers
+- Every JSON response includes `X-Request-ID`; it matches `meta.requestId` on success
+  and `error.requestId` on failure.
+- Authenticated and error responses use `Cache-Control: private, no-store` and `Vary:
+  Authorization, Cookie`. `GET /api/health` uses `public, max-age=30`; `GET /api/v1/meta`
+  uses `public, max-age=300`; those public responses omit `Vary`.
+- A `429 RATE_LIMITED` response includes integer-seconds `Retry-After`. Production uses
+  the required Upstash adapter; development/test may use a bounded in-memory fallback.
 
 Example list metadata:
 
@@ -28,7 +35,8 @@ Example list metadata:
 - **Public**: no identity required.
 - **User**: valid Supabase bearer token or SSR cookie and a matching active profile.
 - **Admin**: User whose database profile has role `ADMIN`.
-- Cookie-authenticated mutations additionally require a same-origin request.
+- Cookie-authenticated mutations require a present `Origin` whose exact parsed origin
+  matches `NEXT_PUBLIC_APP_URL`. Native bearer clients do not require browser CORS.
 
 Missing/invalid/inactive identity returns `401`. An authenticated non-admin receives
 `403` on admin APIs. Browser CORS policy is not authorization.
@@ -43,19 +51,41 @@ Missing/invalid/inactive identity returns `401`. An authenticated non-admin rece
 | `POST /api/v1/auth/login` | Public, rate limited | Email/password API login and safe session DTO; admin UI uses SSR server actions |
 | `POST /api/v1/auth/forgot-password` | Public, rate limited | Non-enumerating reset request with configured redirect |
 | `POST /api/v1/auth/reset-password` | Recovery token | Requires provider-verified recovery AMR |
-| `POST /api/v1/auth/logout` | User | Cookie sign-out or bearer-session revocation |
+| `POST /api/v1/auth/logout` | Public/idempotent | Returns success without a session; otherwise cookie sign-out or bearer-session revocation |
 | `GET /api/v1/auth/session` | User | Safe session/profile summary |
 | `GET /api/v1/me` | User | Authenticated profile DTO |
 | `PATCH /api/v1/me` | User | Update allowlisted profile fields |
 | `POST /api/v1/me/change-password` | User, rate limited | Delegates password update to Supabase |
-| `POST /api/v1/me/device-tokens` | User | Strict Expo token/platform upsert; `201`; DTO omits token text |
-| `DELETE /api/v1/me/device-tokens/{id}` | Owner | Deactivate an owned token and cancel its pending deliveries; inaccessible ID is `404` |
+| `POST /api/v1/me/device-tokens` | User, rate limited | Strict Expo token/platform upsert; `201`; DTO omits token text |
+| `DELETE /api/v1/me/device-tokens/{id}` | Owner, rate limited | Deactivate an owned token and cancel its pending deliveries; inaccessible ID is `404` |
 
 Device registration accepts exactly `{ "expoPushToken": "ExpoPushToken[...]", "platform":
 "IOS"|"ANDROID" }`. Re-registering a token moves it to the current active owner; pending
 deliveries for a previous owner are cancelled first. Token text is never returned.
+Registration and deactivation share a 20-request-per-minute profile limit. Exhaustion
+returns `429 RATE_LIMITED` with `Retry-After: 60`.
+
+Public registration, login, and forgot-password apply separate client and account limits
+over a 60-second window. Client identity is accepted from `x-vercel-forwarded-for` only
+in Vercel runtime; account keys use normalized email and both key types are SHA-256-
+derived. Register and forgot-password allow 5 client/15 account attempts; login allows
+10 client/30 account attempts. Limiter failures fail closed.
+
+Registration does not reveal whether an email is already registered. Supabase's empty-
+identities response follows the same `201` shape. If a newly created Auth identity cannot
+be reconciled to a profile, the server attempts to delete it and returns `503
+REGISTRATION_RETRY`; a failed compensation is logged only as a redacted structured event.
 The current meta payload reports `capabilities.notifications: true` because the Phase 6
 API surface exists; it does not claim that the optional Expo provider is enabled or ready.
+
+Auth/profile JSON bodies are strict: register accepts `email`, 8-128 character `password`,
+and 2-100 character `fullName`; login accepts only `email` and `password`; forgot-password
+accepts only `email`; reset-password accepts a provider recovery `accessToken` and a
+12-128 character `password`; profile update accepts a non-empty subset of `fullName` and
+nullable absolute `avatarUrl`; change-password requires `currentPassword` and a distinct
+12-128 character `newPassword`. Unknown fields return `400`.
+Auth/session/profile response DTOs do not expose the database role, normalized email, or
+provider-internal identity fields. Authorization continues to resolve role server-side.
 
 ## Published learning-content routes
 
@@ -550,9 +580,8 @@ query/body/UUID, `401`, `403` (including unsafe cookie origin), `404`, or safe `
 
 Create accepts `type=GENERAL|BUG_REPORT|QUESTION_REQUEST|IMPROVEMENT`, a trimmed subject
 of 1-160 characters, and a trimmed message of 1-5000. Ownership comes from verified
-identity. The process-local limit is five attempts per user per 60 seconds; exhaustion
-returns `429 RATE_LIMITED` and `Retry-After: 60`. This is not a distributed production
-limit.
+identity. The configured limiter permits five attempts per user per 60 seconds;
+exhaustion returns `429 RATE_LIMITED` and `Retry-After: 60`.
 
 `feedback/mine` accepts standard pagination plus optional `type` and `status`. It sorts
 newest first and exposes only `{ id,type,subject,message,status,createdAt,updatedAt }`.
@@ -583,8 +612,8 @@ All admin reads require **Admin**; mutations also require safe origin for cookie
 | `GET /api/v1/admin/notifications/{id}` | Campaign DTO; `200` |
 | `PATCH /api/v1/admin/notifications/{id}` | Non-empty partial draft update; `200` |
 | `POST /api/v1/admin/notifications/{id}/schedule` | Exact `{ "scheduledAt": offset-date-time }`; `200` |
-| `POST /api/v1/admin/notifications/{id}/cancel` | Body is not parsed; idempotent when already cancelled; `200` |
-| `POST /api/v1/admin/notifications/{id}/send` | Body is not parsed; queue processing; `202` |
+| `POST /api/v1/admin/notifications/{id}/cancel` | Body absent or strict `{}`; idempotent when already cancelled; `200` |
+| `POST /api/v1/admin/notifications/{id}/send` | Body absent or strict `{}`; queue processing; `202` |
 | `GET /api/v1/admin/notifications/{id}/recipients` | Paginated recipient/read/delivery-count evidence |
 | `GET /api/v1/admin/notifications/{id}/deliveries` | Paginated safe delivery evidence |
 | `GET /api/v1/admin/notifications/provider-status` | `{ enabled, ready }`; no credential detail |
@@ -627,7 +656,7 @@ recipient-evidence, and delivery-evidence lists; unknown keys still return `400`
 learner list sorts newest first and returns recipient ID,
 type, title, message, campaign sent time, read time, and recipient creation time. The read
 route uses the recipient ID, derives owner from identity, requires safe cookie origin,
-does not parse its request body, and returns the same `404` for absent, another user's,
+accepts only an absent body or strict `{}`, and returns the same `404` for absent, another user's,
 or non-final campaign recipients.
 Read state is operational history and is not added to `AuditLog`.
 
@@ -652,7 +681,8 @@ CRON_UNAVAILABLE`. Success returns `{ claimed, finalized, batches }`.
 Each batch claims at most 50 due in-progress tests ordered by expiry/ID with `FOR UPDATE
 SKIP LOCKED`. One invocation runs at most 10 batches and stops after its 8-second budget
 or a short batch. `vercel.json` schedules GET every minute (`* * * * *`); POST is kept
-for authenticated operational invocation. Learner/admin reads still perform bounded
+for authenticated operational invocation. POST accepts only an absent body or strict
+`{}`. Learner/admin reads still perform bounded
 lazy expiry, so correctness does not depend solely on the cron schedule.
 
 ## Internal notification job
@@ -668,7 +698,13 @@ If Expo is disabled or incompletely configured, an authorized call returns zero 
 with `200` and performs no campaign mutation. Missing cron configuration returns `503`,
 wrong credentials `401`, invalid cron configuration a safe `400`, and unexpected worker/
 provider failures a safe `500`. `vercel.json` schedules GET every minute; POST is an
-equivalent authenticated operational trigger. Worker state changes are not admin audits.
+equivalent authenticated operational trigger and accepts only an absent body or strict
+`{}`. Worker state changes are not admin audits.
+
+Provider network failures, `429`, and `5xx` are transient. Other non-success HTTP
+responses, malformed JSON/shape, and ticket-count mismatches are permanent: every claimed
+delivery in that provider call moves directly to `FAILED` with `PROVIDER_PERMANENT`
+instead of consuming the transient retry schedule.
 
 ## Admin media APIs
 
@@ -734,7 +770,7 @@ Results sort by `createdAt DESC, id DESC` and include action, entity identifiers
 before/after snapshots, request ID, timestamp, and actor ID/name/email. They omit IP
 hash and user agent. Database triggers reject audit-row updates and deletes.
 
-## Admin UI routes implemented through Phase 6
+## Admin UI routes implemented through Phase 7
 
 - `/organ-systems`, `/organ-systems/new`, `/organ-systems/[id]`
 - `/organ-systems/[id]/topics`
@@ -756,13 +792,14 @@ These are server-protected pages. Lists provide responsive cards, filters, empty
 states, filter-preserving pagination, status badges, pending/success/error feedback,
 safe generic handling for unexpected server-action failures, and confirmation
 before archive actions. Media provides upload, signed preview, alt-text edit, and
-archive controls. The lesson form edits validated JSON rather than a visual block
-editor. UI error handling is supplied by the protected segment error boundary and
+archive controls. The lesson form provides visual controls for all seven validated block
+types, side-by-side learner preview, copy/up/down/Alt+Arrow reorder, content-aware delete
+confirmation, and unsaved-navigation protection. UI error handling is supplied by the protected segment error boundary and
 loading boundaries. Phase 4 adds flashcard grid/list views, filters, bulk lifecycle,
 front/back preview, separate text-and-color quiz/test lists, dynamic 2-6 answer option
 editing, correct-answer selection, question preview, activity, duplicate, and lifecycle
-controls. These forms accept media UUID text rather than a picker. No authenticated
-CRUD or full learner assessment E2E flow is present yet. Phase 5 attempt pages are
+controls. Searchable, paginated managed-media pickers are integrated into organ-system,
+topic, lesson, flashcard, question, and option forms. Phase 5 attempt pages are
 read-only, responsive, paginated/filterable, preserve immutable snapshot labels/media,
 and hide results before submission. Phase 6 adds real dashboard range controls and
 accessible text/chart summaries; responsive table/card lists, filters, pagination,
@@ -770,12 +807,13 @@ loading/empty/error/success/pending states; confirmation for account, feedback, 
 campaign transitions; provider-disabled messaging; notification preview/evidence; and a
 dirty-navigation/before-unload guard on notification editors. The user page combines
 safe management/device counts with existing submitted-attempt and progress reporting.
+Phase 7 also hardens password visibility controls, focus/dialog semantics, pagination,
+table labels, breadcrumbs, responsive overflow, noindex metadata, and robots behavior.
 
-## Not yet implemented or externally verified
+## Externally unverified delivery gates
 
-Phase 7 still needs configured real Expo/device verification, a real PostgreSQL multi-
-worker notification concurrency test, authenticated Phase 6 Playwright flows, a
-distributed production rate limiter, media-picker UX, and a visual lesson editor. There
-is no public question-bank API by design. Both internal cron endpoints require a valid
-deployment `CRON_SECRET` and schedule; the local secret is currently invalid and
-`env:check` intentionally fails, while ordinary runtime remains isolated.
+The 104-operation contract and Phase 7 repository implementation are complete. Real
+Expo/EAS device delivery, production Upstash, authenticated admin Playwright flows, real
+Supabase Auth email/redirect/private Storage, both deployed cron schedules, backup/
+restore, and production deployment remain unverified. There is no public question-bank
+API by design. The local `CRON_SECRET` is invalid, so `env:check` intentionally fails.

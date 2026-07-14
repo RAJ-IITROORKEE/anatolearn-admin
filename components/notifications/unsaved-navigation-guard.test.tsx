@@ -8,10 +8,10 @@ import { UnsavedNavigationGuard } from "./unsaved-navigation-guard";
 
 it("intercepts internal links and supports accessible cancel and confirm without window.confirm", () => {
   const confirmSpy = vi.spyOn(window, "confirm");
-  render(<><UnsavedNavigationGuard dirty /><a href="/dashboard">Dashboard</a></>);
+  render(<><UnsavedNavigationGuard dirty subject="question" /><a href="/dashboard">Dashboard</a></>);
 
   fireEvent.click(screen.getByRole("link", { name: "Dashboard" }));
-  expect(screen.getByRole("alertdialog", { name: "Discard unsaved campaign changes?" })).toBeInTheDocument();
+  expect(screen.getByRole("alertdialog", { name: "Discard unsaved question changes?" })).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
   expect(push).not.toHaveBeenCalled();
 

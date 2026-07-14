@@ -15,7 +15,11 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
     const identity = await resolveRequestIdentity(request);
     if (!identity) return apiError("UNAUTHORIZED", "Authentication is required.", 401, requestIdentifier);
     if (identity.mode === "cookie" && !hasSafeOrigin(request.headers)) return apiError("INVALID_ORIGIN", "Request origin is not allowed.", 403, requestIdentifier);
-    if (!allowRequest(`device-token:${identity.profile.id}`, 20)) return apiError("RATE_LIMITED", "Too many requests.", 429, requestIdentifier);
+    if (!await allowRequest(`device-token:${identity.profile.id}`, 20)) {
+      const response = apiError("RATE_LIMITED", "Too many requests.", 429, requestIdentifier);
+      response.headers.set("Retry-After", "60");
+      return response;
+    }
     const parsedId = idSchema.safeParse((await context.params).id);
     if (!parsedId.success) return apiError("NOT_FOUND", "Device token was not found.", 404, requestIdentifier);
     return apiSuccess(await deactivateDeviceToken(identity.profile.id, parsedId.data), { requestId: requestIdentifier });

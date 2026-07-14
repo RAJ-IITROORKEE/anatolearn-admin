@@ -1,4 +1,5 @@
 import { Activity, CalendarPlus, UserRoundCheck, UserRoundX } from "lucide-react";
+import type { Metadata } from "next";
 
 import { PageHeader } from "@/components/app-shell/page-header";
 import { MetricCard } from "@/components/assessments/metric-card";
@@ -8,6 +9,8 @@ import { parseUserFilters, type Phase6SearchParams } from "@/components/phase6/f
 import { UserFilterForm } from "@/components/phase6/user-filter-form";
 import { UserList } from "@/components/phase6/user-list";
 import { listLearners } from "@/features/users/service";
+
+export const metadata: Metadata = { title: "Users" };
 
 export default async function UsersPage({ searchParams }: { searchParams: Promise<Phase6SearchParams> }) {
   const filters = parseUserFilters(await searchParams);

@@ -28,7 +28,7 @@ export type UserProgressData = {
 type ManagementData = { userId: string; devices: { total: number; active: number; inactive: number }; activity: { attempts: number; submittedAttempts: number; feedback: number; lastAttemptAt: Date | null } };
 
 function Ranking({ items, title }: { items: RankedTopic[]; title: string }) {
-  return <section className="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-5"><h3 className="font-bold text-foreground">{title}</h3><ol className="mt-3 grid gap-2">{items.map((item) => <li className="flex items-center justify-between gap-3 rounded-xl bg-subtle px-3 py-2 text-sm" key={item.topicId}><span className="font-semibold text-body">{item.topicTitle}</span><span className="shrink-0 tabular-nums text-muted">{item.accuracyPercentage}% · {item.sampleCount} answers</span></li>)}</ol></section>;
+  return <section className="min-w-0 rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-5"><h3 className="font-bold text-foreground">{title}</h3><ol className="mt-3 grid gap-2">{items.map((item) => <li className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-xl bg-subtle px-3 py-2 text-sm" key={item.topicId}><span className="min-w-0 break-words font-semibold text-body">{item.topicTitle}</span><span className="tabular-nums text-muted">{item.accuracyPercentage}% · {item.sampleCount} answers</span></li>)}</ol></section>;
 }
 
 export function UserProgress({ data, management }: { data: UserProgressData; management: ManagementData }) {
@@ -62,9 +62,9 @@ export function UserProgress({ data, management }: { data: UserProgressData; man
 
       <section className="mt-8" aria-labelledby="recent-attempts">
         <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl font-bold text-foreground" id="recent-attempts">Recent attempts</h2><Link className="text-sm font-semibold text-primary hover:underline" href={`/attempts?q=${encodeURIComponent(data.profile.email)}`}>View all attempts</Link></div>
-        {data.recentAttempts.length ? <div className="mt-4 grid gap-3 lg:grid-cols-2">{data.recentAttempts.map((attempt) => <Link className="rounded-2xl border border-border bg-surface p-4 shadow-sm hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" href={`/attempts/${attempt.id}`} key={attempt.id}>
+        {data.recentAttempts.length ? <div className="mt-4 grid min-w-0 gap-3 lg:grid-cols-2">{data.recentAttempts.map((attempt) => <Link className="min-w-0 rounded-2xl border border-border bg-surface p-4 shadow-sm hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" href={`/attempts/${attempt.id}`} key={attempt.id}>
           <div className="flex flex-wrap gap-2"><AssessmentTypeBadge type={attempt.assessmentType} /><AttemptStatusBadge status={attempt.status} /></div>
-          <p className="mt-3 font-bold text-foreground">{attempt.organSystemName ?? "Organ system unavailable"}</p>
+          <p className="mt-3 break-words font-bold text-foreground">{attempt.organSystemName ?? "Organ system unavailable"}</p>
           <div className="mt-2 flex flex-wrap justify-between gap-2 text-sm"><span className="tabular-nums text-body">{attempt.scorePercentage}% · {attempt.correctCount} of {attempt.totalQuestionCount} correct</span><span className="text-muted">{formatDateTime(attempt.completedAt)}</span></div>
         </Link>)}</div> : <div className="mt-4"><EmptyState description="This user has no completed or auto-submitted attempts yet." title="No submitted attempts" /></div>}
       </section>

@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: AnatoLearn API
-  version: 0.6.0
-  description: Implemented API surface through Phase 6. Future-phase routes are omitted; there is no public question-bank route. Notification sending is a supported capability, but provider readiness is deployment-specific.
+  version: 0.7.0
+  description: Implemented API surface through the Phase 7 contract-hardening pass. Future routes are omitted; there is no public question-bank route. Notification sending is supported, but provider readiness is deployment-specific.
 servers:
   - url: /api/v1
     description: Versioned API base
@@ -38,7 +38,7 @@ paths:
       operationId: getHealth
       security: []
       responses:
-        '200': { $ref: '#/components/responses/Success' }
+        '200': { $ref: '#/components/responses/HealthSuccess' }
   /meta:
     get:
       tags: [Platform]
@@ -51,70 +51,75 @@ paths:
       tags: [Auth]
       operationId: register
       security: []
-      requestBody: { $ref: '#/components/requestBodies/JsonObject' }
+      requestBody: { $ref: '#/components/requestBodies/RegisterBody' }
       responses:
-        '201': { $ref: '#/components/responses/Success' }
+        '201': { $ref: '#/components/responses/RegisterSuccess' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '409': { $ref: '#/components/responses/Conflict' }
-        '422': { $ref: '#/components/responses/Unprocessable' }
         '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/InternalError' }
   /auth/login:
     post:
       tags: [Auth]
       operationId: login
       security: []
-      requestBody: { $ref: '#/components/requestBodies/JsonObject' }
+      requestBody: { $ref: '#/components/requestBodies/LoginBody' }
       responses:
-        '200': { $ref: '#/components/responses/Success' }
+        '200': { $ref: '#/components/responses/LoginSuccess' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '429': { $ref: '#/components/responses/RateLimited' }
   /auth/forgot-password:
     post:
       tags: [Auth]
       operationId: forgotPassword
       security: []
-      requestBody: { $ref: '#/components/requestBodies/JsonObject' }
+      requestBody: { $ref: '#/components/requestBodies/EmailBody' }
       responses:
-        '200': { $ref: '#/components/responses/Success' }
+        '200': { $ref: '#/components/responses/MessageSuccess' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '429': { $ref: '#/components/responses/RateLimited' }
   /auth/reset-password:
     post:
       tags: [Auth]
       operationId: resetPassword
-      requestBody: { $ref: '#/components/requestBodies/JsonObject' }
+      security: []
+      requestBody: { $ref: '#/components/requestBodies/ResetPasswordBody' }
       responses:
-        '200': { $ref: '#/components/responses/Success' }
+        '200': { $ref: '#/components/responses/PasswordUpdatedSuccess' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /auth/logout:
     post:
       tags: [Auth]
       operationId: logout
+      security: []
       responses:
-        '200': { $ref: '#/components/responses/Success' }
+        '200': { $ref: '#/components/responses/LogoutSuccess' }
         '403': { $ref: '#/components/responses/Forbidden' }
   /auth/session:
     get:
       tags: [Auth]
       operationId: getSession
       responses:
-        '200': { $ref: '#/components/responses/Success' }
+        '200': { $ref: '#/components/responses/SessionSuccess' }
         '401': { $ref: '#/components/responses/Unauthorized' }
   /me:
     get:
       tags: [Profile]
       operationId: getMe
       responses:
-        '200': { $ref: '#/components/responses/Success' }
+        '200': { $ref: '#/components/responses/ProfileSuccess' }
         '401': { $ref: '#/components/responses/Unauthorized' }
     patch:
       tags: [Profile]
       operationId: updateMe
-      requestBody: { $ref: '#/components/requestBodies/JsonObject' }
+      requestBody: { $ref: '#/components/requestBodies/ProfileUpdateBody' }
       responses:
-        '200': { $ref: '#/components/responses/Success' }
+        '200': { $ref: '#/components/responses/ProfileSuccess' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -122,11 +127,13 @@ paths:
     post:
       tags: [Profile]
       operationId: changePassword
-      requestBody: { $ref: '#/components/requestBodies/JsonObject' }
+      requestBody: { $ref: '#/components/requestBodies/ChangePasswordBody' }
       responses:
-        '200': { $ref: '#/components/responses/Success' }
+        '200': { $ref: '#/components/responses/PasswordUpdatedSuccess' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
         '429': { $ref: '#/components/responses/RateLimited' }
   /me/device-tokens:
     post:
@@ -141,6 +148,7 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
   /me/device-tokens/{id}:
     parameters: [{ $ref: '#/components/parameters/Id' }]
@@ -153,6 +161,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
   /organ-systems:
     get:
@@ -166,7 +175,7 @@ paths:
         - $ref: '#/components/parameters/ContentSortBy'
         - { $ref: '#/components/parameters/SortOrder' }
       responses:
-        '200': { $ref: '#/components/responses/ListSuccess' }
+        '200': { $ref: '#/components/responses/PublishedOrganSystemListSuccess' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
   /organ-systems/{slug}:
@@ -175,7 +184,7 @@ paths:
       tags: [Published content]
       operationId: getPublishedOrganSystem
       responses:
-        '200': { $ref: '#/components/responses/Success' }
+        '200': { $ref: '#/components/responses/PublishedOrganSystemSuccess' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
   /organ-systems/{slug}/topics:
@@ -189,7 +198,7 @@ paths:
         - { $ref: '#/components/parameters/Q' }
         - { $ref: '#/components/parameters/SortOrder' }
       responses:
-        '200': { $ref: '#/components/responses/ListSuccess' }
+        '200': { $ref: '#/components/responses/PublishedTopicListSuccess' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -199,7 +208,7 @@ paths:
       tags: [Published content]
       operationId: getPublishedTopic
       responses:
-        '200': { $ref: '#/components/responses/Success' }
+        '200': { $ref: '#/components/responses/PublishedTopicSuccess' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
   /topics/{id}/content:
@@ -209,7 +218,7 @@ paths:
       operationId: listPublishedLessons
       description: Returns all published lessons ordered by displayOrder then id; not paginated.
       responses:
-        '200': { $ref: '#/components/responses/Success' }
+        '200': { $ref: '#/components/responses/PublishedLessonListSuccess' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
@@ -491,9 +500,13 @@ paths:
     post:
       tags: [Notifications]
       operationId: markOwnedNotificationRead
-      description: Idempotently sets readAt for an owned recipient of a SENT or PARTIAL campaign. Any request body is ignored. Cookie requests require a safe same-origin Origin/Host. Read state is operational history, not an admin audit event.
+      description: Idempotently sets readAt for an owned recipient of a SENT or PARTIAL campaign. The body must be absent or an empty JSON object. Cookie requests require a safe same-origin Origin/Host. Read state is operational history, not an admin audit event.
+      requestBody:
+        required: false
+        content: { application/json: { schema: { $ref: '#/components/schemas/EmptyMutation' } } }
       responses:
         '200': { $ref: '#/components/responses/LearnerNotificationSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -707,9 +720,13 @@ paths:
       tags: [Admin notifications]
       operationId: cancelNotificationCampaign
       x-required-role: ADMIN
-      description: Cancels a draft/scheduled campaign, cancels pending deliveries, and writes a redacted CANCEL audit. Already-cancelled is an unaudited idempotent success. Any request body is ignored. Cookie requests require safe origin.
+      description: Cancels a draft/scheduled campaign, cancels pending deliveries, and writes a redacted CANCEL audit. Already-cancelled is an unaudited idempotent success. The body must be absent or an empty JSON object. Cookie requests require safe origin.
+      requestBody:
+        required: false
+        content: { application/json: { schema: { $ref: '#/components/schemas/EmptyMutation' } } }
       responses:
         '200': { $ref: '#/components/responses/CampaignSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -721,9 +738,13 @@ paths:
       tags: [Admin notifications]
       operationId: queueNotificationCampaign
       x-required-role: ADMIN
-      description: Requires a ready provider, moves a draft to PROCESSING, and writes a redacted SEND audit. The 202 response means queued, not delivered. Disabled/incomplete provider returns 503 before mutation. Any request body is ignored. Cookie requests require safe origin.
+      description: Requires a ready provider, moves a draft to PROCESSING, and writes a redacted SEND audit. The 202 response means queued, not delivered. Disabled/incomplete provider returns 503 before mutation. The body must be absent or an empty JSON object. Cookie requests require safe origin.
+      requestBody:
+        required: false
+        content: { application/json: { schema: { $ref: '#/components/schemas/EmptyMutation' } } }
       responses:
         '202': { $ref: '#/components/responses/CampaignSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -783,7 +804,10 @@ paths:
       tags: [Internal jobs]
       operationId: processNotificationsOperational
       security: [{ cronBearer: [] }]
-      description: Authenticated operational alias with behavior identical to GET. Any request body is ignored.
+      description: Authenticated operational alias with behavior identical to GET. The body must be absent or an empty JSON object.
+      requestBody:
+        required: false
+        content: { application/json: { schema: { $ref: '#/components/schemas/EmptyMutation' } } }
       responses: *notificationCronResponses
   /attempts/expire:
     servers: [{ url: /api/internal, description: Internal job base }]
@@ -795,6 +819,7 @@ paths:
       description: Vercel Cron entrypoint. Claims 50 due tests per batch with SKIP LOCKED, up to 10 batches and an 8-second loop budget.
       responses: &cronResponses
         '200': { $ref: '#/components/responses/CronSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/CronUnauthorized' }
         '409': { $ref: '#/components/responses/Conflict' }
         '503': { $ref: '#/components/responses/CronUnavailable' }
@@ -805,6 +830,9 @@ paths:
       x-error-codes: [UNAUTHORIZED, CRON_UNAVAILABLE, TRANSACTION_FAILED, INTERNAL_ERROR]
       security: [{ cronBearer: [] }]
       description: Authenticated operational alias with the same bounded behavior as GET.
+      requestBody:
+        required: false
+        content: { application/json: { schema: { $ref: '#/components/schemas/EmptyMutation' } } }
       responses: *cronResponses
   /admin/organ-systems:
     get:
@@ -1416,6 +1444,25 @@ components:
       scheme: bearer
       bearerFormat: CRON_SECRET
       description: Server-only random secret of at least 32 characters; not a Supabase user token.
+  headers:
+    XRequestId:
+      description: Correlation ID generated for the response; error envelopes repeat it as error.requestId.
+      schema: { type: string, format: uuid }
+    PrivateCacheControl:
+      description: Prevents shared or browser storage of authenticated and error responses.
+      schema: { type: string, const: 'private, no-store' }
+    HealthCacheControl:
+      description: Allows brief public caching of the dependency-free liveness response.
+      schema: { type: string, const: 'public, max-age=30' }
+    MetaCacheControl:
+      description: Allows five-minute public caching of stable API capability metadata.
+      schema: { type: string, const: 'public, max-age=300' }
+    PrivateVary:
+      description: Separates authenticated representations by bearer and cookie credentials.
+      schema: { type: string, const: 'Authorization, Cookie' }
+    RetryAfter:
+      description: Seconds until the process-local rate-limit window permits retry.
+      schema: { type: integer, minimum: 1 }
   parameters:
     Id:
       name: id
@@ -1492,11 +1539,26 @@ components:
       in: query
       schema: { $ref: '#/components/schemas/AttemptStatus' }
   requestBodies:
-    JsonObject:
+    RegisterBody:
       required: true
       content:
         application/json:
-          schema: { type: object }
+          schema: { $ref: '#/components/schemas/RegisterInput' }
+    LoginBody:
+      required: true
+      content: { application/json: { schema: { $ref: '#/components/schemas/LoginInput' } } }
+    EmailBody:
+      required: true
+      content: { application/json: { schema: { $ref: '#/components/schemas/EmailInput' } } }
+    ResetPasswordBody:
+      required: true
+      content: { application/json: { schema: { $ref: '#/components/schemas/ResetPasswordInput' } } }
+    ProfileUpdateBody:
+      required: true
+      content: { application/json: { schema: { $ref: '#/components/schemas/ProfileUpdateInput' } } }
+    ChangePasswordBody:
+      required: true
+      content: { application/json: { schema: { $ref: '#/components/schemas/ChangePasswordInput' } } }
     ContentMutation:
       required: true
       content:
@@ -1508,6 +1570,128 @@ components:
                 minProperties: 1
                 description: A strict non-empty partial of the resource's create schema.
   schemas:
+    LoginInput:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8, maxLength: 128, format: password }
+    RegisterInput:
+      type: object
+      additionalProperties: false
+      required: [email, password, fullName]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8, maxLength: 128, format: password }
+        fullName: { type: string, minLength: 2, maxLength: 100 }
+    EmailInput:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties: { email: { type: string, format: email } }
+    ResetPasswordInput:
+      type: object
+      additionalProperties: false
+      required: [accessToken, password]
+      properties:
+        accessToken: { type: string, minLength: 1, description: Provider-issued recovery access token. }
+        password: { type: string, minLength: 12, maxLength: 128, format: password }
+    ProfileUpdateInput:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        fullName: { type: string, minLength: 2, maxLength: 100 }
+        avatarUrl: { type: [string, 'null'], format: uri }
+    ChangePasswordInput:
+      type: object
+      additionalProperties: false
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword: { type: string, minLength: 8, maxLength: 128, format: password }
+        newPassword: { type: string, minLength: 12, maxLength: 128, format: password, description: Must differ from currentPassword. }
+    AuthProfileSummary:
+      type: object
+      additionalProperties: false
+      required: [id, fullName]
+      properties:
+        id: { type: string, format: uuid }
+        fullName: { type: string }
+    SessionProfile:
+      type: object
+      additionalProperties: false
+      required: [id, fullName, email]
+      properties:
+        id: { type: string, format: uuid }
+        fullName: { type: string }
+        email: { type: string, format: email }
+    Profile:
+      type: object
+      additionalProperties: false
+      required: [id, fullName, email, avatarUrl, isActive]
+      properties:
+        id: { type: string, format: uuid }
+        fullName: { type: string }
+        email: { type: string, format: email }
+        avatarUrl: { type: [string, 'null'] }
+        isActive: { type: boolean }
+    RegisterResult:
+      type: object
+      additionalProperties: false
+      required: [userId, emailConfirmationRequired]
+      properties:
+        userId: { type: string, format: uuid }
+        emailConfirmationRequired: { type: boolean }
+    LoginResult:
+      type: object
+      additionalProperties: false
+      required: [accessToken, refreshToken, expiresAt, tokenType, profile]
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        expiresAt: { type: integer }
+        tokenType: { type: string }
+        profile: { $ref: '#/components/schemas/AuthProfileSummary' }
+    PublishedOrganSystem:
+      type: object
+      additionalProperties: false
+      required: [id, name, slug, shortDescription, longDescription, coverImageUrl, iconImageUrl, displayOrder, isActive]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        shortDescription: { type: string }
+        longDescription: { type: [string, 'null'] }
+        coverImageUrl: { type: [string, 'null'] }
+        iconImageUrl: { type: [string, 'null'] }
+        displayOrder: { type: integer, minimum: 0 }
+        isActive: { type: boolean, const: true }
+    PublishedTopic:
+      type: object
+      additionalProperties: false
+      required: [id, organSystemId, title, slug, summary, coverImageUrl, displayOrder]
+      properties:
+        id: { type: string, format: uuid }
+        organSystemId: { type: string, format: uuid }
+        title: { type: string }
+        slug: { type: string }
+        summary: { type: [string, 'null'] }
+        coverImageUrl: { type: [string, 'null'] }
+        displayOrder: { type: integer, minimum: 0 }
+    PublishedLesson:
+      type: object
+      additionalProperties: false
+      required: [id, topicId, title, slug, summary, contentBlocks, estimatedReadingMinutes, displayOrder]
+      properties:
+        id: { type: string, format: uuid }
+        topicId: { type: string, format: uuid }
+        title: { type: string }
+        slug: { type: string }
+        summary: { type: [string, 'null'] }
+        contentBlocks: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/ContentBlock' } }
+        estimatedReadingMinutes: { type: integer, minimum: 0, maximum: 600 }
+        displayOrder: { type: integer, minimum: 0 }
     PublishStatus: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
     EditableStatus: { type: string, enum: [DRAFT, PUBLISHED] }
     Difficulty: { type: string, enum: [EASY, MEDIUM, HARD] }
@@ -1736,11 +1920,13 @@ components:
         ready: { type: boolean }
     AdminDashboard:
       type: object
+      additionalProperties: false
       required: [generatedAt, range, counts, accuracy, attemptsTrend, contentReadinessCriteria, contentCompleteness, recentRegistrations, recentFeedback, recentAudit]
       properties:
         generatedAt: { type: string, format: date-time }
         range:
           type: object
+          additionalProperties: false
           required: [days, start, endExclusive]
           properties:
             days: { type: integer, enum: [7, 30, 90] }
@@ -1748,10 +1934,24 @@ components:
             endExclusive: { type: string, format: date-time }
         counts:
           type: object
-          description: All-time database-backed counts; fields are totalUsers, activeUsers, organSystems, topics, flashcards, questions, publishedLessons, quizQuestions, testQuestions, newFeedback, completedQuizzes, and completedTests.
-          additionalProperties: { type: integer, minimum: 0 }
+          additionalProperties: false
+          required: [totalUsers, activeUsers, organSystems, topics, flashcards, questions, publishedLessons, quizQuestions, testQuestions, newFeedback, completedQuizzes, completedTests]
+          properties:
+            totalUsers: &nonNegativeCount { type: integer, minimum: 0 }
+            activeUsers: *nonNegativeCount
+            organSystems: *nonNegativeCount
+            topics: *nonNegativeCount
+            flashcards: *nonNegativeCount
+            questions: *nonNegativeCount
+            publishedLessons: *nonNegativeCount
+            quizQuestions: *nonNegativeCount
+            testQuestions: *nonNegativeCount
+            newFeedback: *nonNegativeCount
+            completedQuizzes: *nonNegativeCount
+            completedTests: *nonNegativeCount
         accuracy:
           type: object
+          additionalProperties: false
           required: [quiz, test]
           properties:
             quiz: { $ref: '#/components/schemas/ProgressMetric' }
@@ -1762,6 +1962,7 @@ components:
           maxItems: 90
           items:
             type: object
+            additionalProperties: false
             required: [date, quizAttempts, testAttempts]
             properties:
               date: { type: string, format: date }
@@ -1769,11 +1970,25 @@ components:
               testAttempts: { type: integer, minimum: 0 }
         contentReadinessCriteria:
           type: object
-          description: Denominator is NON_ARCHIVED_TOPICS; completeTopicRequires explicitly lists published hierarchy plus eligible lesson, flashcard, quiz, and test requirements.
+          additionalProperties: false
+          required: [denominator, completeTopicRequires]
+          properties:
+            denominator: { type: string, const: NON_ARCHIVED_TOPICS }
+            completeTopicRequires:
+              type: array
+              minItems: 5
+              maxItems: 5
+              prefixItems:
+                - { const: PUBLISHED_ACTIVE_SYSTEM_AND_PUBLISHED_TOPIC }
+                - { const: ELIGIBLE_PUBLISHED_LESSON }
+                - { const: ELIGIBLE_PUBLISHED_FLASHCARD }
+                - { const: ELIGIBLE_ACTIVE_PUBLISHED_QUIZ_QUESTION }
+                - { const: ELIGIBLE_ACTIVE_PUBLISHED_TEST_QUESTION }
         contentCompleteness:
           type: array
           items:
             type: object
+            additionalProperties: false
             required: [id, name, displayOrder, completeTopics, lessons, flashcards, quizQuestions, testQuestions]
             properties:
               id: { type: string, format: uuid }
@@ -1784,9 +1999,58 @@ components:
               flashcards: { $ref: '#/components/schemas/ProgressMetric' }
               quizQuestions: { $ref: '#/components/schemas/ProgressMetric' }
               testQuestions: { $ref: '#/components/schemas/ProgressMetric' }
-        recentRegistrations: { type: array, maxItems: 5, items: { type: object } }
-        recentFeedback: { type: array, maxItems: 5, items: { type: object } }
-        recentAudit: { type: array, maxItems: 10, items: { type: object }, description: "Redacted projection without snapshots, email, IP hash, or user agent." }
+        recentRegistrations: { type: array, maxItems: 5, items: { $ref: '#/components/schemas/RecentRegistration' } }
+        recentFeedback: { type: array, maxItems: 5, items: { $ref: '#/components/schemas/RecentFeedback' } }
+        recentAudit: { type: array, maxItems: 10, items: { $ref: '#/components/schemas/RecentAudit' }, description: "Redacted projection without snapshots, email, IP hash, or user agent." }
+    RecentRegistration:
+      type: object
+      additionalProperties: false
+      required: [id, fullName, email, isActive, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        fullName: { type: string }
+        email: { type: string, format: email }
+        isActive: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    RecentFeedback:
+      type: object
+      additionalProperties: false
+      required: [id, type, subject, status, createdAt, user]
+      properties:
+        id: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/FeedbackType' }
+        subject: { type: string }
+        status: { $ref: '#/components/schemas/FeedbackStatus' }
+        createdAt: { type: string, format: date-time }
+        user:
+          oneOf:
+            - type: object
+              additionalProperties: false
+              required: [id, fullName, email]
+              properties:
+                id: { type: string, format: uuid }
+                fullName: { type: string }
+                email: { type: string, format: email }
+            - { type: 'null' }
+    RecentAudit:
+      type: object
+      additionalProperties: false
+      required: [id, action, entityType, entityId, createdAt, actor]
+      properties:
+        id: { type: string, format: uuid }
+        action: { $ref: '#/components/schemas/AuditAction' }
+        entityType: { type: string }
+        entityId: { type: string }
+        createdAt: { type: string, format: date-time }
+        actor:
+          oneOf:
+            - type: object
+              additionalProperties: false
+              required: [id, fullName]
+              properties:
+                id: { type: string, format: uuid }
+                fullName: { type: string }
+            - { type: 'null' }
     NotificationCronResult:
       type: object
       additionalProperties: false
@@ -2485,6 +2749,130 @@ components:
                 type: array
                 items: { type: string }
             requestId: { type: string, format: uuid }
+    HealthEnvelope:
+      type: object
+      additionalProperties: false
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data:
+          type: object
+          additionalProperties: false
+          required: [status]
+          properties: { status: { type: string, const: ok } }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    RegisterEnvelope:
+      type: object
+      additionalProperties: false
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/RegisterResult' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    LoginEnvelope:
+      type: object
+      additionalProperties: false
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/LoginResult' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    MessageEnvelope:
+      type: object
+      additionalProperties: false
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data:
+          type: object
+          additionalProperties: false
+          required: [message]
+          properties: { message: { type: string } }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    PasswordUpdatedEnvelope:
+      type: object
+      additionalProperties: false
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data:
+          type: object
+          additionalProperties: false
+          required: [passwordUpdated]
+          properties: { passwordUpdated: { type: boolean, const: true } }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    LogoutEnvelope:
+      type: object
+      additionalProperties: false
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data:
+          type: object
+          additionalProperties: false
+          required: [loggedOut]
+          properties: { loggedOut: { type: boolean, const: true } }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    SessionEnvelope:
+      type: object
+      additionalProperties: false
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data:
+          type: object
+          additionalProperties: false
+          required: [profile]
+          properties: { profile: { $ref: '#/components/schemas/SessionProfile' } }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    ProfileEnvelope:
+      type: object
+      additionalProperties: false
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/Profile' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    PublishedOrganSystemEnvelope:
+      type: object
+      additionalProperties: false
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/PublishedOrganSystem' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    PublishedOrganSystemListEnvelope:
+      type: object
+      additionalProperties: false
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { type: array, items: { $ref: '#/components/schemas/PublishedOrganSystem' } }
+        meta: { $ref: '#/components/schemas/ListMeta' }
+    PublishedTopicEnvelope:
+      type: object
+      additionalProperties: false
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/PublishedTopic' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    PublishedTopicListEnvelope:
+      type: object
+      additionalProperties: false
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { type: array, items: { $ref: '#/components/schemas/PublishedTopic' } }
+        meta: { $ref: '#/components/schemas/ListMeta' }
+    PublishedLessonListEnvelope:
+      type: object
+      additionalProperties: false
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { type: array, items: { $ref: '#/components/schemas/PublishedLesson' } }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
     AdminMediaEnvelope:
       type: object
       required: [success, data]
@@ -2818,208 +3206,324 @@ components:
         requestId: { type: string, format: uuid }
         pagination: { $ref: '#/components/schemas/Pagination' }
   responses:
+    HealthSuccess:
+      description: Liveness response; Cache-Control is public, max-age=30 and Vary is omitted
+      headers: &publicResponseHeaders
+        X-Request-ID: { $ref: '#/components/headers/XRequestId' }
+        Cache-Control: { $ref: '#/components/headers/HealthCacheControl' }
+      content: { application/json: { schema: { $ref: '#/components/schemas/HealthEnvelope' } } }
+    RegisterSuccess:
+      description: Non-enumerating registration result; a new identity and USER profile may have been created
+      headers: &privateResponseHeaders
+        X-Request-ID: { $ref: '#/components/headers/XRequestId' }
+        Cache-Control: { $ref: '#/components/headers/PrivateCacheControl' }
+        Vary: { $ref: '#/components/headers/PrivateVary' }
+      content: { application/json: { schema: { $ref: '#/components/schemas/RegisterEnvelope' } } }
+    LoginSuccess:
+      description: Provider session tokens and safe profile summary
+      headers: *privateResponseHeaders
+      content: { application/json: { schema: { $ref: '#/components/schemas/LoginEnvelope' } } }
+    MessageSuccess:
+      description: Non-enumerating informational result
+      headers: *privateResponseHeaders
+      content: { application/json: { schema: { $ref: '#/components/schemas/MessageEnvelope' } } }
+    PasswordUpdatedSuccess:
+      description: Password update receipt
+      headers: *privateResponseHeaders
+      content: { application/json: { schema: { $ref: '#/components/schemas/PasswordUpdatedEnvelope' } } }
+    LogoutSuccess:
+      description: Idempotent logout receipt
+      headers: *privateResponseHeaders
+      content: { application/json: { schema: { $ref: '#/components/schemas/LogoutEnvelope' } } }
+    SessionSuccess:
+      description: Current safe session profile summary
+      headers: *privateResponseHeaders
+      content: { application/json: { schema: { $ref: '#/components/schemas/SessionEnvelope' } } }
+    ProfileSuccess:
+      description: Current safe profile
+      headers: *privateResponseHeaders
+      content: { application/json: { schema: { $ref: '#/components/schemas/ProfileEnvelope' } } }
+    PublishedOrganSystemSuccess:
+      description: Published active organ system
+      headers: *privateResponseHeaders
+      content: { application/json: { schema: { $ref: '#/components/schemas/PublishedOrganSystemEnvelope' } } }
+    PublishedOrganSystemListSuccess:
+      description: Paginated published active organ systems
+      headers: *privateResponseHeaders
+      content: { application/json: { schema: { $ref: '#/components/schemas/PublishedOrganSystemListEnvelope' } } }
+    PublishedTopicSuccess:
+      description: Published topic under a published active organ system
+      headers: *privateResponseHeaders
+      content: { application/json: { schema: { $ref: '#/components/schemas/PublishedTopicEnvelope' } } }
+    PublishedTopicListSuccess:
+      description: Paginated published topics
+      headers: *privateResponseHeaders
+      content: { application/json: { schema: { $ref: '#/components/schemas/PublishedTopicListEnvelope' } } }
+    PublishedLessonListSuccess:
+      description: Non-paginated published lessons
+      headers: *privateResponseHeaders
+      content: { application/json: { schema: { $ref: '#/components/schemas/PublishedLessonListEnvelope' } } }
     MetaSuccess:
-      description: API version and safe capability flags
+      description: API version and safe capability flags; Cache-Control is public, max-age=300 and Vary is omitted
+      headers:
+        X-Request-ID: { $ref: '#/components/headers/XRequestId' }
+        Cache-Control: { $ref: '#/components/headers/MetaCacheControl' }
       content: { application/json: { schema: { $ref: '#/components/schemas/MetaEnvelope' } } }
     DeviceTokenSuccess:
       description: Safe device registration metadata; token text is omitted
+      headers: *privateResponseHeaders
       content: { application/json: { schema: { $ref: '#/components/schemas/DeviceTokenEnvelope' } } }
     DeviceTokenDeactivationSuccess:
       description: Owned device token deactivation receipt
+      headers: *privateResponseHeaders
       content: { application/json: { schema: { $ref: '#/components/schemas/DeviceTokenDeactivationEnvelope' } } }
     LearnerFeedbackSuccess:
       description: Learner-safe feedback without internal notes or admin attribution
+      headers: *privateResponseHeaders
       content: { application/json: { schema: { $ref: '#/components/schemas/LearnerFeedbackEnvelope' } } }
     LearnerFeedbackListSuccess:
       description: Paginated owner-scoped learner-safe feedback
+      headers: *privateResponseHeaders
       content: { application/json: { schema: { $ref: '#/components/schemas/LearnerFeedbackListEnvelope' } } }
     AdminFeedbackSuccess:
       description: Admin feedback including internal notes and safe attribution summaries
+      headers: *privateResponseHeaders
       content: { application/json: { schema: { $ref: '#/components/schemas/AdminFeedbackEnvelope' } } }
     AdminFeedbackListSuccess:
       description: Paginated admin feedback
+      headers: *privateResponseHeaders
       content: { application/json: { schema: { $ref: '#/components/schemas/AdminFeedbackListEnvelope' } } }
     AdminUserSuccess:
       description: Safe learner list DTO
+      headers: *privateResponseHeaders
       content: { application/json: { schema: { $ref: '#/components/schemas/AdminUserEnvelope' } } }
     AdminUserDetailSuccess:
       description: Safe learner detail with activity counts
+      headers: *privateResponseHeaders
       content: { application/json: { schema: { $ref: '#/components/schemas/AdminUserDetailEnvelope' } } }
     AdminUserListSuccess:
       description: Paginated learner-only directory with unfiltered summary counts
+      headers: *privateResponseHeaders
       content: { application/json: { schema: { $ref: '#/components/schemas/AdminUserListEnvelope' } } }
     AdminDashboardSuccess:
       description: Database-backed admin dashboard aggregates
+      headers: *privateResponseHeaders
       content: { application/json: { schema: { $ref: '#/components/schemas/AdminDashboardEnvelope' } } }
     CampaignSuccess:
       description: Safe campaign DTO; provider credentials and worker leases are omitted
+      headers: *privateResponseHeaders
       content: { application/json: { schema: { $ref: '#/components/schemas/CampaignEnvelope' } } }
     CampaignListSuccess:
       description: Paginated campaigns
+      headers: *privateResponseHeaders
       content: { application/json: { schema: { $ref: '#/components/schemas/CampaignListEnvelope' } } }
     RecipientListSuccess:
       description: Paginated recipient/read evidence without device tokens
+      headers: *privateResponseHeaders
       content: { application/json: { schema: { $ref: '#/components/schemas/RecipientListEnvelope' } } }
     DeliveryListSuccess:
       description: Paginated delivery evidence without token snapshots, receipt IDs/messages, or leases
+      headers: *privateResponseHeaders
       content: { application/json: { schema: { $ref: '#/components/schemas/DeliveryListEnvelope' } } }
     LearnerNotificationSuccess:
       description: Owner-scoped learner notification/read DTO
+      headers: *privateResponseHeaders
       content: { application/json: { schema: { $ref: '#/components/schemas/LearnerNotificationEnvelope' } } }
     LearnerNotificationListSuccess:
       description: Paginated owner-scoped notifications from final SENT/PARTIAL campaigns
+      headers: *privateResponseHeaders
       content: { application/json: { schema: { $ref: '#/components/schemas/LearnerNotificationListEnvelope' } } }
     ProviderStatusSuccess:
       description: Safe provider enabled/readiness booleans
+      headers: *privateResponseHeaders
       content: { application/json: { schema: { $ref: '#/components/schemas/ProviderStatusEnvelope' } } }
     NotificationCronSuccess:
       description: Bounded notification worker counters; zero counts are returned without mutation when the provider is disabled or incomplete
+      headers: *privateResponseHeaders
       content: { application/json: { schema: { $ref: '#/components/schemas/NotificationCronEnvelope' } } }
     Success:
       description: Successful operation
+      headers: *privateResponseHeaders
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ApiSuccess' }
     ListSuccess:
       description: Successful paginated list; pagination is nested under meta.pagination.
+      headers: *privateResponseHeaders
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ApiSuccess' }
     AdminMediaSuccess:
       description: Admin media metadata with a 900-second signed URL
+      headers: *privateResponseHeaders
       content:
         application/json:
           schema: { $ref: '#/components/schemas/AdminMediaEnvelope' }
     AdminMediaListSuccess:
       description: Paginated admin media DTOs with decimal-string byte sizes and 900-second signed URLs
+      headers: *privateResponseHeaders
       content:
         application/json:
           schema: { $ref: '#/components/schemas/AdminMediaListEnvelope' }
     PublishedMediaSuccess:
       description: Eligible published-media metadata with a 300-second signed URL
+      headers: *privateResponseHeaders
       content:
         application/json:
           schema: { $ref: '#/components/schemas/PublishedMediaEnvelope' }
     FlashcardAdminSuccess:
       description: Admin flashcard DTO
+      headers: *privateResponseHeaders
       content:
         application/json:
           schema: { $ref: '#/components/schemas/FlashcardEnvelope' }
     FlashcardListSuccess:
       description: Published flashcards with per-user progress; admin list operations additionally include pagination metadata.
+      headers: *privateResponseHeaders
       content:
         application/json:
           schema: { $ref: '#/components/schemas/FlashcardListEnvelope' }
     FlashcardProgressSuccess:
       description: Current authenticated-user progress for the flashcard
+      headers: *privateResponseHeaders
       content:
         application/json:
           schema: { $ref: '#/components/schemas/FlashcardProgressEnvelope' }
     QuestionSuccess:
       description: Admin-only full question aggregate including options, correct answer, and explanation
+      headers: *privateResponseHeaders
       content:
         application/json:
           schema: { $ref: '#/components/schemas/QuestionEnvelope' }
     QuestionListSuccess:
       description: Paginated admin-only full question aggregates
+      headers: *privateResponseHeaders
       content:
         application/json:
           schema: { $ref: '#/components/schemas/QuestionListEnvelope' }
     AttemptDetailSuccess:
       description: Secret-safe owned attempt snapshot detail; result secrets are omitted for every status
+      headers: *privateResponseHeaders
       content:
         application/json:
           schema: { $ref: '#/components/schemas/AttemptDetailEnvelope' }
     AttemptResultSuccess:
       description: Immutable submitted result with correct option keys, correctness, and explanations
+      headers: *privateResponseHeaders
       content:
         application/json:
           schema: { $ref: '#/components/schemas/AttemptResultEnvelope' }
     AttemptAnswerSuccess:
       description: Stored answer receipt without correctness disclosure
+      headers: *privateResponseHeaders
       content:
         application/json:
           schema: { $ref: '#/components/schemas/AttemptAnswerEnvelope' }
     AttemptListSuccess:
       description: Paginated owned attempts; result fields appear only for completed or auto-submitted items
+      headers: *privateResponseHeaders
       content:
         application/json:
           schema: { $ref: '#/components/schemas/AttemptListEnvelope' }
     LessonProgressSuccess:
       description: Authenticated user's absolute lesson completion state
+      headers: *privateResponseHeaders
       content:
         application/json:
           schema: { $ref: '#/components/schemas/LessonProgressEnvelope' }
     ProgressListSuccess:
       description: Authoritative progress across current published active systems
+      headers: *privateResponseHeaders
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ProgressListEnvelope' }
     ProgressSystemSuccess:
       description: Authoritative progress for one current published active system
+      headers: *privateResponseHeaders
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ProgressSystemEnvelope' }
     UserDashboardSuccess:
       description: Owned submitted-attempt and progress dashboard
+      headers: *privateResponseHeaders
       content:
         application/json:
           schema: { $ref: '#/components/schemas/UserDashboardEnvelope' }
     AdminAttemptListSuccess:
       description: Paginated read-only admin attempt history
+      headers: *privateResponseHeaders
       content:
         application/json:
           schema: { $ref: '#/components/schemas/AdminAttemptListEnvelope' }
     AdminAttemptDetailSuccess:
       description: Read-only admin attempt snapshot; result secrets appear only after submission
+      headers: *privateResponseHeaders
       content:
         application/json:
           schema: { $ref: '#/components/schemas/AdminAttemptDetailEnvelope' }
     AdminUserProgressSuccess:
       description: Narrow profile plus authoritative user dashboard/progress
+      headers: *privateResponseHeaders
       content:
         application/json:
           schema: { $ref: '#/components/schemas/AdminUserProgressEnvelope' }
     CronSuccess:
       description: Bounded due-attempt batch result
+      headers: *privateResponseHeaders
       content:
         application/json:
           schema: { $ref: '#/components/schemas/CronEnvelope' }
     BadRequest:
       description: Request validation failed or a required reorder parent is missing
+      headers: *privateResponseHeaders
       content: &errorContent
         application/json:
           schema: { $ref: '#/components/schemas/ApiError' }
     Unauthorized:
       description: Missing, invalid, or inactive identity
+      headers: *privateResponseHeaders
       content: *errorContent
     Forbidden:
       description: Active identity lacks ADMIN role or cookie mutation origin is unsafe
+      headers: *privateResponseHeaders
       content: *errorContent
     NotFound:
       description: Resource is absent or inaccessible
+      headers: *privateResponseHeaders
       content: *errorContent
     Conflict:
       description: Unique, lifecycle, publication, or reference conflict
+      headers: *privateResponseHeaders
       content: *errorContent
     Unprocessable:
       description: Parent, media, or reorder reference cannot be processed
+      headers: *privateResponseHeaders
       content: *errorContent
     RateLimited:
       description: Too many requests
+      headers:
+        X-Request-ID: { $ref: '#/components/headers/XRequestId' }
+        Cache-Control: { $ref: '#/components/headers/PrivateCacheControl' }
+        Vary: { $ref: '#/components/headers/PrivateVary' }
+        Retry-After: { $ref: '#/components/headers/RetryAfter' }
       content: *errorContent
     InternalError:
       description: Unexpected failure or invalid stored lesson content
+      headers: *privateResponseHeaders
       content: *errorContent
     StorageError:
       description: Supabase Storage upload or signed-read failure
+      headers: *privateResponseHeaders
       content: *errorContent
     CronUnavailable:
       description: Scheduled processing is disabled because CRON_SECRET is not configured
+      headers: *privateResponseHeaders
       content: *errorContent
     ProviderUnavailable:
       description: Expo sending is disabled or incompletely configured; send-now performs no campaign mutation
+      headers: *privateResponseHeaders
       content: *errorContent
     CronUnauthorized:
       description: Missing or invalid CRON_SECRET bearer credential
+      headers: *privateResponseHeaders
       content: *errorContent

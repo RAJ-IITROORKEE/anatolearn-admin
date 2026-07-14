@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { FormAction } from "@/components/phase3/action-form";
 import { ActionForm } from "@/components/phase3/action-form";
 import { fieldClass, labelClass, panelClass } from "@/components/phase3/admin-ui";
+import { ManagedMediaPicker } from "@/components/media/managed-media-picker";
 
 type Flashcard = {
   topicId: string;
@@ -24,16 +25,13 @@ export function FlashcardForm({ action, item, topics }: { action: FormAction; it
   return (
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(300px,.65fr)]">
       <div className={panelClass}>
-        <ActionForm action={action} label={item ? "Save flashcard" : "Create flashcard"}>
+        <ActionForm action={action} guardUnsavedChanges="flashcard" label={item ? "Save flashcard" : "Create flashcard"}>
           <label className={labelClass}>Topic<select className={fieldClass} defaultValue={item?.topicId ?? ""} name="topicId" required><option value="">Select a topic</option>{topics.map((topic) => <option key={topic.id} value={topic.id}>{topic.label}</option>)}</select></label>
           <div className="grid gap-5 md:grid-cols-2">
             <label className={labelClass}>Front text<textarea className={`${fieldClass} min-h-44 py-3`} name="frontText" onChange={(event) => setFront(event.target.value)} required value={front} /></label>
             <label className={labelClass}>Back text<textarea className={`${fieldClass} min-h-44 py-3`} name="backText" onChange={(event) => setBack(event.target.value)} required value={back} /></label>
           </div>
-          <div className="grid gap-5 md:grid-cols-2">
-            <label className={labelClass}>Front media ID <span className="font-normal text-muted">Optional</span><input className={fieldClass} defaultValue={item?.frontMediaId ?? ""} name="frontMediaId" /></label>
-            <label className={labelClass}>Back media ID <span className="font-normal text-muted">Optional</span><input className={fieldClass} defaultValue={item?.backMediaId ?? ""} name="backMediaId" /></label>
-          </div>
+          <div className="grid gap-5 md:grid-cols-2"><ManagedMediaPicker label="Front image" name="frontMediaId" value={item?.frontMediaId} /><ManagedMediaPicker label="Back image" name="backMediaId" value={item?.backMediaId} /></div>
           <div className="grid gap-5 sm:grid-cols-2">
             <label className={labelClass}>Difficulty<select className={fieldClass} defaultValue={item?.difficulty ?? "MEDIUM"} name="difficulty"><option value="EASY">Easy</option><option value="MEDIUM">Medium</option><option value="HARD">Hard</option></select></label>
             <label className={labelClass}>Display order<input className={fieldClass} defaultValue={item?.displayOrder ?? 0} min="0" name="displayOrder" required type="number" /></label>

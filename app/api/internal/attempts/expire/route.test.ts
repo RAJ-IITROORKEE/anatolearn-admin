@@ -44,4 +44,12 @@ describe("attempt expiry cron route", () => {
     await expect(response.json()).resolves.toEqual(expect.objectContaining({ data: { claimed: 3, finalized: 3, batches: 1 } }));
     expect(mocks.expireDueAttempts).toHaveBeenCalledWith({ limit: 50 });
   });
+
+  it("rejects non-empty POST bodies before processing", async () => {
+    const response = await POST(new Request("https://app.example/api/internal/attempts/expire", {
+      method: "POST", headers: { authorization: `Bearer ${secret}`, "content-type": "application/json" }, body: JSON.stringify({ force: true }),
+    }));
+    expect(response.status).toBe(400);
+    expect(mocks.expireDueAttempts).not.toHaveBeenCalled();
+  });
 });

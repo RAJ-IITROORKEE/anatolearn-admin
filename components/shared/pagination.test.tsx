@@ -20,4 +20,13 @@ describe("Pagination", () => {
     expect(screen.getByRole("link", { name: /previous/i })).toHaveAttribute("href", "/content?q=heart&status=DRAFT&page=1&topicId=topic-id");
     expect(screen.getByRole("link", { name: /next/i })).toHaveAttribute("href", "/content?q=heart&status=DRAFT&page=3&topicId=topic-id");
   });
+
+  it("renders unavailable directions as noninteractive controls", () => {
+    render(<Pagination page={1} pageCount={1} pathname="/content" />);
+
+    expect(screen.queryByRole("link", { name: /previous/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /next/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/previous/i)).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByText(/next/i)).toHaveAttribute("aria-disabled", "true");
+  });
 });

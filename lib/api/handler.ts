@@ -7,8 +7,9 @@ import { ProgressError } from "@/features/progress/domain";
 import { FeedbackError } from "@/features/feedback/domain";
 import { UserManagementError } from "@/features/users/domain";
 import { NotificationError } from "@/features/notifications/domain";
+import { logError } from "@/lib/logger";
 
-export function mapApiError(error: unknown, id: string) {
+export function mapApiError(error: unknown, id: string, route?: string) {
   if (error instanceof ContentError) return apiError(error.code, error.message, error.status, id, error.details);
   if (error instanceof AssessmentError) return apiError(error.code, error.message, error.status, id, error.details);
   if (error instanceof ProgressError) return apiError(error.code, error.message, error.status, id);
@@ -21,11 +22,11 @@ export function mapApiError(error: unknown, id: string) {
     if (error.code === "P2003") return apiError("INVALID_REFERENCE", "A referenced record is unavailable.", 422, id);
     if (error.code === "P2025") return apiError("NOT_FOUND", "Content was not found.", 404, id);
   }
-  console.error("Unhandled API error", { requestId: id, error });
+  logError({ requestId: id, code: "INTERNAL_ERROR", status: 500, route });
   return apiError("INTERNAL_ERROR", "An unexpected error occurred.", 500, id);
 }
 
-export async function withApiErrors(callback: (id: string) => Promise<Response>) {
+export async function withApiErrors(callback: (id: string) => Promise<Response>, route?: string) {
   const id = requestId();
-  try { return await callback(id); } catch (error) { return mapApiError(error, id); }
+  try { return await callback(id); } catch (error) { return mapApiError(error, id, route); }
 }

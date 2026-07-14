@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+
 import { PageHeader } from "@/components/app-shell/page-header";
 import { FeedbackFilterForm } from "@/components/phase6/feedback-filter-form";
 import { FeedbackList } from "@/components/phase6/feedback-list";
@@ -6,6 +8,8 @@ import { parseFeedbackFilters, type Phase6SearchParams } from "@/components/phas
 import { EmptyState } from "@/components/shared/empty-state";
 import { Pagination } from "@/components/shared/pagination";
 import { listAdminFeedback } from "@/features/feedback/service";
+
+export const metadata: Metadata = { title: "Feedback" };
 
 export default async function FeedbackPage({ searchParams }: { searchParams: Promise<Phase6SearchParams> }) {
   const filters = parseFeedbackFilters(await searchParams);

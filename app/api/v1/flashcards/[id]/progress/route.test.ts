@@ -23,6 +23,7 @@ function request(mode: "same-origin" | "cross-origin" | "bearer") {
 
 describe("flashcard progress PUT", () => {
   beforeEach(() => {
+    process.env.NEXT_PUBLIC_APP_URL = "https://admin.example";
     mocks.updateFlashcardProgress.mockReset();
     mocks.resolveRequestIdentity.mockReset();
   });

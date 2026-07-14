@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ExpoPushProvider, providerConfigSchema } from "./provider";
+import { ExpoPushProvider, ProviderPermanentError, ProviderTransientError, providerConfigSchema } from "./provider";
 
 describe("Expo provider", () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -37,5 +37,23 @@ describe("Expo provider", () => {
   it("rejects batches over 100", async () => {
     const provider = new ExpoPushProvider("access-token");
     await expect(provider.send(Array.from({ length: 101 }, () => ({ to: "ExpoPushToken[value]", title: "T", body: "B" })))).rejects.toThrow();
+  });
+
+  it.each([400, 401, 403])("types HTTP %s as permanent", async (status) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("rejected", { status })));
+    await expect(new ExpoPushProvider("token").send([{ to: "token", title: "T", body: "B" }]))
+      .rejects.toBeInstanceOf(ProviderPermanentError);
+  });
+
+  it.each([429, 500])("types HTTP %s as transient", async (status) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("unavailable", { status })));
+    await expect(new ExpoPushProvider("token").send([{ to: "token", title: "T", body: "B" }]))
+      .rejects.toBeInstanceOf(ProviderTransientError);
+  });
+
+  it("types malformed successful responses as permanent", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("not-json", { status: 200 })));
+    await expect(new ExpoPushProvider("token").send([{ to: "token", title: "T", body: "B" }]))
+      .rejects.toBeInstanceOf(ProviderPermanentError);
   });
 });

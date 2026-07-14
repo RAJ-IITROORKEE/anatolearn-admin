@@ -5,7 +5,7 @@
 - Vitest for unit tests
 - React Testing Library and user-event for components
 - Playwright desktop/mobile Chromium projects for browser checks
-- A rollback-only assessment PostgreSQL suite exists and runs only when
+- Rollback-only assessment and direct-role PostgreSQL suites run only when
   `TEST_DATABASE_URL` points to a database different from `DATABASE_URL`; provider/auth
   and signed-URL tests remain mocked
 
@@ -22,7 +22,7 @@ npm run build
 
 Install Chromium once with `npx playwright install chromium`.
 
-## Implemented coverage through Phase 6
+## Implemented coverage through Phase 7
 
 ### Platform/auth/foundation
 
@@ -30,8 +30,14 @@ Install Chromium once with `npx playwright install chromium`.
   shared runtime accepts an invalid cron-only value while `cronEnvSchema` rejects it
 - API success/error envelopes and request IDs
 - permission checks and recovery-token claims
-- same-origin validation
+- exact configured-origin validation, including missing/malformed/spoofed origins
+- nonce CSP, global security headers, production-only HSTS, robots/metadata
+- request-ID correlation, private no-store/Vary defaults, and explicit public cache rules
+- structured logging redaction (no supplied body/password/token/exception text)
+- Upstash adapter behavior, paired production environment validation, bounded memory
+  fallback, fail-closed errors, and separate client/account auth quotas
 - authentication and profile request schemas
+- registration existing-account obfuscation and Auth-user compensation paths
 - shared empty and confirmation UI states
 - anonymous protected-page redirect and narrow-screen login controls
 
@@ -60,6 +66,10 @@ Install Chromium once with `npx playwright install chromium`.
 - a destructive inline action can be cancelled through confirmation
 - pagination changes only `page` and retains active query filters
 - unexpected server-action exception messages are replaced by a safe generic message
+- seven-block lesson editing, validated preview, copy/reorder/confirmation/dirty guard
+- searchable paginated managed-media picker and integrations in content/learning forms
+- password visibility without field replacement/value loss; dialog focus, table labels,
+  overflow, responsive pagination, breadcrumbs, and mobile-shell regressions
 
 ### Flashcards and questions
 
@@ -128,7 +138,7 @@ Install Chromium once with `npx playwright install chromium`.
 - learner-only user filters/DTOs, safe detail activity, row-locked activate/deactivate,
   no-op behavior, history preservation, device-token shutdown, pending-delivery
   cancellation, redacted audits, responsive list/detail controls, and confirmations
-- strict feedback create/mine/admin schemas; owner/admin DTO privacy; process-local
+- strict feedback create/mine/admin schemas; owner/admin DTO privacy; adapter-backed
   submission limiting; list/detail routing; review/resolve attribution; internal-note
   behavior; no-op handling; and redacted audit snapshots
 
@@ -148,38 +158,50 @@ Install Chromium once with `npx playwright install chromium`.
   `beforeunload` protection
 - cron authorization regression coverage applies to both internal workers; notification
   worker implementation is unit-tested with mocks, not with concurrent PostgreSQL workers
+- permanent Expo request/shape failures fail claimed deliveries immediately; transient
+  network/429/5xx behavior retains bounded retry coverage
 
-## Latest known pre-documentation Phase 6 verification
+### Contract and database access hardening
+
+- OpenAPI validation discovers route methods and proves exact parity, resolvable refs,
+  104 unique operation IDs, reusable response headers, strict empty-body contracts,
+  documented rate limits, and representative DTO privacy
+- isolated PostgreSQL role tests prove `anon` and `authenticated` cannot read or write
+  application tables while the normal Prisma role remains operational
+- non-destructive canonical seed and bootstrap create/find, compensation, pagination,
+  secret-redaction, and exit behavior
+- axe runs on public pages and is wired into authenticated desktop/mobile projects
+
+## Final Phase 7 verification record
 
 | Command | Result |
 | --- | --- |
 | `npm run lint` | Passed |
 | `npm run typecheck` | Passed |
-| `npm run test` | Passed: 319 tests; 4 conditional PostgreSQL tests skipped in the default run |
-| Dedicated assessment PostgreSQL suite | Passed: 4 tests against migrated isolated schema |
-| `npm run prisma:deploy` | Passed; Phase 6 enum and structure migrations deployed |
-| Prisma migration status | Current: all five migrations |
-| `npm run test:e2e` | **Not rerun for Phase 6**; latest prior anonymous result is 3 passed, 1 skipped |
-| `npm run build` | Passed without a `CRON_SECRET` process override |
+| `npm run test` | Passed: 129 files, 2 skipped; 412 tests, 9 skipped |
+| Isolated `TEST_DATABASE_URL` run | Passed: 2 files/9 tests (4 assessment lifecycle + 5 direct database access) |
+| `npm run prisma:deploy` | Passed; both Phase 7 RLS/revoke migrations deployed to configured development DB |
+| Prisma migration status | Current: all seven migrations |
+| `npm run test:e2e` | 17 passed, 14 skipped |
+| `npm run build` | Passed: 40 static-generation units under dynamic nonce CSP output; all routes included |
 | `npm run env:check` | **Failed** only for invalid `CRON_SECRET`; configuration gate remains open |
-| OpenAPI structural validation | Passed with Swagger CLI: 75 paths, 104 operations, 104 unique operation IDs, 138 component schemas |
+| `npm run openapi:validate` | Passed: 104 operations and 104 unique operation IDs with exact route parity |
+| `npm audit` | 0 high/critical; 2 moderate PostCSS findings through Next.js remain |
 | `git diff --check` | Passed; line-ending conversion warnings only |
 
-The lint/typecheck/test/build and migration results above are the supplied latest known
-Phase 6 pre-documentation record. Do not present the prior Playwright result as a Phase 6
-rerun. The default suite conditionally skips
-`features/assessments/postgres.integration.test.ts`, but the four cases were separately
-run against a migrated isolated `anatolearn_phase5_test` schema and passed. They cover
-snapshot/terminal database guards, source-edit stability, and real multi-client
-concurrent finalization. The real concurrency run also established that raw SQL
-serialization/deadlock conflicts can surface as Prisma `P2010` with SQLSTATE `40001` or
-`40P01`; regression coverage verifies the production retry path. Do not report environment validation or Phase 6
-deployment configuration as complete until a valid secret of at least 32 characters is
-installed. The environment-schema regression test proves that shared runtime validation
-accepts a short cron-only value while cron-boundary validation rejects it. The failed
-`env:check` result is intentional because `envCheckSchema` remains the deployment gate;
-it does not contradict the successful build without a secret override. OpenAPI is valid
-and migration status is current.
+Authenticated admin tests did **not** pass or run: `E2E_ADMIN_EMAIL` and
+`E2E_ADMIN_PASSWORD` were absent. The 14 skips comprise auth setup, 12 authenticated
+tests, and one existing intentional skip. The 17 passes cover desktop/mobile public,
+security, and accessibility behavior. The two moderate audit findings are PostCSS through
+Next.js; no safe stable fix exists, and forcing remediation would downgrade Next.js to 9,
+so `npm audit fix --force` was not used.
+
+The default Vitest suite conditionally skips isolated database files without a distinct
+`TEST_DATABASE_URL`. The separate 9-test run covered the four assessment lifecycle cases
+and five `anon`/`authenticated` direct-access/Prisma-operability cases. The access-control
+migrations are deployed to configured development, not production. The failed
+`env:check` remains intentional until the local `CRON_SECRET` is replaced; production
+validation additionally requires both Upstash values.
 
 The Phase 6 migrations are split because PostgreSQL requires newly added enum values to
 commit before checks/indexes can reference them. Both repeat the empty notification-table
@@ -208,14 +230,13 @@ No current automated test proves the following end to end or against real provid
 - real Expo push ticket/receipt behavior on devices
 - notification worker leases/materialization under concurrent PostgreSQL workers
 - authenticated dashboard/users/feedback/notification Playwright flows
-- a distributed production feedback/auth rate limiter
+- production Upstash credentials and deployed distributed-limiter verification
 
-Most service/route provider behavior still uses mocks. The conditional assessment
-PostgreSQL suite has now passed separately against an isolated migrated schema; it remains
-skipped during ordinary `npm run test` invocations that do not provide
-`TEST_DATABASE_URL`.
+Most external provider behavior still uses mocks. Isolated PostgreSQL suites passed, but
+real Supabase Auth email/redirect/private Storage, Expo/EAS devices, Vercel cron, backup/
+restore, and production deployment remain unverified.
 
-## Required future test layers
+## Remaining external test layers
 
 ### Integration
 
@@ -230,7 +251,7 @@ reset commands. Cover:
 - private Storage upload, signed reads, and published-reference-safe archive
 - required audit events and append-only behavior
 
-### End to end
+### End to end and deployment
 
 Add authenticated fixtures without committing credentials. Critical flows are:
 
@@ -265,6 +286,7 @@ Run, in order:
 npm run lint
 npm run typecheck
 npm run test
+npm run openapi:validate
 npm run build
 npm run test:e2e
 npm run env:check

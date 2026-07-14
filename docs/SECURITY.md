@@ -2,7 +2,7 @@
 
 ## Status and trust boundaries
 
-This document describes controls implemented through Phase 6. Browsers, API clients,
+This document describes controls implemented through Phase 7. Browsers, API clients,
 headers, cookies, query/body data, uploads, and persisted author-authored content are
 untrusted. The Next.js server is the authorization boundary.
 
@@ -36,17 +36,39 @@ untrusted. The Next.js server is the authorization boundary.
 - Zod schemas allowlist and validate external data. Content, flashcard, question,
   option, lifecycle, activity, bulk, assessment, answer, list, and progress schemas are
   strict. Empty submit/retake mutations accept only no body or `{}`.
-- Cookie-authenticated mutations validate Origin/Host for same-origin intent. Native
-  bearer clients are not required to send Origin.
+- Cookie-authenticated mutations require a present, parseable `Origin` whose exact origin
+  matches the parsed `NEXT_PUBLIC_APP_URL`. Host headers are not trusted as the policy
+  source. Native bearer clients are not required to send Origin and do not need browser
+  CORS; the removed CORS environment setting is not part of authorization.
 - Responses use consistent safe envelopes and generated request IDs. Unexpected API
   errors return a generic `500` message, and unexpected Phase 3-5 server-action errors
   return a generic form message; exception details and stack traces are not exposed.
 - Unique, foreign-key, not-found, state, and media failures map to explicit safe
   statuses. Inaccessible published content returns `404` rather than exposing draft or
   parent lifecycle state.
-- Existing auth/password and learner-feedback rate-limit hooks are in-memory/process-
-  local. Feedback permits five submission attempts per verified user per minute and
-  returns `Retry-After: 60`; distributed production still needs a shared limiter.
+- Rate limits use an adapter: atomic Upstash Redis REST counters when the credential pair
+  is configured and a bounded process-local fallback only in development/test.
+  Production requires Upstash and fails closed when it is missing/unavailable. Login,
+  registration, and forgot-password use separate SHA-256-derived client/account keys;
+  reset/change-password, feedback, and device-token limits use server-derived identifiers.
+  A `429` response includes integer-seconds `Retry-After`.
+
+## Browser and transport hardening
+
+- Every matched dynamic request receives a fresh CSP nonce. Script policy uses self,
+  nonce, and `strict-dynamic`; only development adds `unsafe-eval`. Object loading and
+  framing are denied, base/form targets are self-only, and Supabase origins are narrowly
+  admitted for images/connections. Inline styles remain allowed for current Next/Tailwind.
+- Responses set `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, a strict-
+  origin referrer policy, and a restrictive permissions policy. Production alone sets
+  HSTS for one year with subdomains.
+- Application metadata is `noindex,nofollow`; `/robots.txt` disallows all crawling.
+- JSON APIs include `X-Request-ID`. Authenticated and error responses default to
+  `Cache-Control: private, no-store` and `Vary: Authorization, Cookie`; only health and
+  meta opt into short public caching without `Vary`.
+- Unexpected errors are logged as redacted structured JSON containing only level,
+  request ID, safe code/status, and optional route. Bodies, passwords, tokens, stack
+  traces, provider payloads, and arbitrary exception text are excluded.
 
 ## Flashcard and question controls
 
@@ -166,6 +188,19 @@ routes are scheduled every minute.
   processing is therefore explicitly at-least-once in that window.
 - Learner list/read operations are owner-scoped and expose only final `SENT`/`PARTIAL`
   campaigns. An absent, foreign, or non-final recipient returns the same `404`.
+- HTTP 4xx (other than 429), malformed JSON, invalid provider shapes, and batch cardinality
+  mismatch are permanent provider failures. Claimed deliveries fail immediately without
+  retry; transient network/429/5xx failures retain bounded retries.
+
+## Registration consistency and enumeration resistance
+
+- Registration applies both client and account limits. Supabase's empty-identities
+  existing-email response is treated as an obfuscated successful request rather than
+  exposing account existence.
+- Profile provisioning follows Auth signup. If provisioning fails for a newly created
+  identity, the server attempts Auth-user deletion as compensation and returns a safe
+  retry response. Compensation failure emits only a redacted structured event; it does
+  not expose identity or provider details.
 
 ## Structured content controls
 
@@ -246,6 +281,17 @@ Current limitations:
 - Worker delivery/read state is operational history rather than admin audit activity.
   The database guards recipient and delivery history directly.
 
+## Direct database access controls
+
+- The application uses Prisma's privileged server connection; browser/mobile clients do
+  not query application tables through Supabase Data APIs.
+- Phase 7 migrations enable RLS on all 21 application tables, revoke table/sequence access
+  for `anon` and `authenticated`, revoke direct execution/default privileges for invariant
+  functions, grant schema `USAGE`, and revoke schema `CREATE` for those roles.
+- The migrations are schema-scoped and refuse to alter `auth` or `storage`. Isolated tests
+  switch to both client roles and prove reads/writes are denied while Prisma remains
+  operational. They are deployed to configured development only, not claimed in production.
+
 ## Secrets and environment
 
 Local environment files are ignored; `.env.example` contains placeholders only.
@@ -262,6 +308,8 @@ Relevant required names include:
   for scheduled expiry and notification processing)
 - `EXPO_PUSH_ENABLED`, `EXPO_ACCESS_TOKEN` (server-only provider configuration; optional
   to boot and isolated from shared runtime)
+- `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` (paired and required when
+  `NODE_ENV=production`; optional together in development/test)
 
 Environment validation does not print secret values. `envCheckSchema` intentionally
 combines shared, bootstrap, and cron schemas, so `npm run env:check` rejects a configured
@@ -278,13 +326,17 @@ concern, not a Phase 3 code completion gate.
    database/provider integration remains incomplete.
 2. Supabase provider/auth and signed-URL integration is mocked. Authenticated content/
    media/audit/flashcard/question CRUD and full learner assessment E2E are absent.
-3. Scheduled expiry is not deployment-ready until a valid `CRON_SECRET` and Vercel cron
+3. Scheduled expiry is not deployment-ready until a valid `CRON_SECRET` and both Vercel cron
    are configured. The current `npm run env:check` intentionally fails only on the
    invalid configured secret; ordinary runtime and production build are isolated from it.
 4. Expo request/receipt handling is unit-tested but has not been verified with real
    credentials/devices. Notification leases lack a real PostgreSQL multi-worker test,
    and the documented provider-acceptance crash window is at-least-once.
-5. Authenticated Phase 6 Playwright flows have not been run. Existing managed-media
-   picker, visual lesson editor, and distributed rate-limiter gaps remain.
-6. A later SRS may alter data sensitivity or retention requirements and must be
+5. Playwright passed 17 public/security/accessibility cases and skipped 14. Authenticated
+   admin flows did not run because their two E2E credentials were absent.
+6. Production Upstash credentials and behavior are not provisioned/verified. The RLS/
+   revoke migrations are proven in development and an isolated database, not production.
+7. Backup/restore, production deployment, real Supabase Auth email/redirect/private
+   Storage, and optional monitoring remain unverified.
+8. A later SRS may alter data sensitivity or retention requirements and must be
    reviewed before the affected feature phase.

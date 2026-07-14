@@ -28,4 +28,12 @@ describe("learner notification read route", () => {
     expect(response.status).toBe(403);
     expect(mocks.markRead).not.toHaveBeenCalled();
   });
+
+  it("rejects non-empty JSON instead of ignoring it", async () => {
+    const response = await POST(new Request("https://app.example/api/v1/notifications/x/read", {
+      method: "POST", body: JSON.stringify({ read: true }), headers: { "content-type": "application/json" },
+    }), { params: Promise.resolve({ recipientId }) });
+    expect(response.status).toBe(400);
+    expect(mocks.markRead).not.toHaveBeenCalled();
+  });
 });

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
+import type { Metadata } from "next";
 import { PageHeader } from "@/components/app-shell/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Pagination } from "@/components/shared/pagination";
@@ -7,6 +8,8 @@ import { buttonVariants } from "@/components/ui/button";
 import { FilterBar, ResourceCard, ResourceCards, StatusBadge, fieldClass } from "@/components/phase3/admin-ui";
 import { listAdmin } from "@/components/phase3/data";
 import { listQuerySchema } from "@/features/content/schemas";
+
+export const metadata: Metadata = { title: "Organ systems" };
 
 export default async function OrganSystemsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const params = await searchParams; const parsed = listQuerySchema.safeParse({ page: params.page, pageSize: 12, q: params.q || undefined, status: params.status || undefined, sortBy: "displayOrder", sortOrder: "asc" });

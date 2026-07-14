@@ -27,7 +27,7 @@ export async function feedbackSubmitHandler(request: Request) {
   const auth = await requireActiveIdentity(request, true);
   if ("response" in auth) return auth.response;
   const key = `feedback:user:${auth.identity.profile.id}`;
-  if (!allowRequest(key, 5, 60_000)) {
+  if (!await allowRequest(key, 5, 60_000)) {
     const response = apiError("RATE_LIMITED", "Try again later.", 429, auth.id);
     response.headers.set("Retry-After", "60");
     return response;

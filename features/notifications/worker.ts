@@ -5,7 +5,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { audienceSchema } from "./schemas";
 import { finalCampaignStatus } from "./domain";
-import { ExpoPushProvider, ProviderTransientError } from "./provider";
+import { ExpoPushProvider, ProviderPermanentError, ProviderTransientError } from "./provider";
 
 const MAX_SEND_ATTEMPTS = 5;
 const MAX_RECEIPT_POLLS = 20;
@@ -65,6 +65,18 @@ export function receiptPollDecision(
     receiptAttemptCount,
     receiptCheckedAt: now,
     providerErrorCode: "RECEIPT_PENDING",
+  };
+}
+
+export function permanentProviderFailure(attemptCount: number, now: Date) {
+  return {
+    status: "FAILED" as const,
+    attemptCount: attemptCount + 1,
+    lastAttemptAt: now,
+    nextAttemptAt: null,
+    failedAt: now,
+    providerErrorCode: "PROVIDER_PERMANENT",
+    providerErrorMessage: "Notification provider permanently rejected the request.",
   };
 }
 
@@ -248,9 +260,13 @@ async function sendPending(campaign: ClaimedCampaign, provider: ExpoPushProvider
       }
     }
   } catch (error) {
-    if (!(error instanceof ProviderTransientError)) throw error;
+    if (!(error instanceof ProviderTransientError) && !(error instanceof ProviderPermanentError)) throw error;
     await renewCampaignLease(campaign.id, campaign.processingToken, new Date(Date.now() + PROVIDER_LEASE_MS));
     for (const row of claim.rows) {
+      if (error instanceof ProviderPermanentError) {
+        await completeDeliveryClaim(row.id, claim.processingToken, permanentProviderFailure(row.attemptCount, now));
+        continue;
+      }
       const attemptCount = row.attemptCount + 1;
       const terminal = attemptCount >= MAX_SEND_ATTEMPTS;
       await completeDeliveryClaim(row.id, claim.processingToken, {
@@ -274,16 +290,27 @@ async function pollReceipts(campaign: ClaimedCampaign, provider: ExpoPushProvide
   await renewCampaignLease(campaign.id, campaign.processingToken, new Date(Date.now() + PROVIDER_LEASE_MS));
   const ids = claim.rows.map((row) => row.providerReceiptId).filter((id): id is string => Boolean(id));
   let receipts: Awaited<ReturnType<ExpoPushProvider["receipts"]>> | null = null;
-  let transient: ProviderTransientError | null = null;
+  let providerError: ProviderTransientError | ProviderPermanentError | null = null;
   try { receipts = await provider.receipts(ids); }
-  catch (error) { if (error instanceof ProviderTransientError) transient = error; else throw error; }
+  catch (error) {
+    if (error instanceof ProviderTransientError || error instanceof ProviderPermanentError) providerError = error;
+    else throw error;
+  }
   await renewCampaignLease(campaign.id, campaign.processingToken, new Date(Date.now() + PROVIDER_LEASE_MS));
   const now = new Date();
   for (const row of claim.rows) {
-    const result = !transient && row.providerReceiptId ? receipts?.[row.providerReceiptId] : undefined;
+    if (providerError instanceof ProviderPermanentError) {
+      await completeDeliveryClaim(row.id, claim.processingToken, {
+        status: "FAILED", receiptAttemptCount: row.receiptAttemptCount + 1,
+        receiptCheckedAt: now, failedAt: now, providerErrorCode: "PROVIDER_PERMANENT",
+        providerErrorMessage: providerError.message,
+      });
+      continue;
+    }
+    const result = !providerError && row.providerReceiptId ? receipts?.[row.providerReceiptId] : undefined;
     if (!result) {
-      const data = receiptPollDecision({ ticketedAt: row.ticketedAt!, receiptAttemptCount: row.receiptAttemptCount }, transient ? "TRANSIENT" : "MISSING", now);
-      await completeDeliveryClaim(row.id, claim.processingToken, { ...data, providerErrorMessage: transient?.message ?? "Receipt is not available yet." });
+      const data = receiptPollDecision({ ticketedAt: row.ticketedAt!, receiptAttemptCount: row.receiptAttemptCount }, providerError ? "TRANSIENT" : "MISSING", now);
+      await completeDeliveryClaim(row.id, claim.processingToken, { ...data, providerErrorMessage: providerError?.message ?? "Receipt is not available yet." });
     } else if (result.status === "SENT") {
       await completeDeliveryClaim(row.id, claim.processingToken, {
         status: "SENT", receiptAttemptCount: row.receiptAttemptCount + 1,

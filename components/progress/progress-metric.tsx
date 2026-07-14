@@ -3,7 +3,7 @@ import type { ProgressMetric as ProgressMetricValue } from "@/features/progress/
 export function ProgressMetric({ label, metric }: { label: string; metric: ProgressMetricValue }) {
   if (metric.denominator === 0) {
     return (
-      <div className="rounded-xl border border-border bg-subtle p-3">
+      <div className="min-w-0 rounded-xl border border-border bg-subtle p-3">
         <p className="text-xs font-semibold text-muted">{label}</p>
         <p className="mt-1 text-sm font-bold text-body">No data</p>
       </div>
@@ -11,7 +11,7 @@ export function ProgressMetric({ label, metric }: { label: string; metric: Progr
   }
 
   return (
-    <div className="rounded-xl border border-border bg-subtle p-3">
+    <div className="min-w-0 rounded-xl border border-border bg-subtle p-3">
       <div className="flex items-baseline justify-between gap-3">
         <p className="text-xs font-semibold text-muted">{label}</p>
         <p className="font-bold tabular-nums text-foreground">{metric.percentage}%</p>

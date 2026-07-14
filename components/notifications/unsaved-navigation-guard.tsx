@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 
-export function UnsavedNavigationGuard({ dirty }: { dirty: boolean }) {
+export function UnsavedNavigationGuard({ dirty, subject = "campaign" }: { dirty: boolean; subject?: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const [destination, setDestination] = useState<string | null>(null);
@@ -46,14 +46,14 @@ export function UnsavedNavigationGuard({ dirty }: { dirty: boolean }) {
     };
   }, [dirty]);
 
-  return <Dialog.Root onOpenChange={(open) => { if (!open) setDestination(null); }} open={destination !== null}>
+  return <><span className="sr-only" data-dirty={dirty} data-testid="unsaved-navigation-guard" /><Dialog.Root onOpenChange={(open) => { if (!open) setDestination(null); }} open={destination !== null}>
     <Dialog.Portal>
       <Dialog.Overlay className="fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-[2px]" />
       <Dialog.Content aria-describedby="unsaved-navigation-description" className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-surface p-6 shadow-xl focus:outline-none" role="alertdialog">
-        <Dialog.Title className="text-xl font-bold text-foreground">Discard unsaved campaign changes?</Dialog.Title>
+        <Dialog.Title className="text-xl font-bold text-foreground">Discard unsaved {subject} changes?</Dialog.Title>
         <Dialog.Description className="mt-2 text-sm leading-6 text-muted" id="unsaved-navigation-description">Your edits have not been saved. Stay on this page or leave without keeping them.</Dialog.Description>
         <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><Dialog.Close asChild><Button variant="outline">Keep editing</Button></Dialog.Close><Button onClick={() => { const target = destination; setDestination(null); if (target) router.push(target); }} variant="destructive">Discard and leave</Button></div>
       </Dialog.Content>
     </Dialog.Portal>
-  </Dialog.Root>;
+  </Dialog.Root></>;
 }

@@ -36,6 +36,9 @@ describe("requireAdmin", () => {
     expect(result.response?.status).toBe(500);
     const body = await result.response!.json();
     expect(body).toMatchObject({ error: { code: "INTERNAL_ERROR", requestId: expect.any(String) } });
+    const serialized = String(consoleError.mock.calls[0]?.[0]);
+    expect(JSON.parse(serialized)).toMatchObject({ code: "IDENTITY_RESOLUTION_FAILED", status: 500, route: "/api" });
+    expect(serialized).not.toContain("auth unavailable");
     consoleError.mockRestore();
   });
 });

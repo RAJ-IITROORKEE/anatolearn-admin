@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
+import type { Metadata } from "next";
 import { PageHeader } from "@/components/app-shell/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Pagination } from "@/components/shared/pagination";
@@ -7,4 +8,5 @@ import { buttonVariants } from "@/components/ui/button";
 import { FilterBar, ResourceCard, ResourceCards, StatusBadge, fieldClass } from "@/components/phase3/admin-ui";
 import { listAdmin } from "@/components/phase3/data";
 import { listQuerySchema } from "@/features/content/schemas";
+export const metadata: Metadata = { title: "Content review" };
 export default async function ContentPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) { const params = await searchParams; const topics = await listAdmin("topic", { page: 1, pageSize: 100, sortBy: "title", sortOrder: "asc" }); const parsed = listQuerySchema.safeParse({ page: params.page, pageSize: 15, q: params.q || undefined, status: params.status || undefined, topicId: params.topicId || undefined, sortBy: "updatedAt", sortOrder: "desc" }); const input = parsed.success ? parsed.data : listQuerySchema.parse({ pageSize: 15, sortBy: "updatedAt", sortOrder: "desc" }); const result = await listAdmin("contentLesson", input); return <><PageHeader action={<Link className={buttonVariants()} href="/content/new"><Plus className="size-4" />Create lesson</Link>} description="Draft, review, publish, and archive structured anatomy lessons." eyebrow="Learning content" title="Content review" /><FilterBar defaultValue={input.q}><select aria-label="Topic" className={fieldClass} defaultValue={input.topicId ?? ""} name="topicId"><option value="">All topics</option>{topics.items.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></FilterBar>{result.items.length ? <><ResourceCards>{result.items.map((item) => <ResourceCard actions={<StatusBadge status={item.status} />} href={`/content/${item.id}`} key={item.id} title={item.title}><p>{item.summary || "No summary yet."}</p><p className="mt-2">{item.contentBlocks.length} blocks · {item.estimatedReadingMinutes} min read</p></ResourceCard>)}</ResourceCards><div className="mt-5"><Pagination page={result.pagination.page} pageCount={Math.max(1, result.pagination.totalPages)} pathname="/content" /></div></> : <EmptyState actionHref="/content/new" actionLabel="Create lesson" description="Create a lesson or change the current filters." title="No lessons found" />}</>; }

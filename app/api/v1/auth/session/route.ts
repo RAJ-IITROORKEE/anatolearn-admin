@@ -5,5 +5,5 @@ export async function GET(request: Request) {
   const id = requestId();
   const identity = await resolveRequestIdentity(request);
   if (!identity) return apiError("UNAUTHORIZED", "Authentication is required.", 401, id);
-  return apiSuccess({ profile: { id: identity.profile.id, fullName: identity.profile.fullName, email: identity.profile.email, role: identity.profile.role } }, { requestId: id });
+  return apiSuccess({ profile: { id: identity.profile.id, fullName: identity.profile.fullName, email: identity.profile.email } }, { requestId: id });
 }

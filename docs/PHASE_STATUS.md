@@ -2,15 +2,100 @@
 
 ## Current phase
 
-**Phase 6: Dashboard, feedback, and notifications — complete in code**
+**Phase 7: Hardening and delivery — repository implementation complete; external gates open**
 
 Date: 2026-07-14
 
-Phases 0-6 are implemented and all five migrations are current. Phase 7 hardening and
-delivery is next. Deployment configuration remains open: the local `CRON_SECRET` is
-invalid and `npm run env:check` intentionally fails, while ordinary runtime and builds
-remain isolated. Expo may be disabled or misconfigured and has not been verified with
-real credentials/devices.
+Phases 0-7 are implemented and all seven migrations are current in the configured
+development database. The product is not claimed as fully deployed or production-ready.
+`npm run env:check` currently fails only for the invalid local `CRON_SECRET`; production
+also requires paired Upstash credentials. Provider, authenticated E2E, backup/restore,
+cron, and production deployment acceptance remain external gates.
+
+## Phase 7 completed repository work
+
+- Enforced exact configured-origin CSRF checks for cookie mutations; bearer-native Expo
+  clients do not need browser CORS, and the unused CORS variable was removed.
+- Added request-nonce CSP, global frame/MIME/referrer/permissions headers, production-only
+  HSTS, `noindex` metadata/robots, and tests for browser security responses.
+- Standardized `X-Request-ID`, private `no-store` plus `Vary: Authorization, Cookie`, and
+  explicit public health/meta caches; added strict response-header/privacy tests.
+- Added structured redacted unexpected-error logging containing only safe correlation and
+  classification fields.
+- Added an Upstash REST distributed rate-limiter adapter. Paired credentials are required
+  by production validation; development/test has a bounded memory fallback. Auth uses
+  independent client/account quotas; feedback/device/password hooks use server-derived IDs.
+- Obfuscated existing-account registration responses and added newly-created Auth-user
+  compensation when profile provisioning fails.
+- Classified permanent Expo HTTP/shape failures so claimed deliveries fail immediately;
+  transient network/429/5xx failures retain bounded retry behavior.
+- Updated Prisma client/CLI to 6.19.3, removing the previous high audit finding. Current
+  audit result is zero high/critical; two moderate PostCSS findings through Next.js remain.
+  No safe stable fix exists, and force remediation would downgrade Next.js to 9, so it was
+  not used.
+- Added/deployed `20260714130000_deny_direct_application_database_access` and
+  `20260714131000_restrict_application_schema_access` to configured development. They
+  enable RLS/revoke direct application access for Supabase client roles and restrict
+  schema creation. Isolated role tests prove denied reads/writes and retained Prisma access.
+- Replaced raw lesson JSON editing with a visual editor for all seven block types,
+  validated learner preview, duplication/reordering, delete confirmation, and dirty guard.
+- Added searchable/paginated unarchived managed-media pickers to system, topic, lesson,
+  flashcard, question, and option forms.
+- Completed accessibility/responsive fixes across password toggles, pagination, dialogs,
+  breadcrumbs, tables, labels, overflow, metadata, and robots; established axe-enabled
+  public and credential-gated authenticated Playwright coverage.
+- Reconciled OpenAPI to all 104 implemented route operations with unique IDs, strict
+  empty-body, rate-limit, privacy, response-header, and route-parity tests.
+- Made canonical seeding create-if-missing/non-destructive and added tested bootstrap
+  find/create/compensation/redaction behavior. Seeded anatomy content remains draft/demo
+  material requiring academic review before publication.
+- Updated final README, setup, architecture, API, security, testing, plan, status, and
+  machine-readable contract documentation from inspected code and diffs.
+
+Only documentation files were changed by this documentation task. Application code,
+packages, migrations, `.env.example`, local secret values, and provider configuration
+were not modified.
+
+## Final verification record
+
+| Command/check | Result |
+| --- | --- |
+| `npm run lint` | Passed |
+| `npm run typecheck` | Passed |
+| `npm run test` | Passed: 129 files, 2 skipped; 412 tests, 9 skipped |
+| Isolated `TEST_DATABASE_URL` | Passed: 2 files/9 tests (4 assessment lifecycle + 5 direct DB access) |
+| `npm run build` | Passed: 40 static-generation units under nonce dynamic CSP output; all routes |
+| `npm run test:e2e` | 17 passed, 14 skipped |
+| `npm run openapi:validate` | Passed: 104 operations, 104 unique operation IDs, exact route parity |
+| `npm run prisma:deploy` / status | Passed; 7 migrations current, including both Phase 7 migrations |
+| `npm audit` | 0 high/critical; 2 moderate PostCSS-through-Next findings remain |
+| `npm run env:check` | Failed only for invalid local `CRON_SECRET`; intentional deployment gate |
+| `git diff --check` | Passed; line-ending notices only |
+
+The 17 Playwright passes cover desktop/mobile public, security, and accessibility checks.
+Authenticated admin tests were skipped because `E2E_ADMIN_EMAIL` and
+`E2E_ADMIN_PASSWORD` were absent. The 14 skips are auth setup, 12 authenticated tests,
+and one existing intentional skip; do not imply authenticated flows passed.
+
+## External gates and risks
+
+1. Install a valid random 32+ character deployment `CRON_SECRET` and verify both Vercel
+   cron jobs.
+2. Provision and verify paired Upstash production credentials.
+3. Configure a real Expo access token and exercise EAS devices through ticket, receipt,
+   partial, and `DeviceNotRegistered` outcomes. The at-least-once crash window remains.
+4. Supply admin E2E credentials and run all authenticated desktop/mobile flows.
+5. Test real Supabase Auth email/redirect and private Storage integration.
+6. Rehearse backup/restore and complete production deployment. Phase 7 RLS is deployed to
+   configured development and isolated tested, not claimed in production.
+7. Optional Sentry/monitoring remains unconfigured.
+
+## Continuation point
+
+Phase 7 repository implementation is complete. Continue with external deployment
+acceptance above; do not claim full production readiness until those gates pass.
+
+## Phase 6 historical record
 
 ## Phase 6 completed implementation
 
@@ -47,8 +132,8 @@ real credentials/devices.
   before-unload protection.
 - Deployed Phase 6 in two migrations: enum labels first, then dependent structure. This
   split is required by PostgreSQL's rule that new enum values must commit before use.
-  Both migrations repeat the empty notification-table preflight; all five migrations are
-  current.
+  Both migrations repeat the empty notification-table preflight; five migrations were
+  current at the Phase 6 close.
 - Updated README, architecture, API/OpenAPI, security, testing, implementation plan, and
   this status from inspected code/routes/tests/schema/migrations.
 
@@ -65,52 +150,6 @@ real credentials/devices.
 - `app/api/internal/notifications/process/`, `vercel.json`
 - `prisma/migrations/20260714120000_add_phase6_feedback_notification_foundation/`
 - `prisma/migrations/20260714121000_add_phase6_feedback_notification_structure/`
-
-Only documentation files were changed by this documentation task. Application code,
-packages, schema, migrations, local environment values, and secrets were not modified.
-`.env.example` already accurately lists isolated placeholder-only Expo and cron variables,
-so it did not require a change.
-
-## Latest known verification and configuration record
-
-| Command/check | Result |
-| --- | --- |
-| `npm run prisma:deploy` | Passed; Phase 6 enum and structure migrations deployed |
-| Prisma migration status | Current: all five migrations |
-| `npm run lint` | Passed |
-| `npm run typecheck` | Passed |
-| `npm run test` | Passed: 319 tests; 4 conditional PostgreSQL tests skipped in the default run |
-| Dedicated Phase 5 PostgreSQL suite | Passed: 4 tests against a migrated isolated schema, including concurrent finalization |
-| `npm run build` | Passed |
-| `npm run test:e2e` | **Not rerun for Phase 6**; latest prior anonymous result: 3 passed, 1 skipped |
-| `npm run env:check` | **Failed** only for invalid local `CRON_SECRET`; intentional deployment gate |
-| OpenAPI structural validation | Passed with Swagger CLI: 75 paths, 104 operations, 104 unique operation IDs, 138 component schemas |
-| `git diff --check` | Passed; line-ending conversion warnings only |
-
-The default suite skips `features/assessments/postgres.integration.test.ts` unless
-`TEST_DATABASE_URL` is set and differs from `DATABASE_URL`. Its four cases previously
-passed against a migrated isolated schema. That acceptance run exposed Prisma `P2010`
-wrapping PostgreSQL SQLSTATE `40001`/`40P01`; the shared transaction retry now handles
-those forms alongside `P2034`. Do not infer a Phase 6 E2E run from the prior anonymous
-Playwright result.
-
-## Residual limitations and risks
-
-1. No verified real Expo credential/device integration; provider may be disabled or
-   misconfigured.
-2. No real PostgreSQL multi-worker notification lease/materialization concurrency test;
-   provider acceptance followed by a crash can produce an at-least-once duplicate send.
-3. No authenticated Phase 6 Playwright coverage.
-4. Production distributed rate limiting is missing; feedback/auth limits are process-local.
-5. Managed-media picker and visual lesson editor remain absent.
-6. `CRON_SECRET` is still invalid locally. Both scheduled jobs require a valid 32+
-   character deployment secret and verified schedules.
-
-## Next phase
-
-**Phase 7: Hardening and delivery.** Verify real Expo and both deployed cron jobs, add
-notification-worker PostgreSQL concurrency and authenticated Phase 6 E2E coverage,
-install a distributed limiter, and finish the media-picker/visual lesson-editor gaps.
 
 ## Phase 4 completed items
 
@@ -192,6 +231,9 @@ results above are the final Phase 4 implementation verification record supplied 
 this update.
 
 ## Phase 4 residual limitations and risks (historical record)
+
+The following statements describe the Phase 4 close and are superseded where Phase 7
+completion above records later work.
 
 1. No database/provider integration or race suite proves real PostgreSQL transactions,
    Supabase Storage/signed URLs, publication/selection visibility, option replacement,

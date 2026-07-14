@@ -27,7 +27,6 @@ export const attemptListSchema = z.object({
 }).strict();
 
 export const attemptIdSchema = uuid;
-export const emptyMutationSchema = z.object({}).strict();
 export type StartAssessmentInput = z.infer<typeof startAssessmentSchema>;
 export type AnswerInput = z.infer<typeof answerInputSchema>;
 export type AttemptListInput = z.infer<typeof attemptListSchema>;

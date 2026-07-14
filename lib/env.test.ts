@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { bootstrapEnvSchema, cronEnvSchema, notificationProviderEnvSchema, publicEnvSchema, serverEnvSchema } from "@/lib/env";
+import { bootstrapEnvSchema, cronEnvSchema, envCheckSchema, notificationProviderEnvSchema, publicEnvSchema, rateLimitEnvSchema, serverEnvSchema } from "@/lib/env";
 
 describe("publicEnvSchema", () => {
   it("accepts the documented public application settings", () => {
@@ -102,6 +102,8 @@ describe("publicEnvSchema", () => {
     expect(serverEnvSchema.safeParse({ ...base, CRON_SECRET: "too-short" }).success).toBe(true);
     expect(cronEnvSchema.safeParse({ CRON_SECRET: "too-short" }).success).toBe(false);
     expect(cronEnvSchema.parse({ CRON_SECRET: "x".repeat(32) }).CRON_SECRET).toHaveLength(32);
+    expect(cronEnvSchema.safeParse({ CRON_SECRET: "CHANGE_ME_TO_A_RANDOM_SECRET_AT_LEAST_32_CHARS" }).success).toBe(false);
+    expect(cronEnvSchema.safeParse({ CRON_SECRET: "your-cron-secret-goes-here-and-is-long-enough" }).success).toBe(false);
   });
 
   it("keeps optional notification provider validation out of shared runtime configuration", () => {
@@ -120,5 +122,40 @@ describe("publicEnvSchema", () => {
     expect(notificationProviderEnvSchema.safeParse(runtime).success).toBe(false);
     expect(notificationProviderEnvSchema.parse({ EXPO_PUSH_ENABLED: "false" })).toEqual({ EXPO_PUSH_ENABLED: "false" });
     expect(notificationProviderEnvSchema.parse({ EXPO_PUSH_ENABLED: "true", EXPO_ACCESS_TOKEN: "token" })).toEqual({ EXPO_PUSH_ENABLED: "true", EXPO_ACCESS_TOKEN: "token" });
+  });
+
+  it("requires a complete distributed limiter configuration in production", () => {
+    expect(rateLimitEnvSchema.safeParse({ NODE_ENV: "development" }).success).toBe(true);
+    expect(rateLimitEnvSchema.safeParse({ NODE_ENV: "test" }).success).toBe(true);
+    expect(rateLimitEnvSchema.safeParse({ NODE_ENV: "production" }).success).toBe(false);
+    expect(rateLimitEnvSchema.safeParse({ NODE_ENV: "development", UPSTASH_REDIS_REST_URL: "https://redis.example" }).success).toBe(false);
+    expect(rateLimitEnvSchema.safeParse({
+      NODE_ENV: "production",
+      UPSTASH_REDIS_REST_URL: "https://redis.example",
+      UPSTASH_REDIS_REST_TOKEN: "secret-token",
+    }).success).toBe(true);
+  });
+
+  it("makes production env-check fail when Upstash is absent", () => {
+    const base = {
+      NODE_ENV: "production",
+      NEXT_PUBLIC_APP_URL: "https://app.example",
+      DATABASE_URL: "postgresql://user:password@localhost:6543/postgres",
+      DIRECT_URL: "postgresql://user:password@localhost:5432/postgres",
+      NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "publishable",
+      SUPABASE_SECRET_KEY: "sb_secret_example",
+      SUPABASE_STORAGE_ALLOWED_MIME_TYPES: "image/png",
+      SUPABASE_STORAGE_VISIBILITY: "private",
+      ADMIN_BOOTSTRAP_EMAIL: "admin@example.com",
+      CRON_SECRET: "x".repeat(32),
+      EXPO_PUSH_ENABLED: "false",
+    };
+    expect(envCheckSchema.safeParse(base).success).toBe(false);
+    expect(envCheckSchema.safeParse({
+      ...base,
+      UPSTASH_REDIS_REST_URL: "https://redis.example",
+      UPSTASH_REDIS_REST_TOKEN: "secret-token",
+    }).success).toBe(true);
   });
 });

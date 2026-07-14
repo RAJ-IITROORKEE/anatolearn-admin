@@ -2,16 +2,21 @@ import { changePasswordSchema } from "@/features/auth/api-schemas";
 import { apiError, apiSuccess, requestId } from "@/lib/api/response";
 import { resolveRequestIdentity } from "@/lib/auth/request";
 import { prisma } from "@/lib/db/prisma";
-import { allowRequest, requestClientKey } from "@/lib/rate-limit";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { hasSafeOrigin } from "@/lib/security/origin";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseAuthClient } from "@/lib/supabase/auth-client";
 
 export async function POST(request: Request) {
   const id = requestId();
-  if (!allowRequest(requestClientKey(request, "change-password"), 5)) return apiError("RATE_LIMITED", "Try again later.", 429, id);
   const identity = await resolveRequestIdentity(request);
   if (!identity) return apiError("UNAUTHORIZED", "Authentication is required.", 401, id);
+  const rateLimit = await checkRateLimit("auth:change-password", identity.profile.id, 5);
+  if (!rateLimit.allowed) {
+    const response = apiError("RATE_LIMITED", "Try again later.", 429, id);
+    response.headers.set("Retry-After", String(rateLimit.retryAfterSeconds));
+    return response;
+  }
   if (identity.mode === "cookie" && !hasSafeOrigin(request.headers)) return apiError("INVALID_ORIGIN", "Request origin is not allowed.", 403, id);
   const input = changePasswordSchema.safeParse(await request.json().catch(() => null));
   if (!input.success) return apiError("VALIDATION_ERROR", "Invalid password change request.", 400, id, input.error.flatten().fieldErrors);

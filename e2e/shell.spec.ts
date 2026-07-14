@@ -12,6 +12,6 @@ test("login remains usable on narrow screens", async ({ page }, testInfo) => {
   await page.goto("/login");
 
   await expect(page.getByLabel("Email address")).toBeVisible();
-  await expect(page.getByLabel("Password")).toBeVisible();
+  await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
 });

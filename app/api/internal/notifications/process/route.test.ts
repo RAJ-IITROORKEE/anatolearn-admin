@@ -37,4 +37,12 @@ describe("notification worker route", () => {
     expect((await POST(request("POST"))).status).toBe(200);
     expect(mocks.processNotifications).toHaveBeenCalledTimes(2);
   });
+
+  it("rejects non-empty POST bodies before processing", async () => {
+    const response = await POST(new Request("https://app.example/api/internal/notifications/process", {
+      method: "POST", headers: { authorization: `Bearer ${secret}`, "content-type": "application/json" }, body: JSON.stringify({ force: true }),
+    }));
+    expect(response.status).toBe(400);
+    expect(mocks.processNotifications).not.toHaveBeenCalled();
+  });
 });

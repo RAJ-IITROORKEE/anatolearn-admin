@@ -6,13 +6,14 @@ Prisma, and PostgreSQL.
 
 ## Current status
 
-Phases 0-6 are implemented. Phase 6 code and all five migrations are current. Scheduled
-jobs are not deployment-ready until a valid `CRON_SECRET` is installed; this cron-only
-configuration does not prevent ordinary runtime or builds from starting. The current
-application includes:
+Phases 0-7 are implemented in the repository. All seven migrations are current in the
+configured development database, including the two Phase 7 direct-database-access
+hardening migrations. Production deployment readiness is still externally gated; this
+is not a claim that the product is deployed. The current application includes:
 
 - Supabase cookie and bearer authentication with active-profile and admin-role checks
-- Prisma schema, migration, seed, and an explicit administrator bootstrap script
+- Prisma 6.19.3 schema and migrations, a non-destructive create-if-missing seed, and a
+  tested explicit administrator bootstrap script
 - Protected admin pages for organ systems, topics, structured lessons, private media,
   audit logs, profile, and password settings
 - Admin CRUD/lifecycle APIs and authenticated published-content APIs under `/api/v1`
@@ -31,7 +32,7 @@ application includes:
 - Learner-only user management with paginated list/detail, activate/deactivate, preserved
   learning history, device-token shutdown, pending-delivery cancellation, and audits
 - Learner feedback submission/history plus admin triage, internal notes, review/resolve
-  attribution, privacy-separated DTOs, redacted audits, and process-local submission limits
+  attribution, privacy-separated DTOs, redacted audits, and distributed-ready limits
 - Notification drafts, scheduling/cancellation/send queueing, immutable one-time audience
   materialization, recipients/deliveries, learner reads, device-token ownership, provider
   readiness, receipt polling, leases/retries, and a cron worker
@@ -42,18 +43,29 @@ application includes:
   `SENT`, and campaign outcomes distinguish `PROCESSING`, `PARTIAL`, and `FAILED`
 - Validated PNG/JPEG/WebP uploads, 15-minute admin URLs, and 5-minute eligible
   published or owned historical-attempt media URLs
-- Unit/component tests with Vitest/RTL and anonymous/mobile-auth checks with Playwright
+- Exact-origin cookie CSRF checks, nonce-based CSP, production HSTS, security headers,
+  request IDs, private no-store/Vary defaults, explicit public cache policy, and
+  structured redacted error logging
+- Upstash REST rate-limiter support required in production, with a bounded in-memory
+  fallback only in development/test; authentication uses separate client and account keys
+- A seven-block visual lesson editor with validated preview, keyboard/button reordering,
+  deletion confirmation, and dirty-navigation protection
+- Searchable/paginated managed-media pickers integrated into system, topic, lesson,
+  flashcard, question, and option forms
+- Accessibility, metadata/robots, password visibility, pagination, dialog, table, and
+  overflow hardening, with Vitest/RTL and axe-enabled Playwright foundations
 
-Phase 7 hardening and delivery is next. Remaining work includes configured/verified real
-Expo delivery, notification-worker database concurrency coverage, authenticated Phase 6
-Playwright flows, a distributed rate limiter, a media picker, and a visual lesson editor.
+Phase 7 repository implementation is complete. External gates remain: install and verify
+deployment cron and Upstash secrets, exercise real Expo/EAS devices and Supabase Auth/
+Storage, provide admin E2E credentials, perform backup/restore and production deployment,
+and optionally add Sentry/monitoring. See `docs/PHASE_STATUS.md` for the exact boundary.
 
 See `docs/PHASE_STATUS.md` for the latest verification record and known limitations.
 
 ## Local development
 
 Use Node.js 20.19 or newer and npm. Copy `.env.example` to `.env.local`, replace all
-placeholder values, and configure the Supabase project, private storage bucket,
+placeholder values, and configure the Supabase project, private `anatomy-media` bucket,
 pooled/direct database URLs, and a random `CRON_SECRET` of at least 32 characters.
 Never commit local environment files.
 
@@ -63,7 +75,9 @@ or a production build from starting. The internal cron route validates it throug
 `cronEnvSchema`/`getCronEnv`: absent or blank disables that route with `503`, while a
 configured value shorter than 32 characters fails safely through the API error mapper.
 `npm run env:check` still rejects a configured short secret as an intentional deployment
-configuration gate.
+configuration gate. Production validation additionally requires the paired
+`UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`; development/test may leave both
+blank to use the bounded process-local fallback.
 
 ```bash
 npm install
@@ -87,7 +101,11 @@ Phase 6 is split across
 `20260714121000_add_phase6_feedback_notification_structure`: PostgreSQL requires new enum
 labels to commit before later statements can reference them. Both migrations repeat the
 empty notification-table preflight, are deployed, and bring the repository total to five
-current migrations.
+current migrations. Phase 7 adds
+`20260714130000_deny_direct_application_database_access` and
+`20260714131000_restrict_application_schema_access`; both are deployed to the configured
+development database. They enable RLS and revoke table/sequence/function privileges for
+Supabase `anon`/`authenticated`, while retaining schema `USAGE` without `CREATE`.
 
 ## Implemented content workflows
 
@@ -160,10 +178,10 @@ current migrations.
   snapshots. When Expo is disabled or incomplete, send mutations fail before campaign
   state changes; the cron worker returns zero work without mutation.
 
-The lesson editor remains a validated JSON textarea. Content, flashcard, and question
-forms still accept managed media UUIDs rather than offering a media picker. Published
-DTOs retain legacy URL fields/media IDs; clients resolve eligible managed media through
-the authenticated published-media route.
+The visual lesson editor emits the same strict seven-block JSON contract used by the API.
+Managed-media pickers select only unarchived assets and are integrated into content,
+flashcard, question, and option forms. Published DTOs retain legacy URL fields/media IDs;
+clients resolve eligible managed media through the authenticated published-media route.
 
 ## Verification
 
@@ -173,18 +191,25 @@ npm run typecheck
 npm run test
 npm run test:e2e
 npm run build
+npm run openapi:validate
 ```
 
-Install Chromium once with `npx playwright install chromium`. The latest known pre-doc
-Phase 6 record is in `docs/PHASE_STATUS.md`: lint, typecheck, and build passed; Vitest
-passed 319 tests with four conditional PostgreSQL tests skipped in the default suite;
-migration deploy passed and all five migrations are current. Those four Phase 5 tests
-previously passed against a migrated isolated schema, including concurrent finalization,
-after retry handling was repaired for Prisma `P2010` carrying SQLSTATE `40001` and
-`40P01`. Playwright was not rerun for Phase 6; the latest prior anonymous result remains
-3 passed and 1 skipped. `npm run env:check` still intentionally fails because the local
-`CRON_SECRET` is invalid. Expo may be disabled or misconfigured, and real provider
-delivery has not been verified. Do not treat either deployment configuration as ready.
+Install Chromium once with `npx playwright install chromium`. The final Phase 7 record is:
+lint, typecheck, and build passed; the default Vitest run passed 129 files (2 skipped),
+412 tests (9 skipped); the isolated `TEST_DATABASE_URL` run passed 2 files/9 tests (four
+assessment lifecycle and five direct-access cases); Playwright passed 17 and skipped 14.
+Authenticated admin tests did **not** run because `E2E_ADMIN_EMAIL` and
+`E2E_ADMIN_PASSWORD` were absent: the 14 skips comprise auth setup, 12 authenticated
+tests, and one existing intentional skip. OpenAPI has 104 implemented, unique, parity-
+checked operations. The build completed 40 static-generation units under dynamic nonce
+CSP output and included all routes. All seven migrations are current in development.
+
+`npm audit` reports zero high/critical findings. Two moderate PostCSS findings remain
+through Next.js; there is no safe stable fix, and `npm audit fix --force` would downgrade
+Next.js to 9, so it was not used. `npm run env:check` currently fails only because the
+local `CRON_SECRET` is invalid. Real Expo delivery, authenticated admin E2E, real Supabase
+provider integration, cron schedules, Upstash production credentials, backup/restore,
+and production deployment remain unverified external gates.
 
 ## Project references
 
