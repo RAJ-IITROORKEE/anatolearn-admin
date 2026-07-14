@@ -1,0 +1,3 @@
+import { resolveRequestIdentity } from "@/lib/auth/request"; import { apiError, apiSuccess, requestId } from "@/lib/api/response"; import { mapApiError } from "@/lib/api/handler";
+import { parseList } from "@/features/notifications/route-utils"; import { listLearnerNotifications } from "@/features/notifications/service";
+export async function GET(request: Request) { const id = requestId(); try { const identity = await resolveRequestIdentity(request); if (!identity) return apiError("UNAUTHORIZED", "Authentication is required.", 401, id); const result = await listLearnerNotifications(identity.profile.id, parseList(request)); return apiSuccess(result.items, { requestId: id, pagination: result.pagination }); } catch (error) { return mapApiError(error, id); } }

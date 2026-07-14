@@ -59,12 +59,16 @@ enum NotificationType {
 enum NotificationStatus {
   DRAFT
   SCHEDULED
+  PROCESSING
   SENT
+  PARTIAL
+  FAILED
   CANCELLED
 }
 
 enum NotificationDeliveryStatus {
   PENDING
+  TICKETED
   SENT
   FAILED
   CANCELLED
@@ -118,13 +122,16 @@ model Profile {
   topicProgress          TopicProgress[]
   submittedFeedback      Feedback[]              @relation("FeedbackSubmitter")
   reviewedFeedback       Feedback[]              @relation("FeedbackReviewer")
-  notificationCampaigns  NotificationCampaign[]
+  resolvedFeedback       Feedback[]              @relation("FeedbackResolver")
+  notificationCampaigns  NotificationCampaign[]  @relation("NotificationCampaignCreator")
+  cancelledCampaigns     NotificationCampaign[]  @relation("NotificationCampaignCanceller")
   notificationRecipients NotificationRecipient[]
   deviceTokens           DeviceToken[]
   uploadedMedia          MediaAsset[]            @relation("MediaUploader")
   auditLogs              AuditLog[]
 
-  @@index([role, isActive])
+  @@index([role, isActive, createdAt, id])
+  @@index([role, createdAt, id])
   @@index([createdAt])
 }
 
@@ -313,6 +320,7 @@ model AssessmentAttempt {
   @@index([userId, createdAt, id])
   @@index([organSystemId])
   @@index([status, expiresAt])
+  @@index([status, assessmentType, completedAt, id])
   @@index([retakeSourceId])
 }
 
@@ -419,33 +427,50 @@ model Feedback {
   reviewedById      String?        @db.Uuid
   reviewedBy        Profile?       @relation("FeedbackReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
   reviewedAt        DateTime?      @db.Timestamptz(3)
+  resolvedById      String?        @db.Uuid
+  resolvedBy        Profile?       @relation("FeedbackResolver", fields: [resolvedById], references: [id], onDelete: Restrict)
+  resolvedAt        DateTime?      @db.Timestamptz(3)
   adminNotes        String?
   createdAt         DateTime       @default(now()) @db.Timestamptz(3)
   updatedAt         DateTime       @updatedAt @db.Timestamptz(3)
 
-  @@index([status, createdAt])
-  @@index([userId, createdAt])
+  @@index([status, createdAt, id])
+  @@index([userId, createdAt, id])
   @@index([reviewedById])
+  @@index([resolvedById])
   @@index([attachmentMediaId])
 }
 
 model NotificationCampaign {
-  id           String                  @id @default(uuid()) @db.Uuid
-  type         NotificationType
-  title        String
-  message      String
-  targetFilter Json
-  scheduledAt  DateTime?               @db.Timestamptz(3)
-  sentAt       DateTime?               @db.Timestamptz(3)
-  status       NotificationStatus      @default(DRAFT)
-  createdById  String                  @db.Uuid
-  createdBy    Profile                 @relation(fields: [createdById], references: [id], onDelete: Restrict)
-  createdAt    DateTime                @default(now()) @db.Timestamptz(3)
-  updatedAt    DateTime                @updatedAt @db.Timestamptz(3)
-  recipients   NotificationRecipient[]
+  id                   String                  @id @default(uuid()) @db.Uuid
+  type                 NotificationType
+  title                String
+  message              String
+  targetFilter         Json
+  scheduledAt          DateTime?               @db.Timestamptz(3)
+  materializedAt       DateTime?               @db.Timestamptz(3)
+  processingStartedAt  DateTime?               @db.Timestamptz(3)
+  processingLeaseUntil DateTime?               @db.Timestamptz(3)
+  processingToken      String?                 @db.Uuid
+  nextProcessAt        DateTime?               @db.Timestamptz(3)
+  sentAt               DateTime?               @db.Timestamptz(3)
+  cancelledById        String?                 @db.Uuid
+  cancelledBy          Profile?                @relation("NotificationCampaignCanceller", fields: [cancelledById], references: [id], onDelete: Restrict)
+  cancelledAt          DateTime?               @db.Timestamptz(3)
+  failureCode          String?
+  failureMessage       String?
+  status               NotificationStatus      @default(DRAFT)
+  createdById          String                  @db.Uuid
+  createdBy            Profile                 @relation("NotificationCampaignCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt            DateTime                @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime                @updatedAt @db.Timestamptz(3)
+  recipients           NotificationRecipient[]
 
-  @@index([status, scheduledAt])
+  @@index([status, createdAt, id])
+  @@index([status, scheduledAt, id])
+  @@index([status, nextProcessAt, id])
   @@index([createdById])
+  @@index([cancelledById])
 }
 
 model NotificationRecipient {
@@ -460,27 +485,42 @@ model NotificationRecipient {
   deliveries NotificationDelivery[]
 
   @@unique([campaignId, userId])
+  @@index([campaignId, createdAt, id])
   @@index([userId, readAt, createdAt])
 }
 
 model NotificationDelivery {
-  id                String                     @id @default(uuid()) @db.Uuid
-  recipientId       String                     @db.Uuid
-  recipient         NotificationRecipient      @relation(fields: [recipientId], references: [id], onDelete: Restrict)
-  deviceTokenId     String?                    @db.Uuid
-  deviceToken       DeviceToken?               @relation(fields: [deviceTokenId], references: [id], onDelete: SetNull)
-  tokenSnapshot     String
-  status            NotificationDeliveryStatus @default(PENDING)
-  providerReceiptId String?
-  providerErrorCode String?
-  sentAt            DateTime?                  @db.Timestamptz(3)
-  failedAt          DateTime?                  @db.Timestamptz(3)
-  createdAt         DateTime                   @default(now()) @db.Timestamptz(3)
-  updatedAt         DateTime                   @updatedAt @db.Timestamptz(3)
+  id                   String                     @id @default(uuid()) @db.Uuid
+  recipientId          String                     @db.Uuid
+  recipient            NotificationRecipient      @relation(fields: [recipientId], references: [id], onDelete: Restrict)
+  deviceTokenId        String                     @db.Uuid
+  deviceToken          DeviceToken                @relation(fields: [deviceTokenId], references: [id], onDelete: Restrict)
+  tokenSnapshot        String
+  platformSnapshot     DevicePlatform
+  status               NotificationDeliveryStatus @default(PENDING)
+  attemptCount         Int                        @default(0)
+  receiptAttemptCount  Int                        @default(0)
+  nextAttemptAt        DateTime?                  @db.Timestamptz(3)
+  lastAttemptAt        DateTime?                  @db.Timestamptz(3)
+  ticketedAt           DateTime?                  @db.Timestamptz(3)
+  receiptCheckedAt     DateTime?                  @db.Timestamptz(3)
+  processingLeaseUntil DateTime?                  @db.Timestamptz(3)
+  processingToken      String?                    @db.Uuid
+  providerReceiptId    String?
+  providerErrorCode    String?
+  providerErrorMessage String?
+  sentAt               DateTime?                  @db.Timestamptz(3)
+  failedAt             DateTime?                  @db.Timestamptz(3)
+  createdAt            DateTime                   @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime                   @updatedAt @db.Timestamptz(3)
 
+  @@unique([recipientId, deviceTokenId])
   @@index([recipientId, status])
   @@index([deviceTokenId])
   @@index([providerReceiptId])
+  @@index([status, nextAttemptAt, id])
+  @@index([status, ticketedAt, id])
+  @@index([status, processingLeaseUntil, id])
 }
 
 model DeviceToken {
@@ -546,4 +586,5 @@ model AuditLog {
 
   @@index([actorId, createdAt])
   @@index([entityType, entityId, createdAt])
+  @@index([createdAt, id])
 }

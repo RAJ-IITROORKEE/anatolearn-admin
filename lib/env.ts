@@ -28,6 +28,11 @@ export const cronEnvSchema = z.object({
   CRON_SECRET: optionalSecret,
 });
 
+export const notificationProviderEnvSchema = z.object({
+  EXPO_PUSH_ENABLED: z.enum(["true", "false"]).default("false"),
+  EXPO_ACCESS_TOKEN: z.preprocess((value) => value === "" ? undefined : value, z.string().min(1).optional()),
+});
+
 export const bootstrapEnvSchema = serverEnvSchema.extend({
   ADMIN_BOOTSTRAP_EMAIL: z.email(),
   ADMIN_BOOTSTRAP_PASSWORD: z.preprocess(
@@ -36,7 +41,7 @@ export const bootstrapEnvSchema = serverEnvSchema.extend({
   ),
 });
 
-export const envCheckSchema = bootstrapEnvSchema.and(cronEnvSchema);
+export const envCheckSchema = bootstrapEnvSchema.and(cronEnvSchema).and(notificationProviderEnvSchema);
 
 export function getPublicEnv() {
   return publicEnvSchema.parse(process.env);

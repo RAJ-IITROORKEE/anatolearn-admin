@@ -2,7 +2,7 @@
 
 ## Status and trust boundaries
 
-This document describes controls implemented through Phase 5. Browsers, API clients,
+This document describes controls implemented through Phase 6. Browsers, API clients,
 headers, cookies, query/body data, uploads, and persisted author-authored content are
 untrusted. The Next.js server is the authorization boundary.
 
@@ -22,7 +22,8 @@ untrusted. The Next.js server is the authorization boundary.
   session. The profile is loaded server-side; clients cannot provide role or acting ID.
 - Any active profile may read published learning content, operate only its own attempt/
   lesson/flashcard progress, and read its own dashboard. Admin content, media, audit,
-  flashcard, question, attempt, and user-progress APIs require an active `ADMIN` profile.
+  flashcard, question, attempt, dashboard, user-management, feedback-triage, and campaign
+  APIs require an active `ADMIN` profile.
 - Missing/invalid/inactive identity maps to `401`; an active non-admin maps to `403`.
 - Password storage, hashing, reset, and token issuance remain in Supabase Auth.
   Recovery APIs require provider-verified recovery AMR, and forgot-password responses
@@ -43,9 +44,9 @@ untrusted. The Next.js server is the authorization boundary.
 - Unique, foreign-key, not-found, state, and media failures map to explicit safe
   statuses. Inaccessible published content returns `404` rather than exposing draft or
   parent lifecycle state.
-- Existing auth/password rate-limit hooks are in-memory/process-local. Content/media/
-  Phase 4/5 routes do not add a separate rate limiter. Distributed production needs a
-  shared store before rate limits can be considered reliable.
+- Existing auth/password and learner-feedback rate-limit hooks are in-memory/process-
+  local. Feedback permits five submission attempts per verified user per minute and
+  returns `Retry-After: 60`; distributed production still needs a shared limiter.
 
 ## Flashcard and question controls
 
@@ -114,6 +115,57 @@ pages or the production build.
 at most 10 batches, and an 8-second loop budget. Lazy expiry on owned/admin reads limits
 the impact of a delayed job, but production scheduling still requires the deployment
 secret and Vercel cron configuration.
+
+The same boundary protects `GET`/`POST /api/internal/notifications/process`. Provider
+configuration is parsed only after cron authorization. With a valid cron secret but no
+ready provider, the route returns zero work without mutating campaign state. The worker
+is bounded to five campaigns, 500 delivery operations, and eight seconds. Both internal
+routes are scheduled every minute.
+
+## Phase 6 user and feedback controls
+
+- Admin user queries and mutations always require `role=USER`; administrator IDs are
+  hidden as `404`. DTOs omit role, credentials, provider tokens, and token snapshots.
+- Deactivation uses a profile row lock, preserves the profile and all learning/feedback/
+  notification history, disables active device tokens, and cancels only pending
+  deliveries. Activation does not silently reactivate old devices.
+- Learner feedback ownership comes from the verified profile. `feedback/mine` is scoped
+  by that ID and never returns admin notes, reviewer/resolver identities, or timestamps.
+- Admin feedback transitions run under a row lock. Review and resolution attribution is
+  server-derived from the active admin. Internal notes are never in learner DTOs.
+- Feedback audits are deliberately redacted: status and attribution timestamps plus an
+  `adminNotesChanged` flag are retained, while learner message text, notes text, and PII
+  are excluded.
+
+## Notification trust and privacy controls
+
+- `EXPO_PUSH_ENABLED`/`EXPO_ACCESS_TOKEN` have a dedicated provider schema and are not
+  shared-runtime dependencies. Provider status exposes only booleans. Access tokens are
+  server-only and never returned or audited.
+- Send-now checks readiness before opening the campaign mutation transaction. Disabled
+  or incomplete provider configuration returns `503` without changing a draft. Scheduling
+  is still allowed because the provider can be configured before execution.
+- Selected audiences accept 1-500 unique UUIDs and are checked as active learners.
+  Audience and active device-token snapshots are materialized exactly once while the
+  campaign lease is owned. Later token/profile changes do not rewrite history.
+- Recipient identity and delivery identity/token/platform snapshots are protected by
+  database no-delete/immutability triggers. Terminal sent/cancelled deliveries cannot be
+  changed. API DTOs omit token text/snapshots, provider receipt IDs/messages, lease tokens,
+  and provider credentials.
+- Campaign/delivery claims use row locks, `SKIP LOCKED`, opaque processing tokens, and
+  expiring leases. Updates are conditional on lease ownership so stale workers cannot
+  finalize another worker's claim.
+- A provider push ticket is evidence of acceptance only and records `TICKETED`. `SENT`
+  requires a successful receipt. Campaign `SENT`, `PARTIAL`, and `FAILED` states are
+  calculated from receipt-confirmed delivery evidence, avoiding false success.
+- Transient sends retry at most five times with bounded backoff. Receipt polling waits at
+  least 15 seconds and fails after 20 polls or 23 hours. `DeviceNotRegistered` disables
+  the affected token.
+- The network boundary cannot provide exactly-once delivery. A crash after provider
+  acceptance and before ticket persistence can cause a retry and duplicate notification;
+  processing is therefore explicitly at-least-once in that window.
+- Learner list/read operations are owner-scoped and expose only final `SENT`/`PARTIAL`
+  campaigns. An absent, foreign, or non-final recipient returns the same `404`.
 
 ## Structured content controls
 
@@ -186,9 +238,13 @@ Current limitations:
   create `AuditLog` rows. Attempt history instead relies on ownership, immutable
   snapshots/terminal results, and no-delete database triggers; admin reporting is
   read-only.
-- Current Phase 3 snapshots contain content/resource metadata but no generic recursive
-  redaction utility. Future features that handle secrets, tokens, feedback, or other
-  PII must add field-level redaction before using this audit service pattern.
+- Phase 6 learner activation/deactivation, feedback admin changes, and campaign admin
+  transitions are audited transactionally. User audits contain active state only.
+  Feedback and campaign services use feature-specific allowlisted audit snapshots; no
+  learner messages/notes, campaign title/message, selected learner IDs, device tokens,
+  provider receipt data, or credentials enter the audit row.
+- Worker delivery/read state is operational history rather than admin audit activity.
+  The database guards recipient and delivery history directly.
 
 ## Secrets and environment
 
@@ -203,7 +259,9 @@ Relevant required names include:
 - `SUPABASE_STORAGE_ALLOWED_MIME_TYPES`, `SUPABASE_STORAGE_VISIBILITY`
 - `ADMIN_BOOTSTRAP_EMAIL` and optional one-time `ADMIN_BOOTSTRAP_PASSWORD`
 - `CRON_SECRET` (server-only; optional to boot, but at least 32 characters and required
-  for scheduled expiry processing)
+  for scheduled expiry and notification processing)
+- `EXPO_PUSH_ENABLED`, `EXPO_ACCESS_TOKEN` (server-only provider configuration; optional
+  to boot and isolated from shared runtime)
 
 Environment validation does not print secret values. `envCheckSchema` intentionally
 combines shared, bootstrap, and cron schemas, so `npm run env:check` rejects a configured
@@ -223,7 +281,10 @@ concern, not a Phase 3 code completion gate.
 3. Scheduled expiry is not deployment-ready until a valid `CRON_SECRET` and Vercel cron
    are configured. The current `npm run env:check` intentionally fails only on the
    invalid configured secret; ordinary runtime and production build are isolated from it.
-4. Existing managed-media picker, visual lesson editor, and distributed rate-limiter
-   gaps remain.
-5. A later SRS may alter data sensitivity or retention requirements and must be
+4. Expo request/receipt handling is unit-tested but has not been verified with real
+   credentials/devices. Notification leases lack a real PostgreSQL multi-worker test,
+   and the documented provider-acceptance crash window is at-least-once.
+5. Authenticated Phase 6 Playwright flows have not been run. Existing managed-media
+   picker, visual lesson editor, and distributed rate-limiter gaps remain.
+6. A later SRS may alter data sensitivity or retention requirements and must be
    reviewed before the affected feature phase.

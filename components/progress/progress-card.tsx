@@ -6,8 +6,8 @@ export type ProgressSystem = { id: string; name: string; content: Metric; flashc
 
 export function ProgressCard({ system }: { system: ProgressSystem }) {
   return (
-    <article className="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-6">
-      <h3 className="text-lg font-bold text-foreground">{system.name}</h3>
+    <details className="group rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-6">
+      <summary className="cursor-pointer list-none text-lg font-bold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{system.name}<span className="ml-2 text-sm font-medium text-muted group-open:hidden">Show details</span><span className="ml-2 hidden text-sm font-medium text-muted group-open:inline">Hide details</span></summary>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <ProgressMetric label="Content complete" metric={system.content} />
         <ProgressMetric label="Flashcards mastered" metric={system.flashcards} />
@@ -28,6 +28,6 @@ export function ProgressCard({ system }: { system: ProgressSystem }) {
           </section>)}
         </div>
       </div>}
-    </article>
+    </details>
   );
 }

@@ -22,7 +22,7 @@ npm run build
 
 Install Chromium once with `npx playwright install chromium`.
 
-## Implemented coverage through Phase 5
+## Implemented coverage through Phase 6
 
 ### Platform/auth/foundation
 
@@ -110,35 +110,81 @@ Install Chromium once with `npx playwright install chromium`.
 - read-only admin attempt filters/detail disclosure, UUID page guards, labels, badges,
   answer breakdown, historical media authorization, and narrow user progress components
 
-## Latest Phase 5 verification results
+### Phase 5 concurrency acceptance repair
+
+- The four rollback-only PostgreSQL cases passed separately against a migrated isolated
+  schema, including real multi-client finalization.
+- That run exposed raw-query serialization/deadlock errors represented by Prisma `P2010`
+  with PostgreSQL SQLSTATE `40001`/`40P01`; transaction retry detection and regression
+  tests now cover those forms alongside `P2034`.
+- Ordinary `npm run test` skips all four database cases unless `TEST_DATABASE_URL` is
+  configured and differs from `DATABASE_URL`, preventing accidental writes to the normal
+  development database.
+
+### Phase 6 dashboard, users, and feedback
+
+- strict 7/30/90 dashboard query parsing, weighted metrics, gap-filled UTC trends,
+  content-readiness calculations, recent-item bounds, and admin route authorization
+- learner-only user filters/DTOs, safe detail activity, row-locked activate/deactivate,
+  no-op behavior, history preservation, device-token shutdown, pending-delivery
+  cancellation, redacted audits, responsive list/detail controls, and confirmations
+- strict feedback create/mine/admin schemas; owner/admin DTO privacy; process-local
+  submission limiting; list/detail routing; review/resolve attribution; internal-note
+  behavior; no-op handling; and redacted audit snapshots
+
+### Phase 6 notifications
+
+- Expo token format/ownership DTO privacy, reassignment and deactivation side effects
+- strict campaign/audience/list/schedule schemas and lifecycle/final-status rules
+- disabled, incomplete, ticket, receipt, transient, and malformed provider behavior
+- draft/update/schedule/cancel/send service authorization boundaries, provider-ready
+  no-mutation behavior, immutable one-time materialization, safe audits, recipients,
+  deliveries, learner list/read ownership, and evidence DTO token redaction
+- campaign/delivery lease ownership helpers, bounded send retries, delayed receipt polls,
+  receipt age/poll limits, truthful `TICKETED` versus receipt-confirmed `SENT`, and
+  `PROCESSING`/`PARTIAL`/`FAILED` outcomes
+- campaign editor/picker/actions/presentation, provider-disabled states, responsive
+  evidence surfaces, UUID page handling, accessible confirmations, and dirty navigation/
+  `beforeunload` protection
+- cron authorization regression coverage applies to both internal workers; notification
+  worker implementation is unit-tested with mocks, not with concurrent PostgreSQL workers
+
+## Latest known pre-documentation Phase 6 verification
 
 | Command | Result |
 | --- | --- |
 | `npm run lint` | Passed |
 | `npm run typecheck` | Passed |
-| `npm run test` | Passed: 61 files, 206 tests; 4 conditional PostgreSQL tests skipped in the default run |
+| `npm run test` | Passed: 319 tests; 4 conditional PostgreSQL tests skipped in the default run |
 | Dedicated assessment PostgreSQL suite | Passed: 4 tests against migrated isolated schema |
-| Migration preflight/deploy | Passed after confirming `AssessmentAttempt` count was zero; deployed `20260713090000_add_assessment_snapshot_guards` |
-| Prisma migration status | Current |
-| `npm run test:e2e` | Passed against the existing live development server: 3 passed, 1 skipped |
+| `npm run prisma:deploy` | Passed; Phase 6 enum and structure migrations deployed |
+| Prisma migration status | Current: all five migrations |
+| `npm run test:e2e` | **Not rerun for Phase 6**; latest prior anonymous result is 3 passed, 1 skipped |
 | `npm run build` | Passed without a `CRON_SECRET` process override |
 | `npm run env:check` | **Failed** only for invalid `CRON_SECRET`; configuration gate remains open |
-| OpenAPI structural validation | Passed |
+| OpenAPI structural validation | Passed with Swagger CLI: 75 paths, 104 operations, 104 unique operation IDs, 138 component schemas |
+| `git diff --check` | Passed; line-ending conversion warnings only |
 
-The lint/typecheck/test/build/E2E and migration results above are the latest known Phase
-5 implementation record. The default suite conditionally skips
+The lint/typecheck/test/build and migration results above are the supplied latest known
+Phase 6 pre-documentation record. Do not present the prior Playwright result as a Phase 6
+rerun. The default suite conditionally skips
 `features/assessments/postgres.integration.test.ts`, but the four cases were separately
 run against a migrated isolated `anatolearn_phase5_test` schema and passed. They cover
 snapshot/terminal database guards, source-edit stability, and real multi-client
 concurrent finalization. The real concurrency run also established that raw SQL
-serialization conflicts can surface as Prisma `P2010`/SQLSTATE `40001`; regression
-coverage now verifies the production retry path. Do not report environment validation or Phase 5
+serialization/deadlock conflicts can surface as Prisma `P2010` with SQLSTATE `40001` or
+`40P01`; regression coverage verifies the production retry path. Do not report environment validation or Phase 6
 deployment configuration as complete until a valid secret of at least 32 characters is
 installed. The environment-schema regression test proves that shared runtime validation
 accepts a short cron-only value while cron-boundary validation rejects it. The failed
 `env:check` result is intentional because `envCheckSchema` remains the deployment gate;
 it does not contradict the successful build without a secret override. OpenAPI is valid
 and migration status is current.
+
+The Phase 6 migrations are split because PostgreSQL requires newly added enum values to
+commit before checks/indexes can reference them. Both repeat the empty notification-table
+preflight. No real Expo integration result is recorded; the provider may be disabled or
+misconfigured.
 
 ## Remaining coverage gaps
 
@@ -159,6 +205,10 @@ No current automated test proves the following end to end or against real provid
 - authenticated admin UI CRUD, media, lifecycle, audit, flashcard, and question flows
 - full authenticated learner assessment start/answer/expiry/submit/result/retake E2E
 - deployed cron secret injection and one-minute scheduler invocation
+- real Expo push ticket/receipt behavior on devices
+- notification worker leases/materialization under concurrent PostgreSQL workers
+- authenticated dashboard/users/feedback/notification Playwright flows
+- a distributed production feedback/auth rate limiter
 
 Most service/route provider behavior still uses mocks. The conditional assessment
 PostgreSQL suite has now passed separately against an isolated migrated schema; it remains
@@ -202,6 +252,10 @@ Add authenticated fixtures without committing credentials. Critical flows are:
 12. Verify lesson completion, weighted/zero-denominator progress, dashboard rankings,
     admin attempt filters/detail, and narrow user progress.
 13. Exercise the deployed one-minute cron with a valid secret and multiple due batches.
+14. Exercise dashboard range/accessibility, learner activate/deactivate, feedback privacy/
+    triage, notification dirty guards, provider-disabled behavior, and delivery evidence.
+15. Run concurrent notification workers against PostgreSQL and verify one-time audience
+    materialization, lease takeover, retries, receipts, cancellation, and token redaction.
 
 ## Completion gate
 

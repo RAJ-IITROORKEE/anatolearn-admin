@@ -4,11 +4,17 @@ import { apiError, requestId } from "./response";
 import { ContentError } from "@/features/content/domain";
 import { AssessmentError } from "@/features/assessments/domain";
 import { ProgressError } from "@/features/progress/domain";
+import { FeedbackError } from "@/features/feedback/domain";
+import { UserManagementError } from "@/features/users/domain";
+import { NotificationError } from "@/features/notifications/domain";
 
 export function mapApiError(error: unknown, id: string) {
   if (error instanceof ContentError) return apiError(error.code, error.message, error.status, id, error.details);
   if (error instanceof AssessmentError) return apiError(error.code, error.message, error.status, id, error.details);
   if (error instanceof ProgressError) return apiError(error.code, error.message, error.status, id);
+  if (error instanceof FeedbackError) return apiError(error.code, error.message, error.status, id);
+  if (error instanceof UserManagementError) return apiError(error.code, error.message, error.status, id);
+  if (error instanceof NotificationError) return apiError(error.code, error.message, error.status, id);
   if (error instanceof ZodError) return apiError("VALIDATION_ERROR", "Request validation failed.", 400, id, error.flatten().fieldErrors as Record<string, string[]>);
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
     if (error.code === "P2002") return apiError("CONFLICT", "A record with these unique values already exists.", 409, id);

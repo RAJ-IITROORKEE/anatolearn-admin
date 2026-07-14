@@ -157,6 +157,19 @@ authenticated lifecycle E2E remains a Phase 7 hardening gap.
 
 ## Phase 6: Dashboard, feedback, and notifications
 
+**Status: complete in code; external delivery hardening remains Phase 7.** Delivered the
+real admin dashboard and learner-only account management; learner/admin feedback with
+privacy and redacted audits; device-token ownership; campaign draft/schedule/cancel/send
+queue workflows; immutable recipients/deliveries; learner list/read; isolated Expo
+provider readiness; receipt-truthful worker states, leases, retries, and cron route; and
+responsive accessible admin pages with dirty-form protection. The two Phase 6 migrations
+are deployed after splitting enum labels from dependent structure for PostgreSQL
+transaction compatibility; all five migrations are current. Latest known pre-doc gates:
+lint/typecheck/build passed, 319 tests passed with four conditional PostgreSQL skips, and
+migration deploy passed. Playwright was not rerun for Phase 6; the prior anonymous result
+remains 3 passed/1 skipped. `env:check` intentionally fails on the invalid local
+`CRON_SECRET`, and real Expo/device delivery is not verified.
+
 **Work**
 
 - Real aggregated admin dashboard, accessible charts, users/progress views, feedback
@@ -168,6 +181,13 @@ authenticated lifecycle E2E remains a Phase 7 hardening gap.
 - Dashboard contains real paginated/aggregated data and no fake analytics.
 - Internal feedback notes remain admin-only.
 - Notification status reflects provider evidence and never false success.
+
+**Delivered acceptance note:** dashboard values are database-backed; learner feedback
+DTOs exclude internal notes/review identities; provider tickets remain `TICKETED` until
+receipt-confirmed; campaign final states distinguish `SENT`, `PARTIAL`, and `FAILED`.
+Unit/route/component coverage passes. Phase 7 retains real Expo integration, notification
+worker database concurrency, authenticated Phase 6 E2E, distributed rate limiting, and
+existing media-picker/visual-editor gaps.
 
 ## Phase 7: Hardening and delivery
 
@@ -207,11 +227,10 @@ authenticated lifecycle E2E remains a Phase 7 hardening gap.
 
 ## Current continuation point
 
-Phase 6 is next according to `MASTER_BUILD_PROMPT.md`: the real admin dashboard,
-feedback submission/review, notification campaign management, and provider-backed
-delivery with a safe disabled state. Phase 5 adds only a narrow read-only `/users/[id]`
-progress view; general user management remains Phase 6 work. Before deployment, replace
-the invalid `CRON_SECRET` with at least 32 random characters and verify the one-minute
-Vercel cron. This open configuration gate does not block ordinary pages or builds because
-cron validation is isolated from `serverEnvSchema`. Any newly supplied SRS must be
-reconciled before affected work begins.
+Phase 7 is next. Harden and verify delivery rather than adding another feature surface:
+install a valid 32+ character `CRON_SECRET`, verify both one-minute workers, configure and
+exercise real Expo credentials/devices, add PostgreSQL concurrent-worker and authenticated
+Phase 6 Playwright coverage, replace process-local limiting with a distributed adapter,
+and complete the media picker/visual lesson editor. The cron and notification provider
+schemas are isolated from ordinary runtime, so these deployment gaps do not invalidate
+the successful build. Any newly supplied SRS must be reconciled before affected work.

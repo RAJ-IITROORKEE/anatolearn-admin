@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { bootstrapEnvSchema, cronEnvSchema, publicEnvSchema, serverEnvSchema } from "@/lib/env";
+import { bootstrapEnvSchema, cronEnvSchema, notificationProviderEnvSchema, publicEnvSchema, serverEnvSchema } from "@/lib/env";
 
 describe("publicEnvSchema", () => {
   it("accepts the documented public application settings", () => {
@@ -102,5 +102,23 @@ describe("publicEnvSchema", () => {
     expect(serverEnvSchema.safeParse({ ...base, CRON_SECRET: "too-short" }).success).toBe(true);
     expect(cronEnvSchema.safeParse({ CRON_SECRET: "too-short" }).success).toBe(false);
     expect(cronEnvSchema.parse({ CRON_SECRET: "x".repeat(32) }).CRON_SECRET).toHaveLength(32);
+  });
+
+  it("keeps optional notification provider validation out of shared runtime configuration", () => {
+    const runtime = {
+      NEXT_PUBLIC_APP_URL: "http://localhost:3000",
+      DATABASE_URL: "postgresql://user:password@localhost:6543/postgres",
+      DIRECT_URL: "postgresql://user:password@localhost:5432/postgres",
+      NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_example",
+      SUPABASE_SECRET_KEY: "sb_secret_example",
+      SUPABASE_STORAGE_ALLOWED_MIME_TYPES: "image/png",
+      SUPABASE_STORAGE_VISIBILITY: "private",
+      EXPO_PUSH_ENABLED: "invalid",
+    };
+    expect(serverEnvSchema.safeParse(runtime).success).toBe(true);
+    expect(notificationProviderEnvSchema.safeParse(runtime).success).toBe(false);
+    expect(notificationProviderEnvSchema.parse({ EXPO_PUSH_ENABLED: "false" })).toEqual({ EXPO_PUSH_ENABLED: "false" });
+    expect(notificationProviderEnvSchema.parse({ EXPO_PUSH_ENABLED: "true", EXPO_ACCESS_TOKEN: "token" })).toEqual({ EXPO_PUSH_ENABLED: "true", EXPO_ACCESS_TOKEN: "token" });
   });
 });

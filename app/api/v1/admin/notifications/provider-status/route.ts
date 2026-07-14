@@ -1,0 +1,2 @@
+import { requireAdmin } from "@/lib/api/admin"; import { apiSuccess } from "@/lib/api/response"; import { getProviderConfig } from "@/features/notifications/provider"; import { mapApiError } from "@/lib/api/handler";
+export async function GET(request: Request) { const auth = await requireAdmin(request); if (auth.response) return auth.response; try { const config = getProviderConfig(); return apiSuccess({ enabled: config.enabled, ready: config.ready }, { requestId: auth.id }); } catch (error) { return mapApiError(error, auth.id); } }

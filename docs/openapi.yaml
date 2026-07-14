@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: AnatoLearn API
-  version: 0.5.0
-  description: Implemented API surface through Phase 5. Future-phase routes are omitted; there is no public question-bank route.
+  version: 0.6.0
+  description: Implemented API surface through Phase 6. Future-phase routes are omitted; there is no public question-bank route. Notification sending is a supported capability, but provider readiness is deployment-specific.
 servers:
   - url: /api/v1
     description: Versioned API base
@@ -20,6 +20,12 @@ tags:
   - name: Assessments
   - name: Progress
   - name: Admin progress
+  - name: Admin dashboard
+  - name: Admin users
+  - name: Feedback
+  - name: Admin feedback
+  - name: Notifications
+  - name: Admin notifications
   - name: Internal jobs
 security:
   - bearerAuth: []
@@ -39,7 +45,7 @@ paths:
       operationId: getMeta
       security: []
       responses:
-        '200': { $ref: '#/components/responses/Success' }
+        '200': { $ref: '#/components/responses/MetaSuccess' }
   /auth/register:
     post:
       tags: [Auth]
@@ -126,21 +132,28 @@ paths:
     post:
       tags: [Profile]
       operationId: upsertDeviceToken
-      requestBody: { $ref: '#/components/requestBodies/JsonObject' }
+      description: Registers or reassigns an Expo token to the authenticated active profile. Reassignment cancels the previous owner's pending deliveries. Token text is never returned. Cookie requests require a safe same-origin Origin/Host.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/DeviceTokenInput' } } }
       responses:
-        '201': { $ref: '#/components/responses/Success' }
+        '201': { $ref: '#/components/responses/DeviceTokenSuccess' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
   /me/device-tokens/{id}:
     parameters: [{ $ref: '#/components/parameters/Id' }]
     delete:
       tags: [Profile]
       operationId: deactivateDeviceToken
+      description: Owner-scoped, idempotently deactivates the token and cancels its pending deliveries. Token and historical delivery rows are retained. Cookie requests require a safe same-origin Origin/Host.
       responses:
-        '200': { $ref: '#/components/responses/Success' }
+        '200': { $ref: '#/components/responses/DeviceTokenDeactivationSuccess' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
   /organ-systems:
     get:
       tags: [Published content]
@@ -429,6 +442,349 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/Conflict' }
         '500': { $ref: '#/components/responses/InternalError' }
+  /feedback:
+    post:
+      tags: [Feedback]
+      operationId: submitFeedback
+      description: Creates feedback owned by the authenticated active profile. Limited process-locally to five attempts per profile per 60 seconds. No admin audit row is written.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/FeedbackCreateInput' } } }
+      responses:
+        '201': { $ref: '#/components/responses/LearnerFeedbackSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /feedback/mine:
+    get:
+      tags: [Feedback]
+      operationId: listOwnedFeedback
+      description: Owner-scoped feedback history. Admin notes and review/resolution attribution are omitted.
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+        - { name: type, in: query, schema: { $ref: '#/components/schemas/FeedbackType' } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/FeedbackStatus' } }
+      responses:
+        '200': { $ref: '#/components/responses/LearnerFeedbackListSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /notifications:
+    get:
+      tags: [Notifications]
+      operationId: listOwnedNotifications
+      description: Lists only the authenticated profile's recipients from SENT or PARTIAL campaigns. The optional status query is accepted by the shared parser but has no effect on this owner-scoped result.
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+        - { name: status, in: query, description: Accepted for shared-parser compatibility but ignored., schema: { $ref: '#/components/schemas/NotificationStatus' } }
+      responses:
+        '200': { $ref: '#/components/responses/LearnerNotificationListSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /notifications/{recipientId}/read:
+    parameters: [{ $ref: '#/components/parameters/RecipientId' }]
+    post:
+      tags: [Notifications]
+      operationId: markOwnedNotificationRead
+      description: Idempotently sets readAt for an owned recipient of a SENT or PARTIAL campaign. Any request body is ignored. Cookie requests require a safe same-origin Origin/Host. Read state is operational history, not an admin audit event.
+      responses:
+        '200': { $ref: '#/components/responses/LearnerNotificationSuccess' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /admin/dashboard:
+    get:
+      tags: [Admin dashboard]
+      operationId: getAdminDashboard
+      x-required-role: ADMIN
+      description: Database-backed repeatable-read aggregates. days affects only the gap-filled UTC attempt trend; counts and question-weighted accuracy are all-time. This read has no side effects or audit event.
+      parameters:
+        - { name: days, in: query, schema: { type: integer, enum: [7, 30, 90], default: 30 } }
+      responses:
+        '200': { $ref: '#/components/responses/AdminDashboardSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /admin/users:
+    get:
+      tags: [Admin users]
+      operationId: listAdminLearners
+      x-required-role: ADMIN
+      description: Learner-only directory. Pagination total follows current filters; meta.summary contains unfiltered learner totals.
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+        - { name: q, in: query, schema: { type: string, minLength: 1, maxLength: 200 } }
+        - { name: isActive, in: query, schema: { type: string, enum: ['true', 'false'] } }
+        - { name: createdFrom, in: query, description: Inclusive offset-bearing date-time., schema: { type: string, format: date-time } }
+        - { name: createdTo, in: query, description: Inclusive offset-bearing date-time; must not precede createdFrom., schema: { type: string, format: date-time } }
+        - { name: sortBy, in: query, schema: { type: string, enum: [createdAt, fullName, email, lastLoginAt], default: createdAt } }
+        - { name: sortOrder, in: query, schema: { type: string, enum: [asc, desc], default: desc } }
+      responses:
+        '200': { $ref: '#/components/responses/AdminUserListSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /admin/users/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Admin users]
+      operationId: getAdminLearner
+      x-required-role: ADMIN
+      description: Safe learner profile and activity counts. Administrator IDs are hidden as not found. No side effect or audit event.
+      responses:
+        '200': { $ref: '#/components/responses/AdminUserDetailSuccess' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    patch:
+      tags: [Admin users]
+      operationId: setAdminLearnerActivity
+      x-required-role: ADMIN
+      description: Activates or deactivates a learner without deleting history. Deactivation disables active device tokens, cancels pending deliveries, and audits a real state change; activation does not reactivate tokens. A no-op is not audited. Cookie requests require safe origin.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AdminUserActivityInput' } } }
+      responses:
+        '200': { $ref: '#/components/responses/AdminUserSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /admin/feedback:
+    get:
+      tags: [Admin feedback]
+      operationId: listAdminFeedback
+      x-required-role: ADMIN
+      description: Paginated feedback triage list. This read has no side effect or audit event.
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+        - { name: q, in: query, schema: { type: string, minLength: 1, maxLength: 200 } }
+        - { name: type, in: query, schema: { $ref: '#/components/schemas/FeedbackType' } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/FeedbackStatus' } }
+        - { name: userId, in: query, schema: { type: string, format: uuid } }
+        - { name: createdFrom, in: query, schema: { type: string, format: date-time } }
+        - { name: createdTo, in: query, description: Inclusive and must not precede createdFrom., schema: { type: string, format: date-time } }
+        - { name: sortBy, in: query, schema: { type: string, enum: [createdAt, status, type], default: createdAt } }
+        - { name: sortOrder, in: query, schema: { type: string, enum: [asc, desc], default: desc } }
+      responses:
+        '200': { $ref: '#/components/responses/AdminFeedbackListSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /admin/feedback/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Admin feedback]
+      operationId: getAdminFeedback
+      x-required-role: ADMIN
+      responses:
+        '200': { $ref: '#/components/responses/AdminFeedbackSuccess' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    patch:
+      tags: [Admin feedback]
+      operationId: updateAdminFeedback
+      x-required-role: ADMIN
+      description: Adds/clears internal notes and/or advances to REVIEWED or RESOLVED with server-derived attribution. Real changes write redacted audits; no-op updates do not. Cookie requests require safe origin.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AdminFeedbackUpdateInput' } } }
+      responses:
+        '200': { $ref: '#/components/responses/AdminFeedbackSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /admin/notifications:
+    get:
+      tags: [Admin notifications]
+      operationId: listAdminNotificationCampaigns
+      x-required-role: ADMIN
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/NotificationStatus' } }
+      responses:
+        '200': { $ref: '#/components/responses/CampaignListSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    post:
+      tags: [Admin notifications]
+      operationId: createNotificationCampaign
+      x-required-role: ADMIN
+      description: Creates a draft and a redacted CREATE audit. Provider readiness is not required. Cookie requests require safe origin.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CampaignInput' } } }
+      responses:
+        '201': { $ref: '#/components/responses/CampaignSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /admin/notifications/provider-status:
+    get:
+      tags: [Admin notifications]
+      operationId: getNotificationProviderStatus
+      x-required-role: ADMIN
+      description: Exposes only enabled and ready booleans; never returns token/configuration details. No side effect or audit event.
+      responses:
+        '200': { $ref: '#/components/responses/ProviderStatusSuccess' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /admin/notifications/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Admin notifications]
+      operationId: getNotificationCampaign
+      x-required-role: ADMIN
+      responses:
+        '200': { $ref: '#/components/responses/CampaignSuccess' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    patch:
+      tags: [Admin notifications]
+      operationId: updateNotificationCampaign
+      x-required-role: ADMIN
+      description: Updates a draft only and writes a redacted UPDATE audit. Cookie requests require safe origin.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CampaignUpdateInput' } } }
+      responses:
+        '200': { $ref: '#/components/responses/CampaignSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /admin/notifications/{id}/schedule:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Admin notifications]
+      operationId: scheduleNotificationCampaign
+      x-required-role: ADMIN
+      description: Schedules a draft at least 60 seconds after database time and writes a redacted SCHEDULE audit. Provider readiness is not required. Cookie requests require safe origin.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CampaignScheduleInput' } } }
+      responses:
+        '200': { $ref: '#/components/responses/CampaignSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /admin/notifications/{id}/cancel:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Admin notifications]
+      operationId: cancelNotificationCampaign
+      x-required-role: ADMIN
+      description: Cancels a draft/scheduled campaign, cancels pending deliveries, and writes a redacted CANCEL audit. Already-cancelled is an unaudited idempotent success. Any request body is ignored. Cookie requests require safe origin.
+      responses:
+        '200': { $ref: '#/components/responses/CampaignSuccess' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /admin/notifications/{id}/send:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Admin notifications]
+      operationId: queueNotificationCampaign
+      x-required-role: ADMIN
+      description: Requires a ready provider, moves a draft to PROCESSING, and writes a redacted SEND audit. The 202 response means queued, not delivered. Disabled/incomplete provider returns 503 before mutation. Any request body is ignored. Cookie requests require safe origin.
+      responses:
+        '202': { $ref: '#/components/responses/CampaignSuccess' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/ProviderUnavailable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /admin/notifications/{id}/recipients:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Admin notifications]
+      operationId: listNotificationRecipients
+      x-required-role: ADMIN
+      description: Paginated immutable audience/read evidence. The optional status query is accepted by the shared parser but ignored. No side effect or audit event.
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+        - { name: status, in: query, description: Accepted for shared-parser compatibility but ignored., schema: { $ref: '#/components/schemas/NotificationStatus' } }
+      responses:
+        '200': { $ref: '#/components/responses/RecipientListSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /admin/notifications/{id}/deliveries:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Admin notifications]
+      operationId: listNotificationDeliveries
+      x-required-role: ADMIN
+      description: Paginated safe provider evidence. Tokens, receipt IDs/messages, and leases are omitted. The optional status query is accepted by the shared parser but ignored. No side effect or audit event.
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+        - { name: status, in: query, description: Accepted for shared-parser compatibility but ignored., schema: { $ref: '#/components/schemas/NotificationStatus' } }
+      responses:
+        '200': { $ref: '#/components/responses/DeliveryListSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /notifications/process:
+    servers: [{ url: /api/internal, description: Internal job base }]
+    get:
+      tags: [Internal jobs]
+      operationId: processNotificationsCron
+      security: [{ cronBearer: [] }]
+      description: Vercel Cron entrypoint. A disabled/incomplete provider returns zero counts without mutation. Otherwise claims with SKIP LOCKED and leases, materializes audiences once, processes at most five campaigns/500 delivery operations/eight seconds, and writes no admin audits.
+      responses: &notificationCronResponses
+        '200': { $ref: '#/components/responses/NotificationCronSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/CronUnauthorized' }
+        '503': { $ref: '#/components/responses/CronUnavailable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    post:
+      tags: [Internal jobs]
+      operationId: processNotificationsOperational
+      security: [{ cronBearer: [] }]
+      description: Authenticated operational alias with behavior identical to GET. Any request body is ignored.
+      responses: *notificationCronResponses
   /attempts/expire:
     servers: [{ url: /api/internal, description: Internal job base }]
     get:
@@ -1076,6 +1432,11 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    RecipientId:
+      name: recipientId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     OrganSystemIdPath:
       name: organSystemId
       in: path
@@ -1152,6 +1513,288 @@ components:
     Difficulty: { type: string, enum: [EASY, MEDIUM, HARD] }
     AssessmentType: { type: string, enum: [QUIZ, TEST] }
     AttemptStatus: { type: string, enum: [IN_PROGRESS, COMPLETED, AUTO_SUBMITTED, ABANDONED] }
+    FeedbackType: { type: string, enum: [GENERAL, BUG_REPORT, QUESTION_REQUEST, IMPROVEMENT] }
+    FeedbackStatus: { type: string, enum: [NEW, REVIEWED, RESOLVED] }
+    NotificationType: { type: string, enum: [DAILY_STUDY, TEST_REMINDER, ANNOUNCEMENT] }
+    NotificationStatus: { type: string, enum: [DRAFT, SCHEDULED, PROCESSING, SENT, PARTIAL, FAILED, CANCELLED] }
+    NotificationDeliveryStatus: { type: string, enum: [PENDING, TICKETED, SENT, FAILED, CANCELLED] }
+    DevicePlatform: { type: string, enum: [IOS, ANDROID] }
+    Meta:
+      type: object
+      additionalProperties: false
+      required: [apiVersion, capabilities]
+      properties:
+        apiVersion: { type: string, const: v1 }
+        capabilities:
+          type: object
+          additionalProperties: false
+          required: [authentication, storage, notifications]
+          properties:
+            authentication: { type: boolean, const: true }
+            storage: { type: string, const: private }
+            notifications: { type: boolean, const: true, description: Notification APIs are implemented; this does not assert that Expo is enabled or ready. }
+    DeviceTokenInput:
+      type: object
+      additionalProperties: false
+      required: [expoPushToken, platform]
+      properties:
+        expoPushToken: { type: string, maxLength: 256, pattern: '^Expo(?:nent)?PushToken\[[A-Za-z0-9_-]+\]$' }
+        platform: { $ref: '#/components/schemas/DevicePlatform' }
+    DeviceToken:
+      type: object
+      additionalProperties: false
+      required: [id, platform, isActive, lastSeenAt]
+      properties:
+        id: { type: string, format: uuid }
+        platform: { $ref: '#/components/schemas/DevicePlatform' }
+        isActive: { type: boolean }
+        lastSeenAt: { type: string, format: date-time }
+    FeedbackCreateInput:
+      type: object
+      additionalProperties: false
+      required: [type, subject, message]
+      properties:
+        type: { $ref: '#/components/schemas/FeedbackType' }
+        subject: { type: string, minLength: 1, maxLength: 160 }
+        message: { type: string, minLength: 1, maxLength: 5000 }
+    LearnerFeedback:
+      type: object
+      additionalProperties: false
+      required: [id, type, subject, message, status, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/FeedbackType' }
+        subject: { type: string }
+        message: { type: string }
+        status: { $ref: '#/components/schemas/FeedbackStatus' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    SafePerson:
+      type: object
+      additionalProperties: false
+      required: [id, fullName, email, isActive]
+      properties:
+        id: { type: string, format: uuid }
+        fullName: { type: string }
+        email: { type: string, format: email }
+        isActive: { type: boolean }
+    AdminFeedback:
+      allOf:
+        - { $ref: '#/components/schemas/LearnerFeedback' }
+        - type: object
+          required: [adminNotes, reviewedAt, resolvedAt, submitter, reviewer, resolver]
+          properties:
+            adminNotes: { type: [string, 'null'] }
+            reviewedAt: { type: [string, 'null'], format: date-time }
+            resolvedAt: { type: [string, 'null'], format: date-time }
+            submitter: { oneOf: [{ $ref: '#/components/schemas/SafePerson' }, { type: 'null' }] }
+            reviewer: { oneOf: [{ $ref: '#/components/schemas/SafePerson' }, { type: 'null' }] }
+            resolver: { oneOf: [{ $ref: '#/components/schemas/SafePerson' }, { type: 'null' }] }
+    AdminFeedbackUpdateInput:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        adminNotes: { type: [string, 'null'], maxLength: 5000 }
+        status: { type: string, enum: [REVIEWED, RESOLVED] }
+    AdminUserActivityInput:
+      type: object
+      additionalProperties: false
+      required: [isActive]
+      properties: { isActive: { type: boolean } }
+    AdminUser:
+      type: object
+      additionalProperties: false
+      required: [id, fullName, email, avatarUrl, isActive, lastLoginAt, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        fullName: { type: string }
+        email: { type: string, format: email }
+        avatarUrl: { type: [string, 'null'] }
+        isActive: { type: boolean }
+        lastLoginAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    AdminUserDetail:
+      allOf:
+        - { $ref: '#/components/schemas/AdminUser' }
+        - type: object
+          required: [activity]
+          properties:
+            activity:
+              type: object
+              additionalProperties: false
+              required: [attempts, submittedAttempts, feedback, lastAttemptAt]
+              properties:
+                attempts: { type: integer, minimum: 0 }
+                submittedAttempts: { type: integer, minimum: 0 }
+                feedback: { type: integer, minimum: 0 }
+                lastAttemptAt: { type: [string, 'null'], format: date-time }
+    AdminUserSummary:
+      type: object
+      additionalProperties: false
+      required: [total, active, inactive, joined30Days]
+      properties:
+        total: { type: integer, minimum: 0 }
+        active: { type: integer, minimum: 0 }
+        inactive: { type: integer, minimum: 0 }
+        joined30Days: { type: integer, minimum: 0 }
+    NotificationAudience:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [type]
+          properties: { type: { const: ALL_ACTIVE_USERS } }
+        - type: object
+          additionalProperties: false
+          required: [type, userIds]
+          properties:
+            type: { const: SELECTED_USERS }
+            userIds: { type: array, minItems: 1, maxItems: 500, uniqueItems: true, items: { type: string, format: uuid } }
+    CampaignInput:
+      type: object
+      additionalProperties: false
+      required: [type, title, message, target]
+      properties:
+        type: { $ref: '#/components/schemas/NotificationType' }
+        title: { type: string, minLength: 1, maxLength: 100 }
+        message: { type: string, minLength: 1, maxLength: 1000 }
+        target: { $ref: '#/components/schemas/NotificationAudience' }
+    CampaignUpdateInput:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        type: { $ref: '#/components/schemas/NotificationType' }
+        title: { type: string, minLength: 1, maxLength: 100 }
+        message: { type: string, minLength: 1, maxLength: 1000 }
+        target: { $ref: '#/components/schemas/NotificationAudience' }
+    CampaignScheduleInput:
+      type: object
+      additionalProperties: false
+      required: [scheduledAt]
+      properties: { scheduledAt: { type: string, format: date-time, description: Offset required; must be at least 60 seconds after database time. } }
+    Campaign:
+      type: object
+      additionalProperties: false
+      required: [id, type, title, message, target, scheduledAt, sentAt, status, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/NotificationType' }
+        title: { type: string }
+        message: { type: string }
+        target: { $ref: '#/components/schemas/NotificationAudience' }
+        scheduledAt: { type: [string, 'null'], format: date-time }
+        sentAt: { type: [string, 'null'], format: date-time }
+        status: { $ref: '#/components/schemas/NotificationStatus' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    NotificationRecipient:
+      type: object
+      additionalProperties: false
+      required: [id, userId, readAt, createdAt, _count]
+      properties:
+        id: { type: string, format: uuid }
+        userId: { type: string, format: uuid }
+        readAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+        _count:
+          type: object
+          additionalProperties: false
+          required: [deliveries]
+          properties: { deliveries: { type: integer, minimum: 0 } }
+    NotificationDelivery:
+      type: object
+      additionalProperties: false
+      required: [id, status, attemptCount, receiptAttemptCount, providerErrorCode, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/NotificationDeliveryStatus' }
+        attemptCount: { type: integer, minimum: 0, maximum: 5 }
+        receiptAttemptCount: { type: integer, minimum: 0, maximum: 20 }
+        providerErrorCode: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    LearnerNotification:
+      type: object
+      additionalProperties: false
+      required: [id, type, title, message, sentAt, readAt, createdAt]
+      properties:
+        id: { type: string, format: uuid, description: NotificationRecipient ID used by the read route. }
+        type: { $ref: '#/components/schemas/NotificationType' }
+        title: { type: string }
+        message: { type: string }
+        sentAt: { type: [string, 'null'], format: date-time }
+        readAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+    ProviderStatus:
+      type: object
+      additionalProperties: false
+      required: [enabled, ready]
+      properties:
+        enabled: { type: boolean }
+        ready: { type: boolean }
+    AdminDashboard:
+      type: object
+      required: [generatedAt, range, counts, accuracy, attemptsTrend, contentReadinessCriteria, contentCompleteness, recentRegistrations, recentFeedback, recentAudit]
+      properties:
+        generatedAt: { type: string, format: date-time }
+        range:
+          type: object
+          required: [days, start, endExclusive]
+          properties:
+            days: { type: integer, enum: [7, 30, 90] }
+            start: { type: string, format: date-time }
+            endExclusive: { type: string, format: date-time }
+        counts:
+          type: object
+          description: All-time database-backed counts; fields are totalUsers, activeUsers, organSystems, topics, flashcards, questions, publishedLessons, quizQuestions, testQuestions, newFeedback, completedQuizzes, and completedTests.
+          additionalProperties: { type: integer, minimum: 0 }
+        accuracy:
+          type: object
+          required: [quiz, test]
+          properties:
+            quiz: { $ref: '#/components/schemas/ProgressMetric' }
+            test: { $ref: '#/components/schemas/ProgressMetric' }
+        attemptsTrend:
+          type: array
+          minItems: 7
+          maxItems: 90
+          items:
+            type: object
+            required: [date, quizAttempts, testAttempts]
+            properties:
+              date: { type: string, format: date }
+              quizAttempts: { type: integer, minimum: 0 }
+              testAttempts: { type: integer, minimum: 0 }
+        contentReadinessCriteria:
+          type: object
+          description: Denominator is NON_ARCHIVED_TOPICS; completeTopicRequires explicitly lists published hierarchy plus eligible lesson, flashcard, quiz, and test requirements.
+        contentCompleteness:
+          type: array
+          items:
+            type: object
+            required: [id, name, displayOrder, completeTopics, lessons, flashcards, quizQuestions, testQuestions]
+            properties:
+              id: { type: string, format: uuid }
+              name: { type: string }
+              displayOrder: { type: integer }
+              completeTopics: { $ref: '#/components/schemas/ProgressMetric' }
+              lessons: { $ref: '#/components/schemas/ProgressMetric' }
+              flashcards: { $ref: '#/components/schemas/ProgressMetric' }
+              quizQuestions: { $ref: '#/components/schemas/ProgressMetric' }
+              testQuestions: { $ref: '#/components/schemas/ProgressMetric' }
+        recentRegistrations: { type: array, maxItems: 5, items: { type: object } }
+        recentFeedback: { type: array, maxItems: 5, items: { type: object } }
+        recentAudit: { type: array, maxItems: 10, items: { type: object }, description: "Redacted projection without snapshots, email, IP hash, or user agent." }
+    NotificationCronResult:
+      type: object
+      additionalProperties: false
+      required: [campaigns, deliveries, finalized]
+      properties:
+        campaigns: { type: integer, minimum: 0, maximum: 5 }
+        deliveries: { type: integer, minimum: 0, maximum: 500 }
+        finalized: { type: integer, minimum: 0 }
     StartAssessmentInput:
       type: object
       additionalProperties: false
@@ -1175,7 +1818,7 @@ components:
       additionalProperties: false
       required: [answeredOptionKey]
       properties:
-        answeredOptionKey: { type: [string, 'null'], format: uuid, description: A key from this attempt question's shuffled snapshot options, or null to clear. }
+        answeredOptionKey: { type: [string, 'null'], format: uuid, description: "A key from this attempt question's shuffled snapshot options, or null to clear." }
         timeSpentSeconds: { type: integer, minimum: 0, maximum: 86400, description: Monotonic telemetry; values below the stored value do not decrease it. }
     AttemptAnswerReceipt:
       type: object
@@ -2020,6 +2663,148 @@ components:
         success: { type: boolean, const: true }
         data: { $ref: '#/components/schemas/CronResult' }
         meta: { $ref: '#/components/schemas/RequestMeta' }
+    MetaEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/Meta' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    DeviceTokenEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/DeviceToken' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    DeviceTokenDeactivationEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data:
+          type: object
+          additionalProperties: false
+          required: [deactivated]
+          properties: { deactivated: { type: boolean, const: true } }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    LearnerFeedbackEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/LearnerFeedback' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    LearnerFeedbackListEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { type: array, items: { $ref: '#/components/schemas/LearnerFeedback' } }
+        meta: { $ref: '#/components/schemas/ListMeta' }
+    AdminFeedbackEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/AdminFeedback' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    AdminFeedbackListEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { type: array, items: { $ref: '#/components/schemas/AdminFeedback' } }
+        meta: { $ref: '#/components/schemas/ListMeta' }
+    AdminUserEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/AdminUser' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    AdminUserDetailEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/AdminUserDetail' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    AdminUserListEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { type: array, items: { $ref: '#/components/schemas/AdminUser' } }
+        meta:
+          allOf:
+            - { $ref: '#/components/schemas/ListMeta' }
+            - type: object
+              required: [summary]
+              properties: { summary: { $ref: '#/components/schemas/AdminUserSummary' } }
+    AdminDashboardEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/AdminDashboard' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    CampaignEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/Campaign' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    CampaignListEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { type: array, items: { $ref: '#/components/schemas/Campaign' } }
+        meta: { $ref: '#/components/schemas/ListMeta' }
+    RecipientListEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { type: array, items: { $ref: '#/components/schemas/NotificationRecipient' } }
+        meta: { $ref: '#/components/schemas/ListMeta' }
+    DeliveryListEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { type: array, items: { $ref: '#/components/schemas/NotificationDelivery' } }
+        meta: { $ref: '#/components/schemas/ListMeta' }
+    LearnerNotificationEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/LearnerNotification' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    LearnerNotificationListEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { type: array, items: { $ref: '#/components/schemas/LearnerNotification' } }
+        meta: { $ref: '#/components/schemas/ListMeta' }
+    ProviderStatusEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/ProviderStatus' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    NotificationCronEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/NotificationCronResult' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
     RequestMeta:
       type: object
       additionalProperties: false
@@ -2033,6 +2818,63 @@ components:
         requestId: { type: string, format: uuid }
         pagination: { $ref: '#/components/schemas/Pagination' }
   responses:
+    MetaSuccess:
+      description: API version and safe capability flags
+      content: { application/json: { schema: { $ref: '#/components/schemas/MetaEnvelope' } } }
+    DeviceTokenSuccess:
+      description: Safe device registration metadata; token text is omitted
+      content: { application/json: { schema: { $ref: '#/components/schemas/DeviceTokenEnvelope' } } }
+    DeviceTokenDeactivationSuccess:
+      description: Owned device token deactivation receipt
+      content: { application/json: { schema: { $ref: '#/components/schemas/DeviceTokenDeactivationEnvelope' } } }
+    LearnerFeedbackSuccess:
+      description: Learner-safe feedback without internal notes or admin attribution
+      content: { application/json: { schema: { $ref: '#/components/schemas/LearnerFeedbackEnvelope' } } }
+    LearnerFeedbackListSuccess:
+      description: Paginated owner-scoped learner-safe feedback
+      content: { application/json: { schema: { $ref: '#/components/schemas/LearnerFeedbackListEnvelope' } } }
+    AdminFeedbackSuccess:
+      description: Admin feedback including internal notes and safe attribution summaries
+      content: { application/json: { schema: { $ref: '#/components/schemas/AdminFeedbackEnvelope' } } }
+    AdminFeedbackListSuccess:
+      description: Paginated admin feedback
+      content: { application/json: { schema: { $ref: '#/components/schemas/AdminFeedbackListEnvelope' } } }
+    AdminUserSuccess:
+      description: Safe learner list DTO
+      content: { application/json: { schema: { $ref: '#/components/schemas/AdminUserEnvelope' } } }
+    AdminUserDetailSuccess:
+      description: Safe learner detail with activity counts
+      content: { application/json: { schema: { $ref: '#/components/schemas/AdminUserDetailEnvelope' } } }
+    AdminUserListSuccess:
+      description: Paginated learner-only directory with unfiltered summary counts
+      content: { application/json: { schema: { $ref: '#/components/schemas/AdminUserListEnvelope' } } }
+    AdminDashboardSuccess:
+      description: Database-backed admin dashboard aggregates
+      content: { application/json: { schema: { $ref: '#/components/schemas/AdminDashboardEnvelope' } } }
+    CampaignSuccess:
+      description: Safe campaign DTO; provider credentials and worker leases are omitted
+      content: { application/json: { schema: { $ref: '#/components/schemas/CampaignEnvelope' } } }
+    CampaignListSuccess:
+      description: Paginated campaigns
+      content: { application/json: { schema: { $ref: '#/components/schemas/CampaignListEnvelope' } } }
+    RecipientListSuccess:
+      description: Paginated recipient/read evidence without device tokens
+      content: { application/json: { schema: { $ref: '#/components/schemas/RecipientListEnvelope' } } }
+    DeliveryListSuccess:
+      description: Paginated delivery evidence without token snapshots, receipt IDs/messages, or leases
+      content: { application/json: { schema: { $ref: '#/components/schemas/DeliveryListEnvelope' } } }
+    LearnerNotificationSuccess:
+      description: Owner-scoped learner notification/read DTO
+      content: { application/json: { schema: { $ref: '#/components/schemas/LearnerNotificationEnvelope' } } }
+    LearnerNotificationListSuccess:
+      description: Paginated owner-scoped notifications from final SENT/PARTIAL campaigns
+      content: { application/json: { schema: { $ref: '#/components/schemas/LearnerNotificationListEnvelope' } } }
+    ProviderStatusSuccess:
+      description: Safe provider enabled/readiness booleans
+      content: { application/json: { schema: { $ref: '#/components/schemas/ProviderStatusEnvelope' } } }
+    NotificationCronSuccess:
+      description: Bounded notification worker counters; zero counts are returned without mutation when the provider is disabled or incomplete
+      content: { application/json: { schema: { $ref: '#/components/schemas/NotificationCronEnvelope' } } }
     Success:
       description: Successful operation
       content:
@@ -2174,6 +3016,9 @@ components:
       content: *errorContent
     CronUnavailable:
       description: Scheduled processing is disabled because CRON_SECRET is not configured
+      content: *errorContent
+    ProviderUnavailable:
+      description: Expo sending is disabled or incompletely configured; send-now performs no campaign mutation
       content: *errorContent
     CronUnauthorized:
       description: Missing or invalid CRON_SECRET bearer credential

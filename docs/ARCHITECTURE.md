@@ -2,8 +2,9 @@
 
 ## Status
 
-Phases 0-5 are implemented. Phase 5 application code and migration are complete; the
-deployment configuration remains gated on a valid `CRON_SECRET`. This document
+Phases 0-6 are implemented and all five migrations are current. Deployment configuration
+remains gated on a valid `CRON_SECRET`; Expo delivery may also be disabled or
+misconfigured. This document
 describes current behavior; future work is called out explicitly.
 `MASTER_BUILD_PROMPT.md` is the authoritative product scope because no separate product
 SRS is present.
@@ -54,7 +55,7 @@ privileged server-only Auth operations.
 - Cookie-authenticated mutations require a safe same-origin `Origin`/`Host` check.
   Bearer requests do not depend on browser Origin headers.
 
-## Feature organization through Phase 5
+## Feature organization through Phase 6
 
 ```text
 app/(admin)/                    protected Server Component pages and server actions
@@ -62,6 +63,7 @@ app/api/v1/admin/              admin resource, media, and audit handlers
 app/api/v1/{organ-systems,topics,media}/  authenticated published-content handlers
 app/api/v1/{assessments,attempts,progress,dashboard}/ learner assessment/progress handlers
 app/api/internal/attempts/expire/ secret-authenticated GET/POST expiry worker
+app/api/internal/notifications/process/ secret-authenticated GET/POST delivery worker
 components/phase3/             list cards, forms, statuses, and action feedback
 components/{flashcards,questions,admin}/ Phase 4 forms, previews, lists, bulk actions
 features/content/              schemas, DTOs, lifecycle rules, services, handlers
@@ -71,6 +73,10 @@ features/flashcards/           admin/public/progress schemas, DTOs, services, ha
 features/questions/            admin services plus internal assessment selection
 features/assessments/          snapshots, attempt lifecycle, finalization, admin reads
 features/progress/             lesson progress, authoritative reports, cached projection
+features/admin-dashboard/      real aggregate dashboard queries and DTOs
+features/users/                learner directory, detail, and active-state management
+features/feedback/             learner submission/history and admin triage
+features/notifications/        tokens, campaigns, provider adapter, delivery worker
 lib/api/                       envelopes, admin guard, centralized error mapping
 lib/auth/                      cookie/bearer identity and page guards
 ```
@@ -231,8 +237,80 @@ both return at most five, so small eligible sets can overlap. Ties prefer more s
 then topic ID. Historical snapshot titles are retained in those rankings.
 
 Admin reporting consists of paginated attempt list/detail APIs and pages plus a narrow
-`/users/{id}` progress page/API. It is read-only and does not yet provide the Phase 6
-general user list or account-management workflow.
+`/users/{id}` progress API. Phase 6 extends this with a learner-only directory, safe
+detail/activity data, and activate/deactivate operations; it never changes roles or
+deletes history.
+
+## Phase 6 dashboard, users, feedback, and notifications
+
+### Admin dashboard
+
+`GET /api/v1/admin/dashboard` and `/dashboard` share one repeatable-read aggregation.
+`days=7|30|90` (default 30) controls a gap-filled UTC daily quiz/test attempt trend. The
+other counts and question-weighted quiz/test accuracy are all-time. Accuracy divides
+correct immutable submitted snapshots by all submitted snapshot questions, including
+unanswered questions.
+
+Content completeness is grouped by non-archived organ system and uses non-archived
+topics as each metric denominator. A complete topic requires a published active system,
+published topic, at least one eligible published lesson and flashcard, and at least one
+eligible active published quiz and test question with a valid option aggregate and
+unarchived media. The DTO states these criteria explicitly. Recent data is bounded to
+five learner registrations, five feedback submissions, and ten audit events; the audit
+projection excludes snapshots, email, user agent, and IP hash.
+
+### Learner account management and feedback
+
+`features/users` always filters `Profile.role = USER`. Lists support search, active
+state, creation bounds, stable sorting, pagination, and unfiltered active/inactive/new-
+30-day summary counts. Detail adds attempt/submitted-attempt/feedback counts and latest
+attempt time. Activate/deactivate locks the profile, is idempotent, and audits only a
+real state change. Deactivation preserves every profile/history row, disables active
+device tokens, and cancels only `PENDING` deliveries; activation does not reactivate old
+tokens.
+
+Active learners submit strict typed feedback at a process-local limit of five requests
+per minute and can list only their own rows. Learner DTOs omit `adminNotes`, reviewer,
+resolver, and attribution timestamps. Admin list/detail DTOs include those fields and
+support review/resolve transitions. Feedback audit snapshots contain status/timestamps
+and an `adminNotesChanged` boolean, never the learner message, notes text, or submitter
+PII. No-op updates create no audit event.
+
+### Notification lifecycle and evidence
+
+The notification environment schema is isolated from shared runtime validation.
+`EXPO_PUSH_ENABLED` defaults false and an access token is optional; provider status
+reports only `enabled` and `ready`. Draft creation/update and scheduling remain usable
+without a provider. Send-now checks readiness before its transaction, so a disabled or
+misconfigured provider returns `503` without campaign mutation. The internal worker also
+returns zero counts without mutation when no provider is ready.
+
+Drafts target all active learners or 1-500 unique selected active learner IDs. Scheduling
+uses database time and requires at least 60 seconds' notice. Send-now returns `202` after
+moving a draft to `PROCESSING`; it does not call that campaign delivered. Cancellation
+is idempotent for `CANCELLED`, otherwise allowed only from `DRAFT`/`SCHEDULED`, and
+cancels pending deliveries. Campaign mutations append redacted audits containing type,
+status, target type/count, and recipient count—not title, message, user IDs, tokens, or
+provider credentials.
+
+The worker claims due campaigns and deliveries with `FOR UPDATE SKIP LOCKED` and opaque
+lease tokens. The audience and currently active device-token snapshots are materialized
+exactly once; recipient and delivery identity/snapshots are database-immutable. Provider
+ticket acceptance records `TICKETED`. Only a successful Expo receipt records delivery
+`SENT`. Receipt errors become `FAILED`; `DeviceNotRegistered` also disables the token.
+Transient sends retry at 30s, 60s, 5m, 15m, and 60m, for at most five attempts. Tickets
+are polled after 15 seconds and fail as `RECEIPT_UNAVAILABLE` after 20 polls or 23 hours.
+
+Campaigns remain `PROCESSING` while any delivery is pending/ticketed, then become `SENT`
+only when every recipient has a receipt-confirmed delivery, `PARTIAL` when some but not
+all do, or `FAILED` when none do (including an audience with no delivery). The worker is
+bounded to five campaigns, 500 delivery operations, and eight seconds per invocation.
+An unavoidable at-least-once window exists if the process crashes after Expo accepts a
+send but before the ticket is persisted.
+
+Learner notification lists expose only recipients for `SENT`/`PARTIAL` campaigns and
+mark-read is owner-scoped and idempotent. Device tokens and immutable token snapshots are
+never returned by campaign, delivery, learner, or provider-status DTOs.
 
 ## Core content data flow
 
@@ -370,6 +448,15 @@ immutable attempt scope/timing and terminal results, immutable snapshot columns,
 answer changes only while in progress, child insertion only while in progress, and no
 deletion of attempt history (or update/delete of attempt-topic links).
 
+Phase 6 deployment is intentionally split into two migrations because PostgreSQL cannot
+use a newly added enum label in later statements of the same transaction. Migration
+`20260714120000_add_phase6_feedback_notification_foundation` performs empty notification-
+table preflights and adds `PROCESSING`, `PARTIAL`, `FAILED`, and `TICKETED` enum labels.
+After that commits, `20260714121000_add_phase6_feedback_notification_structure` repeats
+the preflight and adds feedback resolution attribution, campaign/delivery leases,
+retry/receipt evidence, indexes, consistency checks, foreign keys, and immutable
+recipient/delivery history triggers. Both are deployed; all five migrations are current.
+
 ## Pagination, filtering, and sorting
 
 Admin lists default to page 1 and page size 20 and cap page size at 100. Content,
@@ -381,6 +468,10 @@ entity type/ID, actor, and inclusive ISO date bounds with fixed newest-first sor
 Learner attempts use type/status/system filters with fixed newest-first ordering. Admin
 attempts additionally filter learner search/ID, snapshot topic, inclusive started-at
 bounds, and sort by started/completed time, score, or duration with ID tie-breaking.
+Phase 6 users additionally filter `q`, `isActive`, and inclusive `createdFrom`/
+`createdTo`, sorting by creation/name/email/last login. Feedback filters `q`, type,
+status, user, and creation bounds and sorts by creation/status/type. Campaigns filter
+status with newest-first ordering; recipient and delivery evidence lists are paginated.
 
 List API metadata is currently nested as:
 
@@ -403,6 +494,13 @@ not append `AuditLog` rows. Their history is represented by owned attempt/progre
 and the assessment migration's immutability/lifecycle guards. Admin Phase 5 reporting
 routes are read-only.
 
+Phase 6 audits real learner activation/deactivation, feedback admin changes, and campaign
+create/update/schedule/cancel/send transitions. User snapshots contain only active state;
+feedback snapshots omit message, note text, and PII; notification snapshots omit message,
+title, selected IDs, device tokens, provider IDs, and credentials. Learner feedback
+submission/read state and worker delivery transitions are operational history, not admin
+audit events.
+
 ## Known limitations
 
 - The lesson editor is a schema-validated JSON textarea. It does not yet provide
@@ -416,7 +514,8 @@ routes are read-only.
   isolated `anatolearn_phase5_test` schema. It verifies deployed guards, source snapshot
   stability, and multi-client concurrent finalization. The run exposed Prisma raw-query
   `P2010`/SQLSTATE `40001` serialization errors, which are now retried with `P2034` and
-  PostgreSQL deadlocks. The suite remains conditional in ordinary local runs.
+  PostgreSQL deadlocks (`40P01`). The suite remains conditional in ordinary local runs
+  without a distinct `TEST_DATABASE_URL`.
 - Supabase provider/auth and signed-URL integration is mocked. Authenticated full CRUD
   and full learner assessment browser coverage is absent.
 - Cron finalization requires a deployment `CRON_SECRET` of at least 32 characters and
@@ -424,11 +523,17 @@ routes are read-only.
   runtime startup, and the production build passes without a `CRON_SECRET` override, but
   the current environment check intentionally fails on the invalid configured secret.
   Phase 5 is therefore implementation-complete but not configuration-complete.
-- Rate limiting is process-local and development-only; production requires a shared
-  store.
+- Feedback and existing auth rate limiting is process-local; production requires a
+  distributed limiter.
+- Expo provider behavior is unit-tested at the adapter boundary but has not been verified
+  with real credentials/devices. The provider can be disabled or misconfigured.
+- Notification-worker lease behavior lacks a real PostgreSQL multi-worker concurrency
+  test. A provider-acceptance/persistence crash can cause at-least-once duplicate sends.
+- Authenticated Phase 6 Playwright flows have not been run. The latest prior anonymous
+  suite result remains 3 passed and 1 skipped.
 
 ## Next phase
 
-Phase 6 implements the real admin dashboard, feedback, and notifications per the
-authoritative plan. Existing device-token routes predate that phase; campaign/delivery
-behavior and the safe provider adapter remain future work.
+Phase 7 hardens and delivers the implemented system: real Expo and scheduler verification,
+worker database concurrency tests, authenticated Phase 6 Playwright coverage, a
+distributed limiter, and the remaining media-picker/visual lesson-editor UX gaps.

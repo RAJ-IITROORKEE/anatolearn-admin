@@ -2,7 +2,7 @@
 
 ## Current contract
 
-This document covers implemented routes through Phase 5. Routes assigned to later
+This document covers implemented routes through Phase 6. Routes assigned to later
 phases are not part of the current API. The machine-readable equivalent is
 `docs/openapi.yaml`.
 
@@ -48,8 +48,14 @@ Missing/invalid/inactive identity returns `401`. An authenticated non-admin rece
 | `GET /api/v1/me` | User | Authenticated profile DTO |
 | `PATCH /api/v1/me` | User | Update allowlisted profile fields |
 | `POST /api/v1/me/change-password` | User, rate limited | Delegates password update to Supabase |
-| `POST /api/v1/me/device-tokens` | User | Upsert owned Expo token/platform; `201` |
-| `DELETE /api/v1/me/device-tokens/{id}` | Owner | Idempotently deactivate an owned token; inaccessible ID is `404` |
+| `POST /api/v1/me/device-tokens` | User | Strict Expo token/platform upsert; `201`; DTO omits token text |
+| `DELETE /api/v1/me/device-tokens/{id}` | Owner | Deactivate an owned token and cancel its pending deliveries; inaccessible ID is `404` |
+
+Device registration accepts exactly `{ "expoPushToken": "ExpoPushToken[...]", "platform":
+"IOS"|"ANDROID" }`. Re-registering a token moves it to the current active owner; pending
+deliveries for a previous owner are cancelled first. Token text is never returned.
+The current meta payload reports `capabilities.notifications: true` because the Phase 6
+API surface exists; it does not claim that the optional Expo provider is enabled or ready.
 
 ## Published learning-content routes
 
@@ -484,6 +490,158 @@ submission they still hide scores, correct option keys, correctness, and explana
 The user-progress profile is limited to ID, name, email, avatar URL, active state,
 creation time, and last login; it does not expose role or auth credentials.
 
+## Phase 6 admin dashboard API
+
+`GET /api/v1/admin/dashboard` requires **Admin**. Its strict query accepts only `days=7`,
+`30`, or `90` (default `30`); duplicate or unknown parameters return `400`. Success is a
+non-paginated dashboard DTO containing:
+
+- `generatedAt` and UTC `[start,endExclusive)` range;
+- learner, non-archived content, published lesson, question-type, new-feedback, and
+  submitted-attempt counts;
+- all-time question-weighted quiz/test `{ numerator, denominator, percentage }` accuracy;
+- one gap-filled UTC trend row per selected day with quiz/test submitted-attempt counts;
+- per-system readiness metrics using non-archived topics as denominator and an explicit
+  `contentReadinessCriteria` contract;
+- five recent learner registrations, five recent feedback rows, and ten safe recent audit
+  rows. Recent audit rows contain no snapshots, email, IP hash, or user agent.
+
+The range changes the trend only; counts and accuracy are all-time. `401`, `403`, and
+safe unexpected `500` responses use the shared envelope. This read has no side effects
+and writes no audit row.
+
+## Phase 6 admin users API
+
+All routes require **Admin** and operate only on `Profile.role=USER`; administrator IDs
+are indistinguishable from absent learner IDs as `404`.
+
+| Method and path | Input and success |
+| --- | --- |
+| `GET /api/v1/admin/users` | Paginated learner DTOs plus `meta.summary`; `200` |
+| `GET /api/v1/admin/users/{id}` | Safe learner detail and activity counts; `200` |
+| `PATCH /api/v1/admin/users/{id}` | Exact `{ "isActive": boolean }`; updated list DTO; `200` |
+
+List query fields are `page`, `pageSize`, trimmed `q` (name/email, max 200),
+`isActive=true|false`, offset-bearing `createdFrom`/`createdTo`, `sortBy=createdAt|fullName|email|lastLoginAt`,
+and `sortOrder=asc|desc`. Defaults are page 1, page size 20, `createdAt desc`; ID is the
+same-direction tie-breaker and date bounds are inclusive. `createdFrom` must not exceed
+`createdTo`. `meta.summary` is unfiltered `{ total, active, inactive, joined30Days }`.
+
+List/detail DTOs expose ID, name, email, avatar URL, active state, last login, and created/
+updated timestamps—never role, credentials, device tokens, or notification token
+snapshots. Detail additionally returns `{ attempts, submittedAttempts, feedback,
+lastAttemptAt }`.
+
+Activity changes lock the learner. A real deactivation preserves all history, disables
+active device tokens, cancels their `PENDING` deliveries, and appends a redacted
+`DEACTIVATE` audit; activation appends `ACTIVATE` but does not reactivate old tokens.
+Replaying the current state is a no-op without another audit. Errors are `400` invalid
+query/body/UUID, `401`, `403` (including unsafe cookie origin), `404`, or safe `500`.
+
+## Phase 6 feedback APIs
+
+| Method and path | Access | Input and success |
+| --- | --- | --- |
+| `POST /api/v1/feedback` | User, rate limited | Strict create; learner DTO; `201` |
+| `GET /api/v1/feedback/mine` | User | Paginated owned learner DTOs; `200` |
+| `GET /api/v1/admin/feedback` | Admin | Paginated admin DTOs; `200` |
+| `GET /api/v1/admin/feedback/{id}` | Admin | Full admin DTO; `200` |
+| `PATCH /api/v1/admin/feedback/{id}` | Admin | Review/resolve and/or notes; `200` |
+
+Create accepts `type=GENERAL|BUG_REPORT|QUESTION_REQUEST|IMPROVEMENT`, a trimmed subject
+of 1-160 characters, and a trimmed message of 1-5000. Ownership comes from verified
+identity. The process-local limit is five attempts per user per 60 seconds; exhaustion
+returns `429 RATE_LIMITED` and `Retry-After: 60`. This is not a distributed production
+limit.
+
+`feedback/mine` accepts standard pagination plus optional `type` and `status`. It sorts
+newest first and exposes only `{ id,type,subject,message,status,createdAt,updatedAt }`.
+Internal notes and review/resolve attribution are never in learner DTOs.
+
+The admin list additionally accepts trimmed `q` (subject, message, submitter name/email),
+`userId`, inclusive `createdFrom`/`createdTo`, `sortBy=createdAt|status|type`, and
+`sortOrder`; ID is a stable tie-breaker. Admin DTOs add `adminNotes`, review/resolve
+timestamps, and safe submitter/reviewer/resolver profile summaries.
+
+Admin update is strict and non-empty: nullable trimmed `adminNotes` up to 5000 and/or
+`status=REVIEWED|RESOLVED`. Domain transitions establish reviewer before resolver and do
+not return to `NEW`. Real changes append `UPDATE`, `REVIEW`, or `RESOLVE` audits. Audit
+snapshots contain only status, attribution timestamps, and whether notes changed—not
+message text, notes text, or user PII. No-op updates are not audited. Common errors are
+`400`, `401`, `403`, `404`, invalid-state `409`, `429` on submit, and safe `500`.
+
+## Phase 6 notification APIs
+
+### Campaign administration
+
+All admin reads require **Admin**; mutations also require safe origin for cookie mode.
+
+| Method and path | Input and success |
+| --- | --- |
+| `GET /api/v1/admin/notifications` | `page`, `pageSize`, optional campaign `status`; newest first |
+| `POST /api/v1/admin/notifications` | Strict draft create; `201` |
+| `GET /api/v1/admin/notifications/{id}` | Campaign DTO; `200` |
+| `PATCH /api/v1/admin/notifications/{id}` | Non-empty partial draft update; `200` |
+| `POST /api/v1/admin/notifications/{id}/schedule` | Exact `{ "scheduledAt": offset-date-time }`; `200` |
+| `POST /api/v1/admin/notifications/{id}/cancel` | Body is not parsed; idempotent when already cancelled; `200` |
+| `POST /api/v1/admin/notifications/{id}/send` | Body is not parsed; queue processing; `202` |
+| `GET /api/v1/admin/notifications/{id}/recipients` | Paginated recipient/read/delivery-count evidence |
+| `GET /api/v1/admin/notifications/{id}/deliveries` | Paginated safe delivery evidence |
+| `GET /api/v1/admin/notifications/provider-status` | `{ enabled, ready }`; no credential detail |
+
+Create requires `type=DAILY_STUDY|TEST_REMINDER|ANNOUNCEMENT`, trimmed title 1-100,
+message 1-1000, and target `{ "type":"ALL_ACTIVE_USERS" }` or
+`{ "type":"SELECTED_USERS", "userIds":[1..500 unique UUIDs] }`. Selected IDs must all
+be active learners. Patch accepts a non-empty subset but only while `DRAFT`. Campaign
+list status is `DRAFT|SCHEDULED|PROCESSING|SENT|PARTIAL|FAILED|CANCELLED`.
+
+Scheduling is draft-only and uses database time; it must be at least 60 seconds ahead
+or returns `422 SCHEDULE_TOO_SOON`. Cancellation is allowed only for draft/scheduled
+campaigns and cancels any pending deliveries. Send is draft-only and first requires a
+ready provider. If Expo is disabled or lacks a token, it returns `503
+PROVIDER_UNAVAILABLE` before mutation. A successful `202` means **queued**, not sent.
+
+Campaign DTOs expose ID, type, title, message, target, scheduled/sent timestamps, status,
+and created/updated timestamps. Recipient DTOs expose recipient/user IDs, read time,
+created time, and delivery count. Delivery DTOs expose ID, status, send/receipt attempt
+counts, safe provider error code, and timestamps. No API returns device token text,
+token snapshots, provider receipt IDs/messages, leases, processing tokens, or provider
+credentials.
+
+Create/update/schedule/cancel/send append campaign audits in the same transaction. Audit
+snapshots include campaign type/status, target type/count, and materialized recipient
+count; they omit title/message, selected IDs, tokens, receipt/provider data, and secrets.
+Common errors are `400`, `401`, `403`, `404`, `409 INVALID_STATUS`, `422
+INVALID_AUDIENCE`/`SCHEDULE_TOO_SOON`, `503 PROVIDER_UNAVAILABLE`, and safe `500`.
+
+### Learner notifications
+
+| Method and path | Access | Behavior |
+| --- | --- | --- |
+| `GET /api/v1/notifications` | User | Paginated owned recipients for `SENT`/`PARTIAL` campaigns |
+| `POST /api/v1/notifications/{recipientId}/read` | Owner | Idempotently set read time; `200` |
+
+The list accepts `page`, `pageSize`, and an optional campaign `status`. Because it reuses
+the campaign list parser, `status` is validated but currently ignored for learner,
+recipient-evidence, and delivery-evidence lists; unknown keys still return `400`. The
+learner list sorts newest first and returns recipient ID,
+type, title, message, campaign sent time, read time, and recipient creation time. The read
+route uses the recipient ID, derives owner from identity, requires safe cookie origin,
+does not parse its request body, and returns the same `404` for absent, another user's,
+or non-final campaign recipients.
+Read state is operational history and is not added to `AuditLog`.
+
+### Provider evidence semantics
+
+Provider ticket acceptance is `TICKETED`; only a successful receipt is `SENT`. Campaigns
+remain `PROCESSING` while pending/ticketed work exists, then finalize `SENT` when every
+recipient has a receipt-confirmed delivery, `PARTIAL` when some but not all do, or
+`FAILED` when none do. Audience/token materialization happens once, so later audience or
+token changes do not rewrite delivery history. Processing uses leases, five send
+attempts with bounded backoff, and receipt failure after 20 polls or 23 hours. A crash
+after provider acceptance but before persistence leaves an unavoidable at-least-once
+duplicate-send window.
+
 ## Internal attempt-expiry job
 
 `GET` and `POST /api/internal/attempts/expire` are outside `/api/v1`. They require
@@ -496,6 +654,21 @@ SKIP LOCKED`. One invocation runs at most 10 batches and stops after its 8-secon
 or a short batch. `vercel.json` schedules GET every minute (`* * * * *`); POST is kept
 for authenticated operational invocation. Learner/admin reads still perform bounded
 lazy expiry, so correctness does not depend solely on the cron schedule.
+
+## Internal notification job
+
+`GET` and `POST /api/internal/notifications/process` use the same exact bearer
+`CRON_SECRET` contract and shared error behavior as attempt expiry. A ready Expo provider
+processes at most five campaigns, 500 delivery operations, and eight seconds, returning
+`{ campaigns, deliveries, finalized }`. It claims due campaigns/deliveries with
+`FOR UPDATE SKIP LOCKED`, uses opaque expiring leases, materializes each audience once,
+sends batches of at most 100, and polls tickets no sooner than 15 seconds.
+
+If Expo is disabled or incompletely configured, an authorized call returns zero counts
+with `200` and performs no campaign mutation. Missing cron configuration returns `503`,
+wrong credentials `401`, invalid cron configuration a safe `400`, and unexpected worker/
+provider failures a safe `500`. `vercel.json` schedules GET every minute; POST is an
+equivalent authenticated operational trigger. Worker state changes are not admin audits.
 
 ## Admin media APIs
 
@@ -561,7 +734,7 @@ Results sort by `createdAt DESC, id DESC` and include action, entity identifiers
 before/after snapshots, request ID, timestamp, and actor ID/name/email. They omit IP
 hash and user agent. Database triggers reject audit-row updates and deletes.
 
-## Admin UI routes implemented through Phase 5
+## Admin UI routes implemented through Phase 6
 
 - `/organ-systems`, `/organ-systems/new`, `/organ-systems/[id]`
 - `/organ-systems/[id]/topics`
@@ -574,7 +747,10 @@ hash and user agent. Database triggers reject audit-row updates and deletes.
 - `/questions/test`, `/questions/test/new`
 - `/questions/[id]`
 - `/attempts`, `/attempts/[id]`
-- `/users/[id]` (narrow progress detail reached from attempt views; no users list yet)
+- `/dashboard`
+- `/users`, `/users/[id]`
+- `/feedback`, `/feedback/[id]`
+- `/notifications`, `/notifications/new`, `/notifications/[id]`
 
 These are server-protected pages. Lists provide responsive cards, filters, empty
 states, filter-preserving pagination, status badges, pending/success/error feedback,
@@ -588,13 +764,18 @@ editing, correct-answer selection, question preview, activity, duplicate, and li
 controls. These forms accept media UUID text rather than a picker. No authenticated
 CRUD or full learner assessment E2E flow is present yet. Phase 5 attempt pages are
 read-only, responsive, paginated/filterable, preserve immutable snapshot labels/media,
-and hide results before submission. The narrow user page shows real submitted attempt
-summary, current-content progress, recent attempts, and five-sample topic rankings.
+and hide results before submission. Phase 6 adds real dashboard range controls and
+accessible text/chart summaries; responsive table/card lists, filters, pagination,
+loading/empty/error/success/pending states; confirmation for account, feedback, and
+campaign transitions; provider-disabled messaging; notification preview/evidence; and a
+dirty-navigation/before-unload guard on notification editors. The user page combines
+safe management/device counts with existing submitted-attempt and progress reporting.
 
-## Not yet implemented
+## Not yet implemented or externally verified
 
-The real aggregate **admin** dashboard, general user list/account management, feedback,
-and notification campaign/delivery APIs/pages remain Phase 6 work. There is no public
-question-bank API by design; questions are exposed only through owned attempt snapshots.
-The internal cron endpoint is operational only after a valid deployment `CRON_SECRET`
-and schedule are configured.
+Phase 7 still needs configured real Expo/device verification, a real PostgreSQL multi-
+worker notification concurrency test, authenticated Phase 6 Playwright flows, a
+distributed production rate limiter, media-picker UX, and a visual lesson editor. There
+is no public question-bank API by design. Both internal cron endpoints require a valid
+deployment `CRON_SECRET` and schedule; the local secret is currently invalid and
+`env:check` intentionally fails, while ordinary runtime remains isolated.

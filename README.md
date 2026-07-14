@@ -6,9 +6,10 @@ Prisma, and PostgreSQL.
 
 ## Current status
 
-Phases 0-5 are implemented. Phase 5 code and its database migration are complete, but
-the deployment is not configuration-complete until a valid `CRON_SECRET` is installed
-in the deployment environment. The current application includes:
+Phases 0-6 are implemented. Phase 6 code and all five migrations are current. Scheduled
+jobs are not deployment-ready until a valid `CRON_SECRET` is installed; this cron-only
+configuration does not prevent ordinary runtime or builds from starting. The current
+application includes:
 
 - Supabase cookie and bearer authentication with active-profile and admin-role checks
 - Prisma schema, migration, seed, and an explicit administrator bootstrap script
@@ -24,15 +25,28 @@ in the deployment environment. The current application includes:
   retakes, history, and result-only answer disclosure
 - Learner lesson/progress/dashboard APIs plus read-only admin attempt and user-progress
   pages backed by submitted snapshot history and current published content
+- A real admin dashboard with 7/30/90-day attempt trends, learner/content/feedback
+  counts, question-weighted quiz/test accuracy, explicit content-readiness metrics, and
+  bounded recent registrations, feedback, and redacted audit activity
+- Learner-only user management with paginated list/detail, activate/deactivate, preserved
+  learning history, device-token shutdown, pending-delivery cancellation, and audits
+- Learner feedback submission/history plus admin triage, internal notes, review/resolve
+  attribution, privacy-separated DTOs, redacted audits, and process-local submission limits
+- Notification drafts, scheduling/cancellation/send queueing, immutable one-time audience
+  materialization, recipients/deliveries, learner reads, device-token ownership, provider
+  readiness, receipt polling, leases/retries, and a cron worker
 - A secret-authenticated expiry job at `/api/internal/attempts/expire`, scheduled every
   minute by `vercel.json`, with bounded batches and lazy expiry on relevant reads
+- A secret-authenticated notification worker at `/api/internal/notifications/process`,
+  also scheduled every minute; provider tickets remain `TICKETED` until a receipt confirms
+  `SENT`, and campaign outcomes distinguish `PROCESSING`, `PARTIAL`, and `FAILED`
 - Validated PNG/JPEG/WebP uploads, 15-minute admin URLs, and 5-minute eligible
   published or owned historical-attempt media URLs
 - Unit/component tests with Vitest/RTL and anonymous/mobile-auth checks with Playwright
 
-Phase 6 is next per the authoritative plan and covers the real admin dashboard,
-feedback, and notifications. The existing admin dashboard intentionally contains no
-fabricated analytics.
+Phase 7 hardening and delivery is next. Remaining work includes configured/verified real
+Expo delivery, notification-worker database concurrency coverage, authenticated Phase 6
+Playwright flows, a distributed rate limiter, a media picker, and a visual lesson editor.
 
 See `docs/PHASE_STATUS.md` for the latest verification record and known limitations.
 
@@ -68,6 +82,12 @@ Migration `20260713090000_add_assessment_snapshot_guards` has been deployed in t
 configured development environment after confirming the attempt count was zero. Its
 preflight intentionally refuses to run against a database containing any assessment
 attempt because the required historical snapshot fields cannot be synthesized safely.
+Phase 6 is split across
+`20260714120000_add_phase6_feedback_notification_foundation` and
+`20260714121000_add_phase6_feedback_notification_structure`: PostgreSQL requires new enum
+labels to commit before later statements can reference them. Both migrations repeat the
+empty notification-table preflight, are deployed, and bring the repository total to five
+current migrations.
 
 ## Implemented content workflows
 
@@ -114,9 +134,31 @@ attempt because the required historical snapshot fields cannot be synthesized sa
   submitted attempt questions as quiz/test denominators; a zero denominator is reported
   as `0/0` and `0%`, not as complete. Topic strengths/weaknesses require at least five
   submitted answers.
-- `/attempts` and `/attempts/[id]` provide read-only admin history. `/users/[id]` is a
-  narrow read-only progress page reached from attempts; a general user-management list
-  remains Phase 6 work.
+- `/attempts` and `/attempts/[id]` provide read-only admin history. `/users` and
+  `/users/[id]` now provide learner-only search, status management, activity/device
+  summaries, and the existing progress report. Deactivation preserves history, disables
+  active device tokens, and cancels pending deliveries.
+
+## Phase 6 administration and delivery
+
+- `/dashboard` contains only database-backed values. The selected `days=7|30|90` range
+  affects the UTC daily attempt trend; overall counts and weighted accuracy remain
+  all-time. Completeness uses non-archived topics as the denominator and states every
+  readiness condition in the API DTO.
+- `/feedback` and `/feedback/[id]` provide responsive triage, filtering, internal notes,
+  and explicit review/resolve actions. Learners use `POST /api/v1/feedback` and
+  `GET /api/v1/feedback/mine`; learner DTOs never include admin notes or reviewer data.
+- `/notifications`, `/notifications/new`, and `/notifications/[id]` support responsive
+  lists/cards, provider-disabled messaging, previews, confirmation and pending states,
+  paginated evidence, accessible labels, and an unsaved-change navigation guard.
+- A send request queues work and returns `202`; it does not claim delivery. Expo ticket
+  acceptance is `TICKETED`, while `SENT` requires a successful receipt. The worker uses
+  expiring campaign/delivery leases, bounded retries, and a 23-hour/20-poll receipt limit.
+  Audience and token snapshots are materialized once. A crash after provider acceptance
+  but before persistence creates an unavoidable at-least-once duplicate-send window.
+- Device tokens and token snapshots are never emitted by public/admin DTOs or audit
+  snapshots. When Expo is disabled or incomplete, send mutations fail before campaign
+  state changes; the cron worker returns zero work without mutation.
 
 The lesson editor remains a validated JSON textarea. Content, flashcard, and question
 forms still accept managed media UUIDs rather than offering a media picker. Published
@@ -133,17 +175,16 @@ npm run test:e2e
 npm run build
 ```
 
-Install Chromium once with `npx playwright install chromium`. The latest Phase 5 record
-is in `docs/PHASE_STATUS.md`: lint, typecheck, 61 Vitest files/206 tests, build, and
-Playwright (3 passed, 1 skipped) passed. The four conditional PostgreSQL integration
-tests also passed separately against a migrated isolated schema, including concurrent
-finalization; the provider/auth signed-URL
-boundary remains mocked. The production build passed without overriding `CRON_SECRET`;
-OpenAPI validation passed and migration status is current. Playwright ran against the
-existing live development server. `npm run env:check` currently fails only because the
-configured `CRON_SECRET` is invalid, which remains the intentional deployment gate. Do
-not treat environment validation or deployment configuration as passed until that secret
-is replaced with at least 32 random characters.
+Install Chromium once with `npx playwright install chromium`. The latest known pre-doc
+Phase 6 record is in `docs/PHASE_STATUS.md`: lint, typecheck, and build passed; Vitest
+passed 319 tests with four conditional PostgreSQL tests skipped in the default suite;
+migration deploy passed and all five migrations are current. Those four Phase 5 tests
+previously passed against a migrated isolated schema, including concurrent finalization,
+after retry handling was repaired for Prisma `P2010` carrying SQLSTATE `40001` and
+`40P01`. Playwright was not rerun for Phase 6; the latest prior anonymous result remains
+3 passed and 1 skipped. `npm run env:check` still intentionally fails because the local
+`CRON_SECRET` is invalid. Expo may be disabled or misconfigured, and real provider
+delivery has not been verified. Do not treat either deployment configuration as ready.
 
 ## Project references
 

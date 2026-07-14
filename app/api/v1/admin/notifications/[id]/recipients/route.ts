@@ -1,0 +1,3 @@
+import { mapApiError } from "@/lib/api/handler"; import { requireAdmin } from "@/lib/api/admin"; import { apiSuccess } from "@/lib/api/response";
+import { parseId, parseList } from "@/features/notifications/route-utils"; import { listRecipients } from "@/features/notifications/service";
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) { const auth = await requireAdmin(request); if (auth.response) return auth.response; try { const id = parseId((await context.params).id, auth.id); if (id instanceof Response) return id; const result = await listRecipients(id, parseList(request)); return apiSuccess(result.items, { requestId: auth.id, pagination: result.pagination }); } catch (error) { return mapApiError(error, auth.id); } }

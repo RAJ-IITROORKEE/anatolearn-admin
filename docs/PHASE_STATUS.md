@@ -2,141 +2,115 @@
 
 ## Current phase
 
-**Phase 5: Assessment engine and progress — implementation complete; configuration gate open**
+**Phase 6: Dashboard, feedback, and notifications — complete in code**
 
 Date: 2026-07-14
 
-Phases 0-4 remain complete. Phase 6 (dashboard, feedback, and notifications) is next per
-`MASTER_BUILD_PROMPT.md` and `docs/IMPLEMENTATION_PLAN.md`. Phase 5 is not deployment-
-complete until a valid `CRON_SECRET` and the Vercel schedule are configured.
+Phases 0-6 are implemented and all five migrations are current. Phase 7 hardening and
+delivery is next. Deployment configuration remains open: the local `CRON_SECRET` is
+invalid and `npm run env:check` intentionally fails, while ordinary runtime and builds
+remain isolated. Expo may be disabled or misconfigured and has not been verified with
+real credentials/devices.
 
-## Phase 5 completed implementation
+## Phase 6 completed implementation
 
-- Added ownership-scoped learner routes for strict multi-topic assessment start,
-  attempt list/detail, answer set/clear, idempotent submission, submitted result, and
-  fresh retake. Cookie mutations enforce same origin; all owners come from verified
-  active profiles, and inaccessible/other-user attempts return the same `404`.
-- Added random question selection and independent option shuffling with immutable
-  snapshots for prompts, explanations, fresh option keys, correct keys, topic/system
-  IDs and labels, difficulty, concept, legacy images, and managed media IDs. Retakes
-  preserve source scope/count but select current eligible questions into new snapshots.
-- Added DTO privacy boundaries: general detail never exposes score/correctness/correct
-  keys/explanations; learner lists expose scores only for submitted statuses; learner
-  results and admin detail reveal immutable results only after `COMPLETED` or
-  `AUTO_SUBMITTED`.
-- Added database-time timing: quiz attempts are untimed; tests receive exactly 60
-  seconds per requested question. Due tests auto-submit under row locks, unanswered
-  items remain distinct and in the score denominator, auto duration is capped, and
-  terminal submit replay is idempotent.
-- Added bounded lazy expiry on learner/admin list/detail/progress paths and internal
-  `GET`/`POST /api/internal/attempts/expire`. The internal worker requires bearer
-  `CRON_SECRET`, claims 50 rows with `SKIP LOCKED`, runs at most 10 batches/8 seconds,
-  and is scheduled every minute by `vercel.json`.
-- Isolated cron-only configuration from shared runtime validation. `CRON_SECRET` is no
-  longer part of `serverEnvSchema`, so absent/blank/short cron configuration does not
-  crash ordinary pages or production builds. `cronEnvSchema`/`getCronEnv` validates only
-  at the internal worker boundary: no/blank secret returns `503`, while a configured
-  short value fails safely through the mapped validation error. `envCheckSchema` still
-  rejects that short configured value as the intentional deployment gate.
-- Added absolute lesson completion and current-content progress reports. Content uses
-  current published lessons; flashcards use current eligible published cards; quiz/test
-  accuracy uses all submitted immutable snapshots, including unanswered denominators,
-  attributed by snapshot system and topic IDs. Zero denominators report `0/0` and `0%`.
-- Added transactional `TopicProgress` refresh after lesson/flashcard/attempt changes,
-  while reporting routes remain authoritative recomputations from source progress and
-  attempt history rather than reads from the projection.
-- Added `/api/v1/dashboard/me` with submitted totals, weighted accuracy, latest 10
-  submitted attempts, current system/topic metrics, and up to five strength/weakness
-  topics after a five-answer minimum.
-- Added read-only admin attempt list/detail APIs and `/attempts`, `/attempts/[id]` UI,
-  plus narrow admin user progress API and `/users/[id]` UI. Admin attempt search supports
-  learner, IDs, assessment/scope/status/date filters, stable sorting, and pagination.
-- Extended signed media authorization: an active learner may resolve managed media in
-  an owned historical attempt snapshot (including archived assets) for 300 seconds;
-  another learner receives `404`. Protected admin attempt detail batch-signs historical
-  snapshot media for 900 seconds without exposing storage coordinates.
-- Added and deployed migration `20260713090000_add_assessment_snapshot_guards` after
-  confirming `AssessmentAttempt` count was zero. Its own preflight rejects non-empty
-  attempt tables; it adds topic/system/difficulty/concept/media snapshot fields, three
-  history/scope indexes, status/timing and test-expiry checks, and triggers protecting
-  immutable scope/snapshots/terminal results, answer/child lifecycle, and history from
-  deletion.
-- Updated README, architecture, API, OpenAPI, security, testing, implementation plan,
-  and phase status to reflect the inspected Phase 5 implementation.
+- Replaced the placeholder dashboard with `GET /api/v1/admin/dashboard` and `/dashboard`:
+  strict 7/30/90-day UTC trends, learner/content/feedback/attempt counts, all-time
+  question-weighted accuracy, explicit content-readiness denominators/criteria, and safe
+  bounded recent registrations, feedback, and audit activity.
+- Added learner-only `GET /api/v1/admin/users`, `GET/PATCH /api/v1/admin/users/{id}`, and
+  `/users`, `/users/[id]`. Search/filter/sort/pagination and activity/device summaries are
+  real. Deactivation preserves history, disables active tokens, cancels pending
+  deliveries, and audits the state change; activation does not reactivate old tokens.
+- Added `POST /api/v1/feedback`, `GET /api/v1/feedback/mine`, admin list/detail/update,
+  and `/feedback`, `/feedback/[id]`. Learner DTOs exclude internal data; admin review/
+  resolve attribution is server-derived; audits redact message/notes/PII. Submission is
+  process-limited to five attempts per user per minute.
+- Added strict device-token ownership/reassignment and cancellation behavior without
+  exposing token text in DTOs.
+- Added notification campaign list/create/detail/update/schedule/cancel/send, provider
+  status, recipient/delivery evidence, learner list/read, and `GET`/`POST
+  `/api/internal/notifications/process` scheduled every minute.
+- Isolated provider environment parsing. Drafting/scheduling work while Expo is disabled;
+  send returns `503` before mutation when not ready, and the authorized worker returns
+  zero work without mutation.
+- Added immutable one-time audience/token materialization, campaign/delivery leases,
+  `SKIP LOCKED` claims, five-attempt backoff, delayed receipt polling, 20-poll/23-hour
+  receipt limits, and explicit at-least-once crash-window documentation.
+- Implemented truthful evidence: provider acceptance is `TICKETED`; only receipts produce
+  delivery `SENT`; campaigns remain `PROCESSING` then finalize `SENT`, `PARTIAL`, or
+  `FAILED`. Tokens, token snapshots, receipt IDs/messages, leases, and credentials are
+  absent from API and audit DTOs.
+- Added `/notifications`, `/notifications/new`, `/notifications/[id]` with responsive
+  table/card views, pagination, provider-disabled states, preview, confirmations,
+  pending/success/error/empty/loading states, accessible labels, and dirty navigation/
+  before-unload protection.
+- Deployed Phase 6 in two migrations: enum labels first, then dependent structure. This
+  split is required by PostgreSQL's rule that new enum values must commit before use.
+  Both migrations repeat the empty notification-table preflight; all five migrations are
+  current.
+- Updated README, architecture, API/OpenAPI, security, testing, implementation plan, and
+  this status from inspected code/routes/tests/schema/migrations.
 
-## Phase 5 primary files, routes, and migration
+## Phase 6 primary files and routes
 
-- `features/assessments/`, `features/progress/`
-- `components/assessments/`, `components/progress/`
-- `app/(admin)/attempts/`, `app/(admin)/users/[id]/`
-- `app/api/v1/assessments/`, `app/api/v1/attempts/`
-- `app/api/v1/content-lessons/[id]/progress/`, `app/api/v1/progress/`,
-  `app/api/v1/dashboard/me/`
-- `app/api/v1/admin/attempts/`, `app/api/v1/admin/users/[id]/progress/`
-- `app/api/internal/attempts/expire/`, `vercel.json`
-- `lib/env.ts`, `lib/env.test.ts`, `scripts/check-env.ts`
-- `prisma/migrations/20260713090000_add_assessment_snapshot_guards/migration.sql`
+- `features/admin-dashboard/`, `features/users/`, `features/feedback/`,
+  `features/notifications/`
+- `components/dashboard/`, `components/phase6/`, `components/notifications/`
+- `app/(admin)/dashboard/`, `users/`, `feedback/`, `notifications/`
+- `app/api/v1/admin/dashboard/`, `admin/users/`, `admin/feedback/`,
+  `admin/notifications/`
+- `app/api/v1/feedback/`, `app/api/v1/notifications/`,
+  `app/api/v1/me/device-tokens/`
+- `app/api/internal/notifications/process/`, `vercel.json`
+- `prisma/migrations/20260714120000_add_phase6_feedback_notification_foundation/`
+- `prisma/migrations/20260714121000_add_phase6_feedback_notification_structure/`
 
 Only documentation files were changed by this documentation task. Application code,
-package files, migrations, environment values, and secrets were not modified.
+packages, schema, migrations, local environment values, and secrets were not modified.
+`.env.example` already accurately lists isolated placeholder-only Expo and cron variables,
+so it did not require a change.
 
-## Phase 5 verification and configuration record
+## Latest known verification and configuration record
 
 | Command/check | Result |
 | --- | --- |
-| Migration preflight | Passed after confirming `AssessmentAttempt` count was zero |
-| `npm run prisma:deploy` | Passed; deployed `20260713090000_add_assessment_snapshot_guards` |
+| `npm run prisma:deploy` | Passed; Phase 6 enum and structure migrations deployed |
+| Prisma migration status | Current: all five migrations |
 | `npm run lint` | Passed |
 | `npm run typecheck` | Passed |
-| `npm run test` | Passed: 61 files, 206 tests; 4 conditional PostgreSQL tests skipped in the default run |
-| Dedicated assessment PostgreSQL suite | Passed: 4 tests against migrated isolated `anatolearn_phase5_test` schema, including concurrent finalization |
-| `npm run build` | Passed without a `CRON_SECRET` process override |
-| `npm run test:e2e` | Passed against the existing live development server: 3 passed, 1 skipped |
-| `npm run env:check` | **Failed** only for invalid `CRON_SECRET` |
-| OpenAPI structural validation | Passed; specification is valid |
-| Prisma migration status | Current |
+| `npm run test` | Passed: 319 tests; 4 conditional PostgreSQL tests skipped in the default run |
+| Dedicated Phase 5 PostgreSQL suite | Passed: 4 tests against a migrated isolated schema, including concurrent finalization |
+| `npm run build` | Passed |
+| `npm run test:e2e` | **Not rerun for Phase 6**; latest prior anonymous result: 3 passed, 1 skipped |
+| `npm run env:check` | **Failed** only for invalid local `CRON_SECRET`; intentional deployment gate |
+| OpenAPI structural validation | Passed with Swagger CLI: 75 paths, 104 operations, 104 unique operation IDs, 138 component schemas |
+| `git diff --check` | Passed; line-ending conversion warnings only |
 
-The default suite skips the four cases in
-`features/assessments/postgres.integration.test.ts` unless `TEST_DATABASE_URL` differs
-from `DATABASE_URL`. They were also run separately against a migrated isolated schema
-and all four passed. That run verified snapshot and terminal immutability, source-edit
-stability, and real multi-connection concurrent finalization. It exposed and fixed raw
-PostgreSQL serialization failures arriving as Prisma `P2010` with SQLSTATE `40001`; the
-shared assessment transaction retry now handles those alongside `P2034` and deadlock
-SQLSTATE `40P01`. Environment validation and Phase 5
-deployment configuration must not be reported as passing until `CRON_SECRET` is replaced
-with at least 32 random characters and the deployed one-minute schedule is verified. The
-regression test in `lib/env.test.ts` specifically proves that shared runtime validation
-accepts an invalid cron-only value while `cronEnvSchema` rejects it. The successful build
-without a process override confirms that this deployment gate is isolated from ordinary
-application startup.
+The default suite skips `features/assessments/postgres.integration.test.ts` unless
+`TEST_DATABASE_URL` is set and differs from `DATABASE_URL`. Its four cases previously
+passed against a migrated isolated schema. That acceptance run exposed Prisma `P2010`
+wrapping PostgreSQL SQLSTATE `40001`/`40P01`; the shared transaction retry now handles
+those forms alongside `P2034`. Do not infer a Phase 6 E2E run from the prior anonymous
+Playwright result.
 
-Post-phase verification also corrected the seeded lesson DTO failure: strict structured
-blocks now accept optional bounded stable IDs, reject duplicate IDs within a lesson, and
-continue rejecting unknown fields and unrestricted HTML. Focused schema and DTO
-regression tests cover the persisted seed shape.
+## Residual limitations and risks
 
-Media upload/list hardening now separates durable upload/metadata success from temporary
-signed-preview availability. Storage compensation runs only when the database/audit
-transaction fails; admin list, mutation, and historical-detail DTOs use null preview
-fields instead of failing an entire page when signing is unavailable. Learner media
-delivery remains strict. Service and DTO regression tests cover the failure paths.
-
-## Phase 5 residual limitations and risks
-
-1. Supabase provider/auth and private signed-URL integration remains mocked.
-2. Full authenticated learner assessment CRUD/lifecycle E2E is absent, as are existing
-   authenticated admin content/media/flashcard/question CRUD flows.
-3. Cron processing requires deployment `CRON_SECRET` and Vercel scheduling; lazy expiry
-   limits stale reads but does not configure operations.
-4. Existing media-picker/lesson-editor and process-local rate-limiter gaps remain.
+1. No verified real Expo credential/device integration; provider may be disabled or
+   misconfigured.
+2. No real PostgreSQL multi-worker notification lease/materialization concurrency test;
+   provider acceptance followed by a crash can produce an at-least-once duplicate send.
+3. No authenticated Phase 6 Playwright coverage.
+4. Production distributed rate limiting is missing; feedback/auth limits are process-local.
+5. Managed-media picker and visual lesson editor remain absent.
+6. `CRON_SECRET` is still invalid locally. Both scheduled jobs require a valid 32+
+   character deployment secret and verified schedules.
 
 ## Next phase
 
-**Phase 6: Dashboard, feedback, and notifications.** Implement the real admin dashboard,
-feedback submission/review, notification campaigns/delivery/reads, and safe provider
-adapter according to the authoritative plan. The Phase 5 `/users/[id]` surface remains
-a narrow read-only progress view, not a general user-management implementation.
+**Phase 7: Hardening and delivery.** Verify real Expo and both deployed cron jobs, add
+notification-worker PostgreSQL concurrency and authenticated Phase 6 E2E coverage,
+install a distributed limiter, and finish the media-picker/visual lesson-editor gaps.
 
 ## Phase 4 completed items
 
