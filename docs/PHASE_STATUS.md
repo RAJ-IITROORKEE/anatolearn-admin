@@ -71,7 +71,7 @@ were not modified.
 | --- | --- |
 | `npm run lint` | Passed |
 | `npm run typecheck` | Passed |
-| `npm run test` | Passed: 139 files, 3 skipped; 443 tests, 13 skipped |
+| `npm run test` | Passed: 139 files, 3 skipped; 444 tests, 13 skipped |
 | Isolated `TEST_DATABASE_URL` | Passed: 2 files/9 tests (4 assessment lifecycle + 5 direct DB access) |
 | `npm run build` | Passed: 42 static-generation units under nonce dynamic CSP output; all routes |
 | `npm run test:e2e` | 17 passed, 14 skipped |

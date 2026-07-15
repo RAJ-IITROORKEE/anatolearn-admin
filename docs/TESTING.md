@@ -189,7 +189,7 @@ Install Chromium once with `npx playwright install chromium`.
 | --- | --- |
 | `npm run lint` | Passed |
 | `npm run typecheck` | Passed |
-| `npm run test` | Passed: 139 files, 3 skipped; 443 tests, 13 skipped |
+| `npm run test` | Passed: 139 files, 3 skipped; 444 tests, 13 skipped |
 | Isolated `TEST_DATABASE_URL` run | Passed: 2 files/9 tests (4 assessment lifecycle + 5 direct database access) |
 | `npm run prisma:deploy` | Passed; both Phase 7 RLS/revoke migrations deployed to configured development DB |
 | Prisma migration status | Current: all nine migrations, including both Trash migrations |

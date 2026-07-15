@@ -3,6 +3,11 @@ import { describe, expect, it } from "vitest";
 import { changePasswordSchema, deviceTokenSchema, emailSchema, loginSchema, profileUpdateSchema, registerSchema } from "./api-schemas";
 
 describe("authentication API schemas", () => {
+  it("keeps strength rules for new passwords but accepts a short existing password", () => {
+    expect(registerSchema.safeParse({ email: "user@example.com", password: "short", fullName: "User" }).success).toBe(false);
+    expect(changePasswordSchema.safeParse({ currentPassword: "short", newPassword: "new-secure-password" }).success).toBe(true);
+  });
+
   it("rejects an unchanged password", () => {
     expect(changePasswordSchema.safeParse({ currentPassword: "same-password", newPassword: "same-password" }).success).toBe(false);
   });

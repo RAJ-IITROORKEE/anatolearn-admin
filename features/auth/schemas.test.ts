@@ -3,11 +3,12 @@ import { describe, expect, it } from "vitest";
 import { loginSchema, passwordSchema, safeNextPath } from "@/features/auth/schemas";
 
 describe("auth schemas", () => {
-  it("normalizes login email and rejects short passwords", () => {
+  it("normalizes login email and accepts any non-empty existing password", () => {
     expect(loginSchema.parse({ email: " Admin@Example.com ", password: "long-password" }).email).toBe(
       "admin@example.com",
     );
-    expect(() => loginSchema.parse({ email: "admin@example.com", password: "short" })).toThrow();
+    expect(loginSchema.parse({ email: "admin@example.com", password: "short" }).password).toBe("short");
+    expect(() => loginSchema.parse({ email: "admin@example.com", password: "" })).toThrow();
   });
 
   it("requires a strong confirmation-matching password", () => {

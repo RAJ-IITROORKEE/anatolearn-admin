@@ -204,7 +204,7 @@ pagination/dialog/table fixes; strict 108-operation OpenAPI route parity; recove
 Trash lifecycle and protected purge worker; non-destructive seed/bootstrap tests; and
 axe/Playwright foundations.
 
-Final gates passed: lint, typecheck, default Vitest (139 files passed, 3 skipped; 443
+Final gates passed: lint, typecheck, default Vitest (139 files passed, 3 skipped; 444
 tests passed, 13 skipped), isolated database run (2 files/9 tests), build (42 static-
 generation units with nonce dynamic CSP output), and OpenAPI validation (108 unique parity-
 checked operations). Playwright was 17 passed/14 skipped; authenticated admin coverage did
