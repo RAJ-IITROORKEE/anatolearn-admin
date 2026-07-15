@@ -6,7 +6,7 @@
 
 Date: 2026-07-15
 
-Phases 0-7 are implemented and all nine migrations are current in the configured
+Phases 0-7 are implemented and all ten migrations are current in the configured
 development database. The product is not claimed as fully deployed or production-ready.
 `npm run env:check` passes locally. The production Vercel project now has a free Upstash
 resource; the adapter accepts its standard `KV_REST_API_*` credentials as well as the
@@ -29,6 +29,11 @@ cron, and production deployment acceptance remain external gates.
 - Added compatibility with Vercel Upstash's standard `KV_REST_API_URL` and
   `KV_REST_API_TOKEN` names after production login correctly failed closed before reaching
   Supabase when only those integration-managed variables were present.
+- Corrected production Supabase Auth URLs and routed password recovery through the server
+  callback before the reset form so hosted recovery no longer falls back to localhost or
+  reaches the form without an exchanged recovery session.
+- Enabled RLS and revoked Supabase client-role access on Prisma's migration metadata table
+  after the production security advisor identified it as publicly readable.
 - Obfuscated existing-account registration responses and added newly-created Auth-user
   compensation when profile provisioning fails.
 - Classified permanent Expo HTTP/shape failures so claimed deliveries fail immediately;
@@ -71,12 +76,12 @@ were not modified.
 | --- | --- |
 | `npm run lint` | Passed |
 | `npm run typecheck` | Passed |
-| `npm run test` | Passed: 139 files, 3 skipped; 444 tests, 13 skipped |
+| `npm run test` | Passed: 139 files, 3 skipped; 445 tests, 13 skipped |
 | Isolated `TEST_DATABASE_URL` | Passed: 2 files/9 tests (4 assessment lifecycle + 5 direct DB access) |
 | `npm run build` | Passed: 42 static-generation units under nonce dynamic CSP output; all routes |
 | `npm run test:e2e` | 17 passed, 14 skipped |
 | `npm run openapi:validate` | Passed: 108 operations, 108 unique operation IDs, exact route parity |
-| `npm run prisma:deploy` / status | Passed; 9 migrations current, including `20260714140000_add_trash_audit_actions` and `20260714141000_add_safe_trash` |
+| `npm run prisma:deploy` / status | Passed; 10 migrations current, including `20260714141000_add_safe_trash` and `20260715151000_secure_prisma_migration_metadata` |
 | `npm audit` | 0 high/critical; 2 moderate PostCSS-through-Next findings remain |
 | `npm run env:check` | Passed locally; production deployment values remain an external gate |
 | `git diff --check` | Passed; line-ending notices only |

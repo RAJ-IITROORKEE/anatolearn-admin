@@ -92,9 +92,12 @@ export function getBootstrapEnv() {
 
 export function getAuthRedirectUrls() {
   const env = getServerEnv();
+  const callback = env.SUPABASE_AUTH_REDIRECT_URL ?? `${env.NEXT_PUBLIC_APP_URL}/auth/callback`;
+  const recoveryCallback = new URL(callback);
+  recoveryCallback.searchParams.set("next", "/reset-password");
   return {
-    callback: env.SUPABASE_AUTH_REDIRECT_URL ?? `${env.NEXT_PUBLIC_APP_URL}/auth/callback`,
+    callback,
     passwordReset:
-      env.SUPABASE_PASSWORD_RESET_REDIRECT_URL ?? `${env.NEXT_PUBLIC_APP_URL}/reset-password`,
+      env.SUPABASE_PASSWORD_RESET_REDIRECT_URL ?? recoveryCallback.toString(),
   };
 }

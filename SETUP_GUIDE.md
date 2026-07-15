@@ -25,8 +25,10 @@ Enable email/password Auth. Configure:
 
 - site URL: `http://localhost:3000` locally;
 - callback: `http://localhost:3000/auth/callback`;
-- password reset: `http://localhost:3000/reset-password`;
-- equivalent allowlisted production URLs before deployment.
+- password reset: `http://localhost:3000/auth/callback?next=%2Freset-password`;
+- equivalent allowlisted production URLs before deployment. The recovery redirect must
+  pass through `/auth/callback` so the server can exchange the Supabase code before it
+  opens `/reset-password`.
 
 Admin web sessions use secure SSR cookies. Native Expo clients send a verified Supabase
 access token as `Authorization: Bearer <token>`. Native requests do not require browser
