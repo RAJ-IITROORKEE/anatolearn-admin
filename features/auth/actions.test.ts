@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   checkAuthRateLimits: vi.fn(),
   createSupabaseServerClient: vi.fn(),
+  findProfileForUser: vi.fn(),
   headers: vi.fn(),
 }));
 
@@ -12,12 +13,12 @@ vi.mock("@/lib/rate-limit", () => ({
 }));
 vi.mock("next/headers", () => ({ headers: mocks.headers }));
 vi.mock("@/lib/supabase/server", () => ({ createSupabaseServerClient: mocks.createSupabaseServerClient }));
-vi.mock("@/features/auth/profile-service", () => ({ findProfileForUser: vi.fn() }));
+vi.mock("@/features/auth/profile-service", () => ({ findProfileForUser: mocks.findProfileForUser, syncProfileEmail: vi.fn() }));
 vi.mock("@/lib/db/prisma", () => ({ prisma: {} }));
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
-vi.mock("@/lib/env", () => ({ getAuthRedirectUrls: () => ({ passwordReset: "https://app.example/reset-password" }) }));
+vi.mock("@/lib/env", () => ({ getAuthRedirectUrls: () => ({ callback: "https://app.example/auth/callback", passwordReset: "https://app.example/reset-password" }) }));
 
-import { forgotPasswordAction, loginAction } from "./actions";
+import { forgotPasswordAction, loginAction, updateEmailAction } from "./actions";
 
 describe("web auth action rate limiting", () => {
   beforeEach(() => {
@@ -47,6 +48,40 @@ describe("web auth action rate limiting", () => {
       namespace: "auth:forgot-password", accountIdentifier: "user@example.com", clientIdentifier: "client-key",
       clientLimit: 5, accountLimit: 15,
     }));
+    expect(mocks.createSupabaseServerClient).not.toHaveBeenCalled();
+  });
+
+  it("requests an email change for the authenticated administrator", async () => {
+    mocks.checkAuthRateLimits.mockResolvedValue({ allowed: true });
+    mocks.findProfileForUser.mockResolvedValue({ id: "profile-id", role: "ADMIN", isActive: true });
+    const updateUser = vi.fn().mockResolvedValue({ error: null });
+    mocks.createSupabaseServerClient.mockResolvedValue({
+      auth: {
+        getUser: vi.fn().mockResolvedValue({ data: { user: { id: "user-id", email: "old@example.com" } } }),
+        updateUser,
+      },
+    });
+
+    const form = new FormData();
+    form.set("email", " New@example.com ");
+    await expect(updateEmailAction({}, form)).resolves.toEqual({
+      success: "Check your email to confirm the new address.",
+    });
+
+    expect(updateUser).toHaveBeenCalledWith(
+      { email: "new@example.com" },
+      { emailRedirectTo: "https://app.example/auth/callback?next=%2Fsettings%2Fprofile" },
+    );
+    expect(mocks.checkAuthRateLimits).toHaveBeenCalledWith(expect.objectContaining({
+      namespace: "auth:update-email",
+      accountIdentifier: "new@example.com",
+    }));
+  });
+
+  it("does not call Supabase when the email is invalid", async () => {
+    const form = new FormData();
+    form.set("email", "not-an-email");
+    await expect(updateEmailAction({}, form)).resolves.toEqual({ error: "Enter a valid email address." });
     expect(mocks.createSupabaseServerClient).not.toHaveBeenCalled();
   });
 });

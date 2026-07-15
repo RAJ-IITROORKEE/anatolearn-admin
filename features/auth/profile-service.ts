@@ -25,3 +25,11 @@ export async function provisionUserProfile(user: User, fullName?: string) {
 export async function findProfileForUser(userId: string) {
   return prisma.profile.findUnique({ where: { id: userId } });
 }
+
+export async function syncProfileEmail(user: { id: string; email?: string | null }) {
+  if (!user.email) return;
+  await prisma.profile.updateMany({
+    where: { id: user.id },
+    data: { email: user.email, emailNormalized: user.email.trim().toLowerCase() },
+  });
+}

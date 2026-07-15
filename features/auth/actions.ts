@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 
 import { emailSchema, loginSchema, passwordSchema } from "@/features/auth/schemas";
-import { findProfileForUser } from "@/features/auth/profile-service";
+import { findProfileForUser, syncProfileEmail } from "@/features/auth/profile-service";
 import { canAccessAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db/prisma";
 import { getAuthRedirectUrls } from "@/lib/env";
@@ -33,6 +33,7 @@ export async function loginAction(_: AuthActionState, formData: FormData): Promi
   const { data, error } = await supabase.auth.signInWithPassword(input.data);
   if (error || !data.user) return { error: "Email or password is incorrect." };
 
+  await syncProfileEmail(data.user);
   const profile = await findProfileForUser(data.user.id);
   if (!profile || !canAccessAdmin(profile)) {
     await supabase.auth.signOut();
@@ -95,6 +96,42 @@ export async function updatePasswordAction(
     });
   }
   return { success: "Password updated. You can continue securely." };
+}
+
+export async function updateEmailAction(
+  _: AuthActionState,
+  formData: FormData,
+): Promise<AuthActionState> {
+  const input = emailSchema.safeParse({ email: formData.get("email") });
+  if (!input.success) return { error: "Enter a valid email address." };
+
+  const supabase = await createSupabaseServerClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return { error: "Your session is missing or expired. Please sign in again." };
+
+  const profile = await findProfileForUser(userData.user.id);
+  if (!profile || !canAccessAdmin(profile)) return { error: "This account does not have active administrator access." };
+  if (userData.user.email?.trim().toLowerCase() === input.data.email) return { error: "Enter a different email address." };
+
+  const requestHeaders = await headers();
+  const rateLimit = await checkAuthRateLimits({
+    namespace: "auth:update-email",
+    accountIdentifier: input.data.email,
+    clientIdentifier: trustedClientIdentifier(requestHeaders),
+    clientLimit: 3,
+    accountLimit: 5,
+  });
+  if (!rateLimit.allowed) return { error: "Too many attempts. Please try again later." };
+
+  const { callback } = getAuthRedirectUrls();
+  const emailRedirect = new URL(callback);
+  emailRedirect.searchParams.set("next", "/settings/profile");
+  const { error } = await supabase.auth.updateUser(
+    { email: input.data.email },
+    { emailRedirectTo: emailRedirect.toString() },
+  );
+  if (error) return { error: "The email could not be changed. Check that it is available and try again." };
+  return { success: "Check your email to confirm the new address." };
 }
 
 export async function logoutAction() {
