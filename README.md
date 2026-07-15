@@ -83,9 +83,10 @@ or a production build from starting. The internal cron route validates it throug
 `cronEnvSchema`/`getCronEnv`: absent or blank disables that route with `503`, while a
 configured value shorter than 32 characters fails safely through the API error mapper.
 `npm run env:check` still rejects a configured short secret as an intentional deployment
-configuration gate. Production validation additionally requires the paired
-`UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`; development/test may leave both
-blank to use the bounded process-local fallback.
+configuration gate. Production validation additionally requires either Vercel Upstash's
+paired `KV_REST_API_URL`/`KV_REST_API_TOKEN` variables or the self-managed
+`UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` pair. Development/test may leave both
+pairs blank to use the bounded process-local fallback.
 
 ```bash
 npm install

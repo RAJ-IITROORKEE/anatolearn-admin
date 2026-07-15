@@ -64,10 +64,15 @@ export class UpstashRateLimiter implements RateLimiter {
 const memoryLimiter = new MemoryRateLimiter();
 
 export function getRateLimiter(): RateLimiter {
-  const url = process.env.UPSTASH_REDIS_REST_URL?.trim();
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
-  if (url && token) return new UpstashRateLimiter(url, token);
-  if (url || token || process.env.NODE_ENV === "production") {
+  const vercelUrl = process.env.KV_REST_API_URL?.trim();
+  const vercelToken = process.env.KV_REST_API_TOKEN?.trim();
+  if (vercelUrl && vercelToken) return new UpstashRateLimiter(vercelUrl, vercelToken);
+
+  const customUrl = process.env.UPSTASH_REDIS_REST_URL?.trim();
+  const customToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
+  if (customUrl && customToken) return new UpstashRateLimiter(customUrl, customToken);
+
+  if (customUrl || customToken || vercelUrl || vercelToken || process.env.NODE_ENV === "production") {
     return { check: async () => { throw new Error("Production rate limiting is not configured."); } };
   }
   return memoryLimiter;

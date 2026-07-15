@@ -134,6 +134,15 @@ describe("publicEnvSchema", () => {
       UPSTASH_REDIS_REST_URL: "https://redis.example",
       UPSTASH_REDIS_REST_TOKEN: "secret-token",
     }).success).toBe(true);
+    expect(rateLimitEnvSchema.safeParse({
+      NODE_ENV: "production",
+      KV_REST_API_URL: "https://redis.example",
+      KV_REST_API_TOKEN: "secret-token",
+    }).success).toBe(true);
+    expect(rateLimitEnvSchema.safeParse({
+      NODE_ENV: "production",
+      KV_REST_API_URL: "https://redis.example",
+    }).success).toBe(false);
   });
 
   it("makes production env-check fail when Upstash is absent", () => {
@@ -156,6 +165,11 @@ describe("publicEnvSchema", () => {
       ...base,
       UPSTASH_REDIS_REST_URL: "https://redis.example",
       UPSTASH_REDIS_REST_TOKEN: "secret-token",
+    }).success).toBe(true);
+    expect(envCheckSchema.safeParse({
+      ...base,
+      KV_REST_API_URL: "https://redis.example",
+      KV_REST_API_TOKEN: "secret-token",
     }).success).toBe(true);
   });
 });

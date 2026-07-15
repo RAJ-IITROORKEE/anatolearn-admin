@@ -189,7 +189,7 @@ Install Chromium once with `npx playwright install chromium`.
 | --- | --- |
 | `npm run lint` | Passed |
 | `npm run typecheck` | Passed |
-| `npm run test` | Passed: 139 files, 3 skipped; 442 tests, 13 skipped |
+| `npm run test` | Passed: 139 files, 3 skipped; 443 tests, 13 skipped |
 | Isolated `TEST_DATABASE_URL` run | Passed: 2 files/9 tests (4 assessment lifecycle + 5 direct database access) |
 | `npm run prisma:deploy` | Passed; both Phase 7 RLS/revoke migrations deployed to configured development DB |
 | Prisma migration status | Current: all nine migrations, including both Trash migrations |
@@ -212,7 +212,9 @@ The default Vitest suite conditionally skips isolated database files without a d
 and five `anon`/`authenticated` direct-access/Prisma-operability cases. The access-control
 migrations are deployed to configured development, not production. The failed
 `env:check` passes locally; production
-validation additionally requires both Upstash values.
+validation additionally requires one complete supported Upstash pair. Unit coverage accepts
+both Vercel's `KV_REST_API_*` names and the self-managed `UPSTASH_REDIS_REST_*` names while
+rejecting incomplete pairs.
 
 The Phase 6 migrations are split because PostgreSQL requires newly added enum values to
 commit before checks/indexes can reference them. Both repeat the empty notification-table

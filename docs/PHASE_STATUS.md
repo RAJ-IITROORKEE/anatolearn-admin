@@ -4,12 +4,13 @@
 
 **Phase 7: Hardening and delivery — repository implementation complete; external gates open**
 
-Date: 2026-07-14
+Date: 2026-07-15
 
 Phases 0-7 are implemented and all nine migrations are current in the configured
 development database. The product is not claimed as fully deployed or production-ready.
-`npm run env:check` passes locally; production
-also requires paired Upstash credentials. Provider, authenticated E2E, backup/restore,
+`npm run env:check` passes locally. The production Vercel project now has a free Upstash
+resource; the adapter accepts its standard `KV_REST_API_*` credentials as well as the
+self-managed `UPSTASH_REDIS_REST_*` pair. Provider, authenticated E2E, backup/restore,
 cron, and production deployment acceptance remain external gates.
 
 ## Phase 7 completed repository work
@@ -25,6 +26,9 @@ cron, and production deployment acceptance remain external gates.
 - Added an Upstash REST distributed rate-limiter adapter. Paired credentials are required
   by production validation; development/test has a bounded memory fallback. Auth uses
   independent client/account quotas; feedback/device/password hooks use server-derived IDs.
+- Added compatibility with Vercel Upstash's standard `KV_REST_API_URL` and
+  `KV_REST_API_TOKEN` names after production login correctly failed closed before reaching
+  Supabase when only those integration-managed variables were present.
 - Obfuscated existing-account registration responses and added newly-created Auth-user
   compensation when profile provisioning fails.
 - Classified permanent Expo HTTP/shape failures so claimed deliveries fail immediately;
@@ -67,9 +71,9 @@ were not modified.
 | --- | --- |
 | `npm run lint` | Passed |
 | `npm run typecheck` | Passed |
-| `npm run test` | Passed: 139 files, 3 skipped; 442 tests, 13 skipped |
+| `npm run test` | Passed: 139 files, 3 skipped; 443 tests, 13 skipped |
 | Isolated `TEST_DATABASE_URL` | Passed: 2 files/9 tests (4 assessment lifecycle + 5 direct DB access) |
-| `npm run build` | Passed: 40 static-generation units under nonce dynamic CSP output; all routes |
+| `npm run build` | Passed: 42 static-generation units under nonce dynamic CSP output; all routes |
 | `npm run test:e2e` | 17 passed, 14 skipped |
 | `npm run openapi:validate` | Passed: 108 operations, 108 unique operation IDs, exact route parity |
 | `npm run prisma:deploy` / status | Passed; 9 migrations current, including `20260714140000_add_trash_audit_actions` and `20260714141000_add_safe_trash` |

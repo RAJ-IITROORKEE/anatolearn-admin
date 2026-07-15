@@ -71,10 +71,11 @@ privileged server-only Auth operations.
 - Unexpected API errors produce a single structured JSON log containing only level,
   request ID, safe code/status, and optional route. Request bodies, credentials, provider
   messages, stack traces, and arbitrary exception text are not logged.
-- The rate-limit interface uses an atomic Upstash Redis REST script when both credentials
-  are configured. Production environment validation requires the pair and fails closed
-  if limiting is unavailable. Development/test may use a bounded 10,000-key memory
-  adapter. Authentication checks separate hashed client and normalized-account keys;
+- The rate-limit interface uses an atomic Upstash Redis REST script with either Vercel's
+  `KV_REST_API_*` pair or the self-managed `UPSTASH_REDIS_REST_*` pair. Production
+  environment validation requires one complete pair and fails closed if limiting is
+  unavailable. Development/test may use a bounded 10,000-key memory adapter.
+  Authentication checks separate hashed client and normalized-account keys;
   trusted client addresses come only from Vercel's forwarded header in Vercel runtime.
 
 ## Feature organization through Phase 7
@@ -585,9 +586,10 @@ audit events.
   isolated from shared runtime startup, and the production build passes without a
   `CRON_SECRET` override; deployment still requires configured production secrets.
   Phase 5 is therefore implementation-complete but not configuration-complete.
-- Distributed limiting is implemented, but production requires provisioned and verified
-  paired Upstash credentials. Development/test intentionally use process memory when the
-  pair is absent.
+- Distributed limiting is implemented. A Vercel Upstash resource is provisioned for the
+  production project; deployed behavior still requires verification after the compatible
+  application revision is promoted. Development/test intentionally use process memory
+  when both supported credential pairs are absent.
 - Expo provider behavior is unit-tested at the adapter boundary but has not been verified
   with real credentials/devices. The provider can be disabled or misconfigured.
 - Notification-worker lease behavior lacks a real PostgreSQL multi-worker concurrency

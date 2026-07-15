@@ -10,7 +10,11 @@ import {
 } from "./rate-limit";
 
 describe("development process-local rate limiter", () => {
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
 
   it("expires a key after its window", async () => {
     vi.useFakeTimers();
@@ -55,6 +59,19 @@ describe("development process-local rate limiter", () => {
     else process.env.UPSTASH_REDIS_REST_URL = originalUrl;
     if (originalToken === undefined) delete process.env.UPSTASH_REDIS_REST_TOKEN;
     else process.env.UPSTASH_REDIS_REST_TOKEN = originalToken;
+  });
+
+  it("uses Vercel Upstash integration variables in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("UPSTASH_REDIS_REST_URL", "https://legacy-redis.example");
+    vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "legacy-token");
+    vi.stubEnv("KV_REST_API_URL", "https://redis.example");
+    vi.stubEnv("KV_REST_API_TOKEN", "integration-token");
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ result: [1, 60_000] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(checkRateLimit("auth:login", "user@example.com", 10)).resolves.toMatchObject({ allowed: true });
+    expect(fetchMock).toHaveBeenCalledWith("https://redis.example", expect.objectContaining({ method: "POST" }));
   });
 
   it("trusts only Vercel's controlled forwarding header on Vercel", () => {

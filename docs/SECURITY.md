@@ -316,8 +316,9 @@ Relevant required names include:
   for scheduled expiry and notification processing)
 - `EXPO_PUSH_ENABLED`, `EXPO_ACCESS_TOKEN` (server-only provider configuration; optional
   to boot and isolated from shared runtime)
-- `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` (paired and required when
-  `NODE_ENV=production`; optional together in development/test)
+- `KV_REST_API_URL`, `KV_REST_API_TOKEN` (preferred Vercel Upstash integration pair), or
+  `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` (self-managed pair); one complete
+  pair is required when `NODE_ENV=production`
 
 Environment validation does not print secret values. `envCheckSchema` intentionally
 combines shared, bootstrap, and cron schemas, so `npm run env:check` rejects a configured
@@ -342,8 +343,9 @@ concern, not a Phase 3 code completion gate.
    and the documented provider-acceptance crash window is at-least-once.
 5. Playwright passed 17 public/security/accessibility cases and skipped 14. Authenticated
    admin flows did not run because their two E2E credentials were absent.
-6. Production Upstash credentials and behavior are not provisioned/verified. The RLS/
-   revoke migrations are proven in development and an isolated database, not production.
+6. A production Vercel Upstash resource is provisioned. Deployed limiter behavior remains
+   to be verified after the compatible application revision is promoted. The RLS/revoke
+   migrations are proven in development and an isolated database, not production.
 7. Backup/restore, production deployment, real Supabase Auth email/redirect/private
    Storage, and optional monitoring remain unverified.
 8. A later SRS may alter data sensitivity or retention requirements and must be

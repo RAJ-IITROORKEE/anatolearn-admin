@@ -59,8 +59,17 @@ Replace every required placeholder. Important server-only values are `DATABASE_U
 scheduled jobs are deployed. Add the same secret to the Vercel project environment and
 to the GitHub repository secret `ANATOLEARN_CRON_SECRET`.
 
-Production also requires both variables below. They must be paired; development/test may
-leave both blank to use the bounded in-memory limiter.
+Production requires a distributed rate limiter. The Vercel Upstash integration injects
+the preferred pair automatically:
+
+```dotenv
+KV_REST_API_URL="https://...upstash.io"
+KV_REST_API_TOKEN="..."
+```
+
+A self-managed Upstash database may instead use the legacy pair below. Each selected pair
+must be complete; development/test may leave both pairs blank to use the bounded in-memory
+limiter.
 
 ```dotenv
 UPSTASH_REDIS_REST_URL="https://...upstash.io"
