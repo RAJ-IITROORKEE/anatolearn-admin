@@ -20,7 +20,7 @@ export function AppShell({ children, profile }: { children: React.ReactNode; pro
       <a className="fixed left-4 top-4 z-[100] -translate-y-24 rounded-lg bg-primary px-4 py-2 font-semibold text-white shadow-lg transition-transform focus:translate-y-0 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2" href="#main-content">Skip to main content</a>
       <aside className={cn("fixed inset-y-0 left-0 z-40 hidden border-r border-border bg-surface transition-[width] duration-200 lg:flex lg:flex-col", collapsed ? "w-[76px]" : "w-[260px]")}>
         <div className={cn("flex h-16 items-center border-b border-border px-4", collapsed && "justify-center px-2")}><BrandMark compact={collapsed} /></div>
-        <div className="min-h-0 flex-1 overflow-y-auto"><NavList collapsed={collapsed} /></div>
+        <div className="app-scrollbar min-h-0 flex-1 overflow-y-auto"><NavList collapsed={collapsed} /></div>
         <div className="border-t border-border p-3"><Button aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} className={cn("w-full", collapsed && "px-0")} onClick={() => setCollapsed((value) => !value)} variant="ghost">{collapsed ? <PanelLeftOpen aria-hidden="true" className="size-5" /> : <><PanelLeftClose aria-hidden="true" className="size-5" /><span>Collapse sidebar</span></>}</Button></div>
       </aside>
 
@@ -34,7 +34,7 @@ export function AppShell({ children, profile }: { children: React.ReactNode; pro
                 <Dialog.Content aria-describedby={undefined} aria-label="Navigation" className="fixed inset-y-0 left-0 z-50 flex w-[min(88vw,320px)] flex-col border-r border-border bg-surface shadow-xl">
                   <Dialog.Title className="sr-only">Navigation</Dialog.Title>
                   <div className="flex h-16 items-center justify-between border-b border-border px-4"><BrandMark /><Dialog.Close asChild><Button aria-label="Close navigation" size="icon" variant="ghost"><X aria-hidden="true" className="size-5" /></Button></Dialog.Close></div>
-                  <div className="min-h-0 flex-1 overflow-y-auto"><NavList onNavigate={() => setMobileOpen(false)} /></div>
+                  <div className="app-scrollbar min-h-0 flex-1 overflow-y-auto"><NavList onNavigate={() => setMobileOpen(false)} /></div>
                 </Dialog.Content>
               </Dialog.Portal>
             </Dialog.Root>
