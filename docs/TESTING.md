@@ -237,14 +237,14 @@ No current automated test proves the following end to end or against real provid
 - Supabase provider/auth behavior or actual private Storage signed-URL generation
 - authenticated admin UI CRUD, media, lifecycle, audit, flashcard, and question flows
 - full authenticated learner assessment start/answer/expiry/submit/result/retake E2E
-- deployed cron secret injection and one-minute scheduler invocation
+- deployed cron secret injection and GitHub Actions scheduler invocation
 - real Expo push ticket/receipt behavior on devices
 - notification worker leases/materialization under concurrent PostgreSQL workers
 - authenticated dashboard/users/feedback/notification Playwright flows
 - production Upstash credentials and deployed distributed-limiter verification
 
 Most external provider behavior still uses mocks. Isolated PostgreSQL suites passed, but
-real Supabase Auth email/redirect/private Storage, Expo/EAS devices, Vercel cron, backup/
+real Supabase Auth email/redirect/private Storage, Expo/EAS devices, Vercel/GitHub cron, backup/
 restore, and production deployment remain unverified.
 
 ## Remaining external test layers
@@ -283,7 +283,8 @@ Add authenticated fixtures without committing credentials. Critical flows are:
     not another learner.
 12. Verify lesson completion, weighted/zero-denominator progress, dashboard rankings,
     admin attempt filters/detail, and narrow user progress.
-13. Exercise the deployed one-minute cron with a valid secret and multiple due batches.
+13. Dispatch the deployed GitHub Actions scheduler with a valid secret and multiple due
+    batches; verify the Vercel daily Trash purge separately.
 14. Exercise dashboard range/accessibility, learner activate/deactivate, feedback privacy/
     triage, notification dirty guards, provider-disabled behavior, and delivery evidence.
 15. Run concurrent notification workers against PostgreSQL and verify one-time audience

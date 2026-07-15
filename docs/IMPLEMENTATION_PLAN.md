@@ -134,7 +134,7 @@ also passed separately against a migrated isolated schema, including real multi-
 concurrent finalization; provider/auth signed URLs and
 assessment E2E remain mocked/absent. `npm run env:check` intentionally still fails for
     the configured `CRON_SECRET`; deployment completion must not be claimed until the
-    deployment secret and schedule are configured.
+    deployment secret, Vercel daily cron, and GitHub Actions scheduler are configured.
 
 **Work**
 
@@ -258,7 +258,8 @@ development and isolated tested, not claimed in production.
 ## Current continuation point
 
 Do not add another repository feature phase before external deployment acceptance. Install
-a valid random 32+ character `CRON_SECRET` and verify both one-minute jobs; provision and
+a valid random 32+ character `CRON_SECRET` and verify the Vercel daily plus GitHub Actions
+jobs; provision and
 verify production Upstash; exercise real Expo/EAS devices; provide admin E2E credentials;
 test real Supabase Auth email/redirect/private Storage; and perform backup/restore plus
 production deployment. Optional monitoring may follow. These gates do not invalidate the

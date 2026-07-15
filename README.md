@@ -36,13 +36,14 @@ is not a claim that the product is deployed. The current application includes:
 - Notification drafts, scheduling/cancellation/send queueing, immutable one-time audience
   materialization, recipients/deliveries, learner reads, device-token ownership, provider
   readiness, receipt polling, leases/retries, and a cron worker
-- A secret-authenticated expiry job at `/api/internal/attempts/expire`, scheduled every
-  minute by `vercel.json`, with bounded batches and lazy expiry on relevant reads
+- A secret-authenticated expiry job at `/api/internal/attempts/expire`, triggered
+  approximately every ten minutes by GitHub Actions, with bounded batches and lazy expiry
+  on relevant reads
 - A secret-authenticated notification worker at `/api/internal/notifications/process`,
-  also scheduled every minute; provider tickets remain `TICKETED` until a receipt confirms
-  `SENT`, and campaign outcomes distinguish `PROCESSING`, `PARTIAL`, and `FAILED`
-- A protected Trash purge worker at `/api/internal/trash/purge`, scheduled daily at
-  `0 3 * * *` with exact `Bearer CRON_SECRET` authentication and storage-job retries
+  triggered by the same free scheduler; provider tickets remain `TICKETED` until a receipt
+  confirms `SENT`, and campaign outcomes distinguish `PROCESSING`, `PARTIAL`, and `FAILED`
+- A protected Trash purge worker at `/api/internal/trash/purge`, scheduled daily by Vercel
+  at `0 3 * * *` with exact `Bearer CRON_SECRET` authentication and storage-job retries
 - Validated PNG/JPEG/WebP uploads, 15-minute admin URLs, and 5-minute eligible
   published or owned historical-attempt media URLs
 - Exact-origin cookie CSRF checks, nonce-based CSP, production HSTS, security headers,
@@ -61,10 +62,11 @@ is not a claim that the product is deployed. The current application includes:
 - Accessibility, metadata/robots, password visibility, pagination, dialog, table, and
   overflow hardening, with Vitest/RTL and axe-enabled Playwright foundations
 
-Phase 7 repository implementation is complete. External gates remain: install and verify
-deployment cron and Upstash secrets, exercise real Expo/EAS devices and Supabase Auth/
-Storage, provide admin E2E credentials, perform backup/restore and production deployment,
-and optionally add Sentry/monitoring. See `docs/PHASE_STATUS.md` for the exact boundary.
+Phase 7 repository implementation is complete. External gates remain: configure and verify
+the Vercel daily cron plus GitHub Actions scheduler secrets, install Upstash secrets,
+exercise real Expo/EAS devices and Supabase Auth/Storage, provide admin E2E credentials,
+perform backup/restore and production deployment, and optionally add Sentry/monitoring.
+See `docs/PHASE_STATUS.md` for the exact boundary.
 
 See `docs/PHASE_STATUS.md` for the latest verification record and known limitations.
 

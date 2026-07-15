@@ -56,7 +56,8 @@ Copy-Item .env.example .env.local
 Replace every required placeholder. Important server-only values are `DATABASE_URL`,
 `DIRECT_URL`, `SUPABASE_SECRET_KEY`, bootstrap credentials, and `CRON_SECRET`.
 `CRON_SECRET` must be a non-placeholder random value of at least 32 characters before
-scheduled jobs are deployed.
+scheduled jobs are deployed. Add the same secret to the Vercel project environment and
+to the GitHub repository secret `ANATOLEARN_CRON_SECRET`.
 
 Production also requires both variables below. They must be paired; development/test may
 leave both blank to use the bounded in-memory limiter.
@@ -120,13 +121,17 @@ weaken validation; install a valid secret.
 
 1. Take and verify a recoverable database backup before migration.
 2. Configure production Supabase URLs/keys, private bucket, redirects, random 32+
-   `CRON_SECRET`, and both Upstash variables.
+   `CRON_SECRET`, and both Upstash variables in Vercel.
 3. Run `npm run prisma:deploy` as a controlled deployment step.
 4. Deploy the application, then verify `/api/health`, admin login, private media, and one
    representative read/write workflow.
-5. Verify both Vercel cron jobs invoke every minute:
-   `/api/internal/attempts/expire` and `/api/internal/notifications/process`.
-6. Confirm server secrets do not appear in browser bundles or logs.
+5. In the GitHub repository, add these Actions secrets: `ANATOLEARN_APP_URL` (the HTTPS
+   Vercel production URL) and `ANATOLEARN_CRON_SECRET` (the exact Vercel `CRON_SECRET`).
+6. Run **Process AnatoLearn scheduled work** once with `workflow_dispatch`, then confirm
+   its ten-minute schedule invokes `/api/internal/attempts/expire` and
+   `/api/internal/notifications/process`. Vercel invokes `/api/internal/trash/purge`
+   daily at `0 3 * * *`.
+7. Confirm server secrets do not appear in browser bundles, workflow output, or logs.
 
 For rollback, roll back the application release first. Do not edit or delete applied
 migration files and do not run `prisma migrate reset`. Restore from the verified backup
@@ -136,7 +141,8 @@ not claimed as deployed in production.
 
 ## 8. Outstanding external gates
 
-- install a valid deployment `CRON_SECRET` and verify both Vercel schedules;
+- install a valid deployment `CRON_SECRET` and verify the Vercel daily cron plus GitHub
+  Actions scheduler;
 - provision and verify production Upstash credentials;
 - configure a real Expo access token and test EAS devices through ticket, receipt,
   partial, and `DeviceNotRegistered` outcomes;

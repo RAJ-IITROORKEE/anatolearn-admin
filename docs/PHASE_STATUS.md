@@ -89,8 +89,8 @@ and one existing intentional skip; do not imply authenticated flows passed.
 
 ## External gates and risks
 
-1. Install a valid random 32+ character deployment `CRON_SECRET` and verify both Vercel
-   cron jobs.
+1. Install a valid random 32+ character deployment `CRON_SECRET`, configure the Vercel
+   daily cron and GitHub Actions scheduler secrets, and verify both workers.
 2. Provision and verify paired Upstash production credentials.
 3. Configure a real Expo access token and exercise EAS devices through ticket, receipt,
    partial, and `DeviceNotRegistered` outcomes. The at-least-once crash window remains.
@@ -125,7 +125,8 @@ acceptance above; do not claim full production readiness until those gates pass.
   exposing token text in DTOs.
 - Added notification campaign list/create/detail/update/schedule/cancel/send, provider
   status, recipient/delivery evidence, learner list/read, and `GET`/`POST
-  `/api/internal/notifications/process` scheduled every minute.
+  `/api/internal/notifications/process` triggered approximately every ten minutes by the
+  GitHub Actions scheduler.
 - Isolated provider environment parsing. Drafting/scheduling work while Expo is disabled;
   send returns `503` before mutation when not ready, and the authorized worker returns
   zero work without mutation.

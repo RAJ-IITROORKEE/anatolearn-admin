@@ -213,9 +213,10 @@ Expiry is both eager and lazy. Owned attempt/result reads, retakes, learner list
 progress/dashboard reads, and admin attempt reads finalize relevant due tests before
 returning. List/report paths claim at most 50 due rows per call. The internal GET/POST
 worker claims 50 rows per batch using `FOR UPDATE SKIP LOCKED`, with at most 10 batches
-and an 8-second loop budget. `vercel.json` invokes it every minute. It requires an exact
-`Authorization: Bearer <CRON_SECRET>` comparison and returns `503` when no secret is
-configured.
+and an 8-second loop budget. GitHub Actions invokes it approximately every ten minutes
+through the protected repository workflow, while Vercel's Hobby-compatible `vercel.json`
+retains only the daily Trash purge. It requires an exact `Authorization: Bearer
+<CRON_SECRET>` comparison and returns `503` when no secret is configured.
 
 `CRON_SECRET` is isolated from shared application startup. `serverEnvSchema` does not
 contain it, so a missing, blank, or short cron-only value cannot crash ordinary routes or
@@ -579,11 +580,10 @@ audit events.
   without a distinct `TEST_DATABASE_URL`.
 - Supabase provider/auth and signed-URL integration is mocked. Authenticated full CRUD
   and full learner assessment browser coverage is absent.
-- Cron finalization requires a deployment `CRON_SECRET` of at least 32 characters and
-  the Vercel schedule to be deployed. Cron-only validation is isolated from shared
-  runtime startup, and the production build passes without a `CRON_SECRET` override, but
-  the current environment check passes locally; deployment still requires configured
-  production secrets.
+- Cron finalization requires a deployment `CRON_SECRET` of at least 32 characters, the
+  Vercel daily schedule, and the GitHub Actions workflow secrets. Cron-only validation is
+  isolated from shared runtime startup, and the production build passes without a
+  `CRON_SECRET` override; deployment still requires configured production secrets.
   Phase 5 is therefore implementation-complete but not configuration-complete.
 - Distributed limiting is implemented, but production requires provisioned and verified
   paired Upstash credentials. Development/test intentionally use process memory when the
@@ -602,6 +602,7 @@ audit events.
 ## Delivery boundary
 
 Phase 7 repository implementation is complete. Production deployment readiness remains
-gated on a valid random `CRON_SECRET` and both schedules, production Upstash credentials,
+gated on a valid random `CRON_SECRET`, the Vercel daily schedule, and the GitHub Actions
+scheduler, production Upstash credentials,
 real Expo/EAS ticket/receipt/partial/device testing, authenticated admin E2E credentials,
 real Supabase provider integration, and backup/restore plus deployment verification.

@@ -134,16 +134,17 @@ central mapper as a safe `400 VALIDATION_ERROR`; an incorrect request bearer rec
 `401`. Consequently, missing or invalid cron-only configuration cannot crash ordinary
 pages or the production build.
 
-`vercel.json` schedules the GET route every minute. A call is bounded to batches of 50,
-at most 10 batches, and an 8-second loop budget. Lazy expiry on owned/admin reads limits
-the impact of a delayed job, but production scheduling still requires the deployment
-secret and Vercel cron configuration.
+GitHub Actions invokes the GET route approximately every ten minutes through
+`.github/workflows/cron-workers.yml`. A call is bounded to batches of 50, at most 10
+batches, and an 8-second loop budget. Lazy expiry on owned/admin reads limits the impact
+of scheduler delay, but production scheduling still requires the deployment secret and
+the protected repository Actions secrets.
 
 The same boundary protects `GET`/`POST /api/internal/notifications/process`. Provider
 configuration is parsed only after cron authorization. With a valid cron secret but no
 ready provider, the route returns zero work without mutating campaign state. The worker
 is bounded to five campaigns, 500 delivery operations, and eight seconds. Both internal
-routes are scheduled every minute.
+routes are invoked by the same approximately ten-minute GitHub Actions schedule.
 
 ## Phase 6 user and feedback controls
 
@@ -333,9 +334,9 @@ concern, not a Phase 3 code completion gate.
    database/provider integration remains incomplete.
 2. Supabase provider/auth and signed-URL integration is mocked. Authenticated content/
    media/audit/flashcard/question CRUD and full learner assessment E2E are absent.
-3. Scheduled expiry is not deployment-ready until a valid `CRON_SECRET` and both Vercel cron
-   are configured. The current `npm run env:check` passes locally; the
-   invalid configured secret; ordinary runtime and production build are isolated from it.
+3. Scheduled expiry is not deployment-ready until a valid `CRON_SECRET`, the Vercel daily
+   cron, and the GitHub Actions scheduler secrets are configured. Ordinary runtime and
+   production build are isolated from the cron-only secret.
 4. Expo request/receipt handling is unit-tested but has not been verified with real
    credentials/devices. Notification leases lack a real PostgreSQL multi-worker test,
    and the documented provider-acceptance crash window is at-least-once.

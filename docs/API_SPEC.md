@@ -702,10 +702,10 @@ CRON_UNAVAILABLE`. Success returns `{ claimed, finalized, batches }`.
 
 Each batch claims at most 50 due in-progress tests ordered by expiry/ID with `FOR UPDATE
 SKIP LOCKED`. One invocation runs at most 10 batches and stops after its 8-second budget
-or a short batch. `vercel.json` schedules GET every minute (`* * * * *`); POST is kept
-for authenticated operational invocation. POST accepts only an absent body or strict
-`{}`. Learner/admin reads still perform bounded
-lazy expiry, so correctness does not depend solely on the cron schedule.
+or a short batch. GitHub Actions invokes GET approximately every ten minutes through the
+protected repository workflow; POST is kept for authenticated operational invocation.
+POST accepts only an absent body or strict `{}`. Learner/admin reads still perform bounded
+lazy expiry, so correctness does not depend solely on the scheduler.
 
 ## Internal notification job
 
@@ -719,9 +719,9 @@ sends batches of at most 100, and polls tickets no sooner than 15 seconds.
 If Expo is disabled or incompletely configured, an authorized call returns zero counts
 with `200` and performs no campaign mutation. Missing cron configuration returns `503`,
 wrong credentials `401`, invalid cron configuration a safe `400`, and unexpected worker/
-provider failures a safe `500`. `vercel.json` schedules GET every minute; POST is an
-equivalent authenticated operational trigger and accepts only an absent body or strict
-`{}`. Worker state changes are not admin audits.
+provider failures a safe `500`. GitHub Actions invokes GET approximately every ten minutes;
+POST is an equivalent authenticated operational trigger and accepts only an absent body or
+strict `{}`. Worker state changes are not admin audits.
 
 Provider network failures, `429`, and `5xx` are transient. Other non-success HTTP
 responses, malformed JSON/shape, and ticket-count mismatches are permanent: every claimed
@@ -836,7 +836,7 @@ table labels, breadcrumbs, responsive overflow, noindex metadata, and robots beh
 
 The 108-operation contract and Phase 7 repository implementation are complete. Real
 Expo/EAS device delivery, production Upstash, authenticated admin Playwright flows, real
-Supabase Auth email/redirect/private Storage, both deployed cron schedules, backup/
+Supabase Auth email/redirect/private Storage, the deployed Vercel/GitHub cron schedules, backup/
 restore, and production deployment remain unverified. There is no public question-bank
 API by design. The local environment passes `env:check`; deployment still requires
 deployment-scoped cron and rate-limit values.
