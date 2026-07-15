@@ -14,7 +14,10 @@ import { checkAuthRateLimits, trustedClientIdentifier } from "@/lib/rate-limit";
 export type AuthActionState = { error?: string; success?: string };
 
 export async function loginAction(_: AuthActionState, formData: FormData): Promise<AuthActionState> {
-  const input = loginSchema.safeParse(Object.fromEntries(formData));
+  const input = loginSchema.safeParse({
+    email: formData.get("email"),
+    password: formData.get("password"),
+  });
   if (!input.success) return { error: "Enter a valid email and password." };
   const requestHeaders = await headers();
   const rateLimit = await checkAuthRateLimits({
@@ -49,7 +52,7 @@ export async function forgotPasswordAction(
   _: AuthActionState,
   formData: FormData,
 ): Promise<AuthActionState> {
-  const input = emailSchema.safeParse(Object.fromEntries(formData));
+  const input = emailSchema.safeParse({ email: formData.get("email") });
   if (!input.success) return { error: "Enter a valid email address." };
   const requestHeaders = await headers();
   const rateLimit = await checkAuthRateLimits({
@@ -70,7 +73,10 @@ export async function updatePasswordAction(
   _: AuthActionState,
   formData: FormData,
 ): Promise<AuthActionState> {
-  const input = passwordSchema.safeParse(Object.fromEntries(formData));
+  const input = passwordSchema.safeParse({
+    password: formData.get("password"),
+    confirmPassword: formData.get("confirmPassword"),
+  });
   if (!input.success) return { error: input.error.issues[0]?.message ?? "Enter a valid password." };
   const supabase = await createSupabaseServerClient();
   const { data: userData } = await supabase.auth.getUser();

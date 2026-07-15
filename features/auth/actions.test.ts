@@ -28,6 +28,7 @@ describe("web auth action rate limiting", () => {
 
   it("limits login by the schema-normalized identifier before authentication", async () => {
     const form = new FormData();
+    form.set("$ACTION_KEY", "framework-generated-value");
     form.set("email", " User@Example.COM ");
     form.set("password", "valid-password");
     await expect(loginAction({}, form)).resolves.toEqual({ error: "Too many attempts. Please try again later." });
