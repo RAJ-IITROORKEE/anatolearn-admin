@@ -35,6 +35,22 @@ function storageUploadError(error: unknown, requestId: string) {
   return new MediaServiceError("STORAGE_ERROR", "Image upload failed.");
 }
 
+function logSigningError(error: unknown, requestId: string, batch = false) {
+  const providerError = error as { name?: unknown; message?: unknown };
+  logError({
+    requestId,
+    code: batch ? "MEDIA_BATCH_SIGNED_URL_FAILED" : "MEDIA_SIGNED_URL_FAILED",
+    status: 502,
+    route: "/admin/media/sign",
+    details: {
+      provider: "supabase",
+      operation: batch ? "storage.createSignedUrls" : "storage.createSignedUrl",
+      name: safeProviderValue(providerError.name) ?? "StorageError",
+      message: safeProviderValue(providerError.message) ?? "Storage provider did not return a message.",
+    },
+  });
+}
+
 export type AdminMediaReference = {
   id: string;
   signedUrl: string;
@@ -43,11 +59,20 @@ export type AdminMediaReference = {
   altText: string;
 };
 
-async function withSignedUrl(asset: SelectedMedia, expiresIn = 900, required = false) {
-  const { data, error } = await createSupabaseAdminClient().storage.from(asset.bucket).createSignedUrl(asset.path, expiresIn);
+async function withSignedUrl(asset: SelectedMedia, expiresIn = 900, required = false, requestId = "unknown") {
   const { bucket: _bucket, path: _path, ...dto } = asset;
   void _bucket; void _path;
+  let signed;
+  try {
+    signed = await createSupabaseAdminClient().storage.from(asset.bucket).createSignedUrl(asset.path, expiresIn);
+  } catch (error) {
+    logSigningError(error, requestId);
+    if (required) throw new MediaServiceError("STORAGE_ERROR", "Could not create a media access URL.");
+    return mediaDto(dto, null, null);
+  }
+  const { data, error } = signed;
   if (error || !data?.signedUrl) {
+    logSigningError(error ?? new Error("Storage provider did not return a signed URL."), requestId);
     if (required) throw new MediaServiceError("STORAGE_ERROR", "Could not create a media access URL.");
     return mediaDto(dto, null, null);
   }
@@ -92,7 +117,7 @@ export async function uploadMedia(file: File, altText: string, actorId: string, 
     logError({ requestId, code: "MEDIA_METADATA_PERSIST_FAILED", status: 500, route: "/admin/media/upload" });
     throw error;
   }
-  return withSignedUrl(asset);
+  return withSignedUrl(asset, 900, false, requestId);
 }
 
 export async function listMedia(input: { page: number; pageSize: number; search?: string; mimeType?: string; archived?: boolean; uploadedById?: string }) {
@@ -119,8 +144,18 @@ export async function getAdminMediaMap(ids: readonly string[]) {
 
   const client = createSupabaseAdminClient();
   const entries = await Promise.all([...byBucket.entries()].map(async ([bucket, bucketAssets]) => {
-    const { data, error } = await client.storage.from(bucket).createSignedUrls(bucketAssets.map((asset) => asset.path), 900);
-    if (error || !data) return [];
+    let signed;
+    try {
+      signed = await client.storage.from(bucket).createSignedUrls(bucketAssets.map((asset) => asset.path), 900);
+    } catch (error) {
+      logSigningError(error, "unknown", true);
+      return [];
+    }
+    const { data, error } = signed;
+    if (error || !data) {
+      logSigningError(error ?? new Error("Storage provider did not return signed URLs."), "unknown", true);
+      return [];
+    }
     return bucketAssets.flatMap((asset, index) => {
       const signedUrl = data[index]?.signedUrl;
       return signedUrl ? [[asset.id, { id: asset.id, signedUrl, width: asset.width, height: asset.height, altText: asset.altText }] as const] : [];

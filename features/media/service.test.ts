@@ -68,6 +68,28 @@ describe("historical attempt media authorization", () => {
     expect(mocks.remove).not.toHaveBeenCalled();
   });
 
+  it("completes an upload when the optional preview signer throws", async () => {
+    const created = { ...asset, bucket: "anatomy-media", path: "media/uploader/asset.png", archivedAt: null };
+    mocks.upload.mockResolvedValue({ data: { path: created.path }, error: null });
+    mocks.tx.mediaAsset.create.mockResolvedValue(created);
+    mocks.tx.auditLog.create.mockResolvedValue({});
+    mocks.createSignedUrl.mockRejectedValue(new Error("signing service unavailable"));
+
+    await expect(uploadMedia(
+      { name: "heart.png", type: "image/png", size: 1, arrayBuffer: async () => new Uint8Array([1]).buffer } as File,
+      "",
+      "uploader",
+      "request-id",
+    )).resolves.toMatchObject({ id: created.id, signedUrl: null, signedUrlExpiresIn: null });
+
+    expect(mocks.remove).not.toHaveBeenCalled();
+    expect(mocks.logError).toHaveBeenCalledWith(expect.objectContaining({
+      requestId: "request-id",
+      code: "MEDIA_SIGNED_URL_FAILED",
+      details: expect.objectContaining({ provider: "supabase", operation: "storage.createSignedUrl", message: "signing service unavailable" }),
+    }));
+  });
+
   it("records safe Supabase details when storage rejects an upload", async () => {
     mocks.upload.mockResolvedValue({ data: null, error: { name: "StorageApiError", message: "Bucket policy rejected the upload", status: 403 } });
 
@@ -149,5 +171,16 @@ describe("historical attempt media authorization", () => {
     mocks.createSignedUrls.mockResolvedValue({ data: null, error: { message: "temporary" } });
 
     await expect(getAdminMediaMap([asset.id])).resolves.toEqual(new Map());
+  });
+
+  it("keeps admin parent lists available when batch preview signing throws", async () => {
+    mocks.findMany.mockResolvedValue([asset]);
+    mocks.createSignedUrls.mockRejectedValue(new Error("signing service unavailable"));
+
+    await expect(getAdminMediaMap([asset.id])).resolves.toEqual(new Map());
+    expect(mocks.logError).toHaveBeenCalledWith(expect.objectContaining({
+      code: "MEDIA_BATCH_SIGNED_URL_FAILED",
+      details: expect.objectContaining({ provider: "supabase", operation: "storage.createSignedUrls", message: "signing service unavailable" }),
+    }));
   });
 });
