@@ -10,12 +10,14 @@ type Props = {
 };
 
 export function AdminMediaThumbnail({ attached = false, label, legacyUrl, media }: Props) {
+  void attached;
   const source = media?.signedUrl ?? legacyUrl;
   const alt = media?.altText || label;
+  if (!source) return null;
   return <div className="grid min-w-24 gap-1.5">
     <div className="flex h-20 items-center justify-center overflow-hidden rounded-xl border border-border bg-subtle">
-      {source ? <img alt={alt} className="h-full w-full object-contain" src={source} /> : <span className="px-2 text-center text-xs text-muted">{attached ? "Preview unavailable" : "Not uploaded"}</span>}
+      <img alt={alt} className="h-full w-full object-contain" src={source} />
     </div>
-    <span className="text-center text-xs font-medium text-muted">{source ? `${label} attached` : attached ? `${label} preview unavailable` : `No ${label.toLowerCase()}`}</span>
+    <span className="text-center text-xs font-medium text-muted">{label} attached</span>
   </div>;
 }

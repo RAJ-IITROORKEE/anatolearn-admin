@@ -59,7 +59,7 @@ export async function createFlashcardAction(_state: ActionState, data: FormData)
     revalidatePath("/flashcards");
     return { success: "Flashcard created.", redirectTo: `/flashcards/${created.id}` };
   } catch (error) {
-    if (uploadContext) await cleanupDirectUploads(uploadContext); return phase4ActionError(error);
+    if (uploadContext) await cleanupDirectUploads(uploadContext); return phase4ActionError(error, { requestId: uploadContext?.requestId, route: "/admin/flashcards/create" });
   }
 }
 
@@ -72,7 +72,7 @@ export async function updateFlashcardAction(id: string, _state: ActionState, dat
     await updateFlashcard(id, parsed.data, ctx);
     revalidatePath(`/flashcards/${id}`);
     return { success: "Flashcard saved." };
-  } catch (error) { if (uploadContext) await cleanupDirectUploads(uploadContext); return phase4ActionError(error); }
+  } catch (error) { if (uploadContext) await cleanupDirectUploads(uploadContext); return phase4ActionError(error, { requestId: uploadContext?.requestId, route: "/admin/flashcards/update" }); }
 }
 
 export async function changeFlashcardStatusAction(id: string, status: string, _state: ActionState): Promise<ActionState> {
@@ -104,7 +104,7 @@ export async function createQuestionAction(_state: ActionState, data: FormData):
     revalidatePath(`/questions/${parsed.data.assessmentType.toLowerCase()}`);
     return { success: "Question created.", redirectTo: `/questions/${created.id}` };
   } catch (error) {
-    if (uploadContext) await cleanupDirectUploads(uploadContext); return phase4ActionError(error);
+    if (uploadContext) await cleanupDirectUploads(uploadContext); return phase4ActionError(error, { requestId: uploadContext?.requestId, route: "/admin/questions/create" });
   }
 }
 
@@ -117,7 +117,7 @@ export async function updateQuestionAction(id: string, _state: ActionState, data
     await updateQuestion(id, parsed.data, ctx);
     revalidatePath(`/questions/${id}`);
     return { success: "Question saved." };
-  } catch (error) { if (uploadContext) await cleanupDirectUploads(uploadContext); return phase4ActionError(error); }
+  } catch (error) { if (uploadContext) await cleanupDirectUploads(uploadContext); return phase4ActionError(error, { requestId: uploadContext?.requestId, route: "/admin/questions/update" }); }
 }
 
 export async function changeQuestionStatusAction(id: string, status: string, _state: ActionState): Promise<ActionState> {

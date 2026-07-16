@@ -42,7 +42,7 @@ export async function createResource(resource: Resource, _state: ActionState, da
     const created = await createContent(resource, parsed.data, ctx);
     revalidatePath(resource === "organSystem" ? "/organ-systems" : resource === "topic" ? "/topics" : "/content");
     return { success: `${resource === "organSystem" ? "Organ system" : resource === "topic" ? "Topic" : "Lesson"} created.`, redirectTo: resource === "organSystem" ? `/organ-systems/${created.slug}` : resource === "topic" ? `/topics/${created.id}` : `/content/${created.id}` };
-  } catch (error) { if (uploadContext) await cleanupDirectUploads(uploadContext); return phase3ActionError(error); }
+  } catch (error) { if (uploadContext) await cleanupDirectUploads(uploadContext); return phase3ActionError(error, { requestId: uploadContext?.requestId, route: `/admin/${resource}/create` }); }
 }
 
 export async function updateResource(resource: Resource, id: string, _state: ActionState, data: FormData): Promise<ActionState> {
@@ -55,7 +55,7 @@ export async function updateResource(resource: Resource, id: string, _state: Act
     const updated = await updateContent(resource, id, parsed.data, ctx);
     revalidatePath(resource === "organSystem" ? `/organ-systems/${updated.slug}` : resource === "topic" ? `/topics/${id}` : `/content/${id}`);
     return { success: "Changes saved.", ...(resource === "organSystem" ? { redirectTo: `/organ-systems/${updated.slug}` } : {}) };
-  } catch (error) { if (uploadContext) await cleanupDirectUploads(uploadContext); return phase3ActionError(error); }
+  } catch (error) { if (uploadContext) await cleanupDirectUploads(uploadContext); return phase3ActionError(error, { requestId: uploadContext?.requestId, route: `/admin/${resource}/update` }); }
 }
 
 export async function changeResourceStatus(resource: Resource, id: string, status: string, _state: ActionState): Promise<ActionState> {
@@ -64,11 +64,13 @@ export async function changeResourceStatus(resource: Resource, id: string, statu
 }
 
 export async function uploadMediaAction(_state: ActionState, data: FormData): Promise<ActionState> {
-  try { const parsed = mediaUploadSchema.safeParse({ altText: formValue(data, "altText") }); const file = data.get("file"); if (!parsed.success) return { error: parsed.error.issues[0]?.message }; if (!(file instanceof File) || !file.size) return { error: "Choose an image to upload." }; const ctx = await context(); await uploadMedia(file, parsed.data.altText, ctx.actorId, ctx.requestId); revalidatePath("/media"); return { success: "Image uploaded." }; } catch (error) { return phase3ActionError(error); }
+  let requestId = "unknown";
+  try { const parsed = mediaUploadSchema.safeParse({ altText: formValue(data, "altText") }); const file = data.get("file"); if (!parsed.success) return { error: parsed.error.issues[0]?.message }; if (!(file instanceof File) || !file.size) return { error: "Choose an image to upload." }; const ctx = await context(); requestId = ctx.requestId; await uploadMedia(file, parsed.data.altText, ctx.actorId, ctx.requestId); revalidatePath("/media"); return { success: "Image uploaded." }; } catch (error) { return phase3ActionError(error, { requestId, route: "/admin/media/upload" }); }
 }
 
 export async function updateMediaAction(id: string, _state: ActionState, data: FormData): Promise<ActionState> {
-  try { const parsed = mediaUpdateSchema.safeParse({ altText: formValue(data, "altText") }); if (!parsed.success) return { error: parsed.error.issues[0]?.message }; const ctx = await context(); await updateMedia(id, parsed.data.altText!, ctx.actorId, ctx.requestId); revalidatePath("/media"); return { success: "Alt text updated." }; } catch (error) { return phase3ActionError(error); }
+  let requestId = "unknown";
+  try { const parsed = mediaUpdateSchema.safeParse({ altText: formValue(data, "altText") }); if (!parsed.success) return { error: parsed.error.issues[0]?.message }; const ctx = await context(); requestId = ctx.requestId; await updateMedia(id, parsed.data.altText!, ctx.actorId, ctx.requestId); revalidatePath("/media"); return { success: "Alt text updated." }; } catch (error) { return phase3ActionError(error, { requestId, route: "/admin/media/update" }); }
 }
 
 export async function archiveMediaAction(id: string, _state: ActionState): Promise<ActionState> {

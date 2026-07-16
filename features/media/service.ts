@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 
 import { getServerEnv } from "@/lib/env";
 import { prisma } from "@/lib/db/prisma";
+import { logError } from "@/lib/logger";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { mediaDto } from "./dto";
 import { hasPublishedMediaReference, MediaServiceError } from "./domain";
@@ -11,6 +12,28 @@ import { buildMediaPath } from "./schemas";
 
 const select = { id: true, originalFilename: true, mimeType: true, byteSize: true, width: true, height: true, altText: true, archivedAt: true, uploadedById: true, createdAt: true, updatedAt: true, bucket: true, path: true } satisfies Prisma.MediaAssetSelect;
 type SelectedMedia = Prisma.MediaAssetGetPayload<{ select: typeof select }>;
+
+function safeProviderValue(value: unknown) {
+  return typeof value === "string" ? value.replace(/[\r\n]/g, " ").slice(0, 240) : undefined;
+}
+
+function storageUploadError(error: unknown, requestId: string) {
+  const providerError = error as { name?: unknown; message?: unknown; status?: unknown };
+  const status = typeof providerError.status === "number" && providerError.status >= 400 ? providerError.status : 502;
+  logError({
+    requestId,
+    code: "MEDIA_STORAGE_UPLOAD_FAILED",
+    status,
+    route: "/admin/media/upload",
+    details: {
+      provider: "supabase",
+      operation: "storage.upload",
+      name: safeProviderValue(providerError.name) ?? "StorageError",
+      message: safeProviderValue(providerError.message) ?? "Storage provider did not return a message.",
+    },
+  });
+  return new MediaServiceError("STORAGE_ERROR", "Image upload failed.");
+}
 
 export type AdminMediaReference = {
   id: string;
@@ -42,8 +65,13 @@ export async function uploadMedia(file: File, altText: string, actorId: string, 
   const assetId = crypto.randomUUID();
   const path = buildMediaPath(actorId, assetId, image.mimeType);
   const storage = createSupabaseAdminClient().storage.from(env.SUPABASE_STORAGE_BUCKET);
-  const uploaded = await storage.upload(path, bytes, { contentType: image.mimeType, upsert: false });
-  if (uploaded.error) throw new MediaServiceError("STORAGE_ERROR", "Image upload failed.");
+  let uploaded;
+  try {
+    uploaded = await storage.upload(path, bytes, { contentType: image.mimeType, upsert: false });
+  } catch (error) {
+    throw storageUploadError(error, requestId);
+  }
+  if (uploaded.error) throw storageUploadError(uploaded.error, requestId);
   let asset: SelectedMedia;
   try {
     asset = await prisma.$transaction(async (tx) => {
@@ -52,7 +80,16 @@ export async function uploadMedia(file: File, altText: string, actorId: string, 
       return created;
     });
   } catch (error) {
-    await storage.remove([path]);
+    try {
+      const removed = await storage.remove([path]);
+      if (removed?.error) {
+        logError({ requestId, code: "MEDIA_STORAGE_COMPENSATION_FAILED", status: 502, route: "/admin/media/upload", details: { provider: "supabase", operation: "storage.remove", name: safeProviderValue(removed.error.name) ?? "StorageError", message: safeProviderValue(removed.error.message) ?? "Storage provider did not return a message." } });
+      }
+    } catch (compensationError) {
+      const providerError = compensationError as { name?: unknown; message?: unknown };
+      logError({ requestId, code: "MEDIA_STORAGE_COMPENSATION_FAILED", status: 502, route: "/admin/media/upload", details: { provider: "supabase", operation: "storage.remove", name: safeProviderValue(providerError.name) ?? "StorageError", message: safeProviderValue(providerError.message) ?? "Storage provider did not return a message." } });
+    }
+    logError({ requestId, code: "MEDIA_METADATA_PERSIST_FAILED", status: 500, route: "/admin/media/upload" });
     throw error;
   }
   return withSignedUrl(asset);

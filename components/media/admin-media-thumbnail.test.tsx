@@ -10,11 +10,13 @@ describe("AdminMediaThumbnail", () => {
     expect(screen.getByText("Cover attached")).toBeInTheDocument();
   });
 
-  it("distinguishes signing failure from no attached image", () => {
+  it("hides missing or unavailable images instead of rendering placeholders", () => {
     const { rerender } = render(<AdminMediaThumbnail attached label="Icon" />);
-    expect(screen.getByText("Icon preview unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("Icon preview unavailable")).not.toBeInTheDocument();
     rerender(<AdminMediaThumbnail label="Icon" />);
-    expect(screen.getByText("No icon")).toBeInTheDocument();
+    expect(screen.queryByText("Not uploaded")).not.toBeInTheDocument();
+    expect(screen.queryByText("No icon")).not.toBeInTheDocument();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
   });
 
   it("uses a legacy URL when no managed asset is attached", () => {

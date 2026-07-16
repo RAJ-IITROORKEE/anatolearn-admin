@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   createSignedUrls: vi.fn(),
   upload: vi.fn(),
   remove: vi.fn(),
+  logError: vi.fn(),
   findMany: vi.fn(),
   count: vi.fn(),
   tx: {
@@ -19,6 +20,7 @@ vi.mock("@/lib/db/prisma", () => ({ prisma: { $transaction: mocks.transaction, m
 vi.mock("@/lib/supabase/admin", () => ({
   createSupabaseAdminClient: () => ({ storage: { from: () => ({ createSignedUrl: mocks.createSignedUrl, createSignedUrls: mocks.createSignedUrls, upload: mocks.upload, remove: mocks.remove }) } }),
 }));
+vi.mock("@/lib/logger", () => ({ logError: mocks.logError }));
 vi.mock("@/lib/env", () => ({ getServerEnv: () => ({
   SUPABASE_STORAGE_MAX_FILE_MB: 8,
   SUPABASE_STORAGE_ALLOWED_MIME_TYPES: "image/png,image/jpeg,image/webp",
@@ -64,6 +66,41 @@ describe("historical attempt media authorization", () => {
 
     expect(result).toMatchObject({ id: created.id, signedUrl: null, signedUrlExpiresIn: null });
     expect(mocks.remove).not.toHaveBeenCalled();
+  });
+
+  it("records safe Supabase details when storage rejects an upload", async () => {
+    mocks.upload.mockResolvedValue({ data: null, error: { name: "StorageApiError", message: "Bucket policy rejected the upload", status: 403 } });
+
+    await expect(uploadMedia(
+      { name: "icon.png", type: "image/png", size: 1, arrayBuffer: async () => new Uint8Array([1]).buffer } as File,
+      "",
+      "uploader",
+      "request-id",
+    )).rejects.toMatchObject({ code: "STORAGE_ERROR", message: "Image upload failed." });
+
+    expect(mocks.logError).toHaveBeenCalledWith(expect.objectContaining({
+      requestId: "request-id",
+      code: "MEDIA_STORAGE_UPLOAD_FAILED",
+      status: 403,
+      details: expect.objectContaining({ provider: "supabase", operation: "storage.upload", message: "Bucket policy rejected the upload" }),
+    }));
+  });
+
+  it("converts thrown storage failures into a safe media error and logs the provider context", async () => {
+    mocks.upload.mockRejectedValue(new Error("network unavailable"));
+
+    await expect(uploadMedia(
+      { name: "icon.png", type: "image/png", size: 1, arrayBuffer: async () => new Uint8Array([1]).buffer } as File,
+      "",
+      "uploader",
+      "request-id",
+    )).rejects.toMatchObject({ code: "STORAGE_ERROR", message: "Image upload failed." });
+
+    expect(mocks.logError).toHaveBeenCalledWith(expect.objectContaining({
+      requestId: "request-id",
+      code: "MEDIA_STORAGE_UPLOAD_FAILED",
+      details: expect.objectContaining({ provider: "supabase", operation: "storage.upload", message: "network unavailable" }),
+    }));
   });
 
   it("keeps the media list available when one preview cannot be signed", async () => {
