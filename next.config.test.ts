@@ -16,4 +16,8 @@ describe("static security headers", () => {
     const production = Object.fromEntries(createSecurityHeaders("production").map(({ key, value }) => [key.toLowerCase(), value]));
     expect(production["strict-transport-security"]).toContain("max-age=31536000");
   });
+
+  it("allows server-action image forms up to the media upload limit", () => {
+    expect(nextConfig.experimental?.serverActions?.bodySizeLimit).toBe("8mb");
+  });
 });

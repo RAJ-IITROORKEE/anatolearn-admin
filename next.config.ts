@@ -13,6 +13,11 @@ export function createSecurityHeaders(nodeEnv: string | undefined) {
 }
 
 const nextConfig: NextConfig = {
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "8mb",
+    },
+  },
   async headers() {
     return [{ source: "/(.*)", headers: createSecurityHeaders(process.env.NODE_ENV) }];
   },
