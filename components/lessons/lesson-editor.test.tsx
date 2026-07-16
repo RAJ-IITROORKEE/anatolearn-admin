@@ -1,8 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { expect, test, vi } from "vitest";
-
-vi.mock("@/app/(admin)/managed-media-actions", () => ({ searchManagedMediaAction: vi.fn().mockResolvedValue({ items: [], pagination: { page: 1, totalPages: 0 } }) }));
+import { expect, test } from "vitest";
 
 import { LessonEditor } from "./lesson-editor";
 

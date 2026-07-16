@@ -5,7 +5,6 @@
 import { ArrowDown, ArrowUp, Copy, Plus, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { ManagedMediaPicker, type ManagedMediaItem } from "@/components/media/managed-media-picker";
 import { fieldClass, labelClass, panelClass } from "@/components/phase3/admin-ui";
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog";
 import { contentBlocksSchema, type ContentBlock } from "@/features/content/schemas";
@@ -66,7 +65,7 @@ function isSemanticallyEmpty(block: EditorBlock) {
   }
 }
 
-function LessonPreview({ blocks, media }: { blocks: unknown; media: ReadonlyMap<string, ManagedMediaItem> }) {
+function LessonPreview({ blocks, media }: { blocks: unknown; media: ReadonlyMap<string, string> }) {
   const parsed = contentBlocksSchema.safeParse(blocks);
   if (!parsed.success) return <p className="rounded-xl bg-subtle p-4 text-sm text-muted">Complete required block fields to see the validated learner preview.</p>;
   return <div className="grid gap-5">{parsed.data.map((block) => {
@@ -78,8 +77,8 @@ function LessonPreview({ blocks, media }: { blocks: unknown; media: ReadonlyMap<
     }
     if (block.type === "paragraph") return <p className="whitespace-pre-wrap text-sm leading-7 text-body" key={key}>{block.text}</p>;
     if (block.type === "image") {
-      const item = media.get(block.id ?? "");
-      return <figure key={key}>{item?.signedUrl ? <img alt={block.altText} className="max-h-96 w-full rounded-xl object-contain" src={item.signedUrl} /> : <div className="flex min-h-40 items-center justify-center rounded-xl bg-subtle p-5 text-center text-sm font-semibold text-muted">Managed image preview unavailable</div>}{block.caption ? <figcaption className="mt-2 text-center text-xs text-muted">{block.caption}</figcaption> : null}</figure>;
+       const preview = media.get(block.id ?? "");
+       return <figure key={key}>{preview ? <img alt={block.altText} className="max-h-96 w-full rounded-xl object-contain" src={preview} /> : <div className="flex min-h-40 items-center justify-center rounded-xl bg-subtle p-5 text-center text-sm font-semibold text-muted">Upload an image to preview it here.</div>}{block.caption ? <figcaption className="mt-2 text-center text-xs text-muted">{block.caption}</figcaption> : null}</figure>;
     }
     if (block.type === "callout") return <aside className={`rounded-xl border p-4 ${block.tone === "warning" ? "border-warning/30 bg-amber-50" : block.tone === "success" ? "border-success/30 bg-success-soft" : "border-primary/20 bg-primary-soft"}`} key={key}>{block.title ? <p className="font-bold">{block.title}</p> : null}<p className="mt-1 whitespace-pre-wrap text-sm leading-6">{block.text}</p></aside>;
     if (block.type === "bulletList") return <ul className="list-disc space-y-2 pl-6 text-sm text-body" key={key}>{block.items.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul>;
@@ -91,7 +90,7 @@ function LessonPreview({ blocks, media }: { blocks: unknown; media: ReadonlyMap<
 export function LessonEditor({ initialBlocks }: { initialBlocks: ContentBlock[] }) {
   const [blocks, setBlocks] = useState<EditorBlock[]>(() => normalizeBlocks(initialBlocks));
   const [type, setType] = useState<BlockType>("paragraph");
-  const [media, setMedia] = useState<Map<string, ManagedMediaItem>>(new Map());
+  const [media, setMedia] = useState<Map<string, string>>(new Map());
   const [newBlockIds, setNewBlockIds] = useState<Set<string>>(new Set());
   const serializedInput = useRef<HTMLInputElement>(null);
   const mounted = useRef(false);
@@ -99,6 +98,7 @@ export function LessonEditor({ initialBlocks }: { initialBlocks: ContentBlock[] 
     if (!mounted.current) { mounted.current = true; return; }
     serializedInput.current?.dispatchEvent(new Event("change", { bubbles: true }));
   }, [blocks]);
+  useEffect(() => () => { for (const url of media.values()) URL.revokeObjectURL(url); }, [media]);
   const checked = contentBlocksSchema.safeParse(blocks);
   const errors = checked.success ? [] : [...new Set(checked.error.issues.map((issue) => {
     const index = typeof issue.path[0] === "number" ? issue.path[0] + 1 : null;
@@ -140,7 +140,7 @@ export function LessonEditor({ initialBlocks }: { initialBlocks: ContentBlock[] 
         </div></div>
         {block.type === "heading" ? <div className="grid gap-3 sm:grid-cols-[120px_1fr]"><label className={labelClass}>Level<select className={fieldClass} onChange={(event) => replace(index, { ...block, level: Number(event.target.value) as 2 | 3 | 4 })} value={block.level}><option value="2">Heading 2</option><option value="3">Heading 3</option><option value="4">Heading 4</option></select></label><label className={labelClass}>Heading text<input className={fieldClass} maxLength={200} onChange={(event) => replace(index, { ...block, text: event.target.value })} required value={block.text} /></label></div> : null}
         {block.type === "paragraph" ? <label className={labelClass}>Paragraph text<textarea className={`${fieldClass} min-h-32 py-3`} maxLength={5000} onChange={(event) => replace(index, { ...block, text: event.target.value })} required value={block.text} /></label> : null}
-        {block.type === "image" ? <div className="grid gap-4"><ManagedMediaPicker label="Lesson image" name={`lessonMedia.${block.id}`} onChange={(id, item) => { replace(index, { ...block, mediaId: id }); setMedia((current) => { const next = new Map(current); if (item) next.set(block.id, item); else next.delete(block.id); return next; }); }} required value={block.mediaId} /><label className={labelClass}>Image alt text <span className="font-normal text-muted">Required</span><input className={fieldClass} maxLength={300} onChange={(event) => replace(index, { ...block, altText: event.target.value })} required value={block.altText} /></label><label className={labelClass}>Caption <span className="font-normal text-muted">Optional</span><input className={fieldClass} maxLength={500} onChange={(event) => replace(index, { ...block, caption: event.target.value || null })} value={block.caption ?? ""} /></label></div> : null}
+         {block.type === "image" ? <div className="grid gap-4 rounded-xl border border-border bg-subtle p-4"><label className={labelClass}>Lesson image <span className="font-normal text-muted">Upload to replace{block.mediaId ? "; existing image is retained unless replaced or cleared" : ""}</span><input accept="image/png,image/jpeg,image/webp" className={`${fieldClass} py-2`} name={`lessonFile.${block.id}`} onChange={(event) => { const file = event.target.files?.[0]; setMedia((current) => { const next = new Map(current); const old = next.get(block.id); if (old) URL.revokeObjectURL(old); if (file) next.set(block.id, URL.createObjectURL(file)); else next.delete(block.id); return next; }); }} type="file" /></label><label className={labelClass}>Image alt text <span className="font-normal text-muted">Required for new uploads</span><input className={fieldClass} maxLength={300} name={`lessonAltText.${block.id}`} onChange={(event) => replace(index, { ...block, altText: event.target.value })} required value={block.altText} /></label>{block.mediaId ? <label className="flex items-center gap-2 text-sm text-muted"><input name={`lessonClear.${block.id}`} type="checkbox" />Remove the existing image</label> : null}<label className={labelClass}>Caption <span className="font-normal text-muted">Optional</span><input className={fieldClass} maxLength={500} onChange={(event) => replace(index, { ...block, caption: event.target.value || null })} value={block.caption ?? ""} /></label></div> : null}
         {block.type === "callout" ? <div className="grid gap-3"><div className="grid gap-3 sm:grid-cols-2"><label className={labelClass}>Tone<select className={fieldClass} onChange={(event) => replace(index, { ...block, tone: event.target.value as "info" | "warning" | "success" })} value={block.tone}><option value="info">Information</option><option value="warning">Warning</option><option value="success">Success</option></select></label><label className={labelClass}>Title <span className="font-normal text-muted">Optional</span><input className={fieldClass} onChange={(event) => replace(index, { ...block, title: event.target.value || null })} value={block.title ?? ""} /></label></div><label className={labelClass}>Callout text<textarea className={`${fieldClass} min-h-28 py-3`} onChange={(event) => replace(index, { ...block, text: event.target.value })} required value={block.text} /></label></div> : null}
         {block.type === "bulletList" || block.type === "numberedList" ? <label className={labelClass}>List items <span className="font-normal text-muted">One item per line</span><textarea className={`${fieldClass} min-h-32 py-3`} onChange={(event) => replace(index, { ...block, items: event.target.value.split("\n") })} required value={block.items.join("\n")} /></label> : null}
         {block.type === "divider" ? <p className="text-sm text-muted">A horizontal divider will separate lesson sections.</p> : null}

@@ -29,7 +29,7 @@ export const contentBlocksSchema = z.array(contentBlockSchema).max(200).superRef
 });
 
 export const organSystemCreateSchema = z.object({
-  name: text(120), slug, shortDescription: text(500), longDescription: optionalText(5000),
+  name: text(120), slug: slug.optional(), shortDescription: text(500), longDescription: optionalText(5000),
   coverMediaId: uuid.nullable().optional(), iconMediaId: uuid.nullable().optional(),
   displayOrder: z.number().int().min(0), isActive: z.boolean().optional(),
 }).strict();

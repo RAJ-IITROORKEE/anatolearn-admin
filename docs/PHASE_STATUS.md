@@ -48,8 +48,9 @@ cron, and production deployment acceptance remain external gates.
   schema creation. Isolated role tests prove denied reads/writes and retained Prisma access.
 - Replaced raw lesson JSON editing with a visual editor for all seven block types,
   validated learner preview, duplication/reordering, delete confirmation, and dirty guard.
-- Added searchable/paginated unarchived managed-media pickers to system, topic, lesson,
-  flashcard, question, and option forms.
+- Replaced resource-form managed-media selection with direct image uploads for system,
+  topic, lesson, flashcard, question, and option forms; the Media Library remains the
+  searchable/paginated asset-management surface.
 - Completed accessibility/responsive fixes across password toggles, pagination, dialogs,
   breadcrumbs, tables, labels, overflow, metadata, and robots; established axe-enabled
   public and credential-gated authenticated Playwright coverage.
@@ -262,8 +263,8 @@ completion above records later work.
 2. There is no authenticated CRUD E2E coverage for content, media, flashcards,
    questions, lifecycle, or audit workflows; current Playwright coverage is shell/auth
    focused.
-3. Content, flashcard, question, and option forms still accept managed media UUID text
-   rather than offering a media picker.
+3. Direct file upload replacement is implemented for content, flashcard, question, and
+   option forms; the Media Library remains available for asset management.
 4. There is no public question API by design. Questions are reserved for internal
    assessment selection and the Phase 5 attempt engine.
 5. The rate limiter remains in-memory/process-local and unsuitable as a distributed

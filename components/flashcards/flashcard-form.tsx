@@ -5,7 +5,7 @@ import { useState } from "react";
 import type { FormAction } from "@/components/phase3/action-form";
 import { ActionForm } from "@/components/phase3/action-form";
 import { fieldClass, labelClass, panelClass } from "@/components/phase3/admin-ui";
-import { ManagedMediaPicker } from "@/components/media/managed-media-picker";
+import { DirectImageInput } from "@/components/media/direct-image-input";
 
 type Flashcard = {
   topicId: string;
@@ -31,7 +31,7 @@ export function FlashcardForm({ action, item, topics }: { action: FormAction; it
             <label className={labelClass}>Front text<textarea className={`${fieldClass} min-h-44 py-3`} name="frontText" onChange={(event) => setFront(event.target.value)} required value={front} /></label>
             <label className={labelClass}>Back text<textarea className={`${fieldClass} min-h-44 py-3`} name="backText" onChange={(event) => setBack(event.target.value)} required value={back} /></label>
           </div>
-          <div className="grid gap-5 md:grid-cols-2"><ManagedMediaPicker label="Front image" name="frontMediaId" value={item?.frontMediaId} /><ManagedMediaPicker label="Back image" name="backMediaId" value={item?.backMediaId} /></div>
+           <div className="grid gap-5 md:grid-cols-2"><DirectImageInput label="Front image" fileName="frontFile" altTextName="frontAltText" mediaIdName="frontMediaId" clearName="clearFront" existingMediaId={item?.frontMediaId} /><DirectImageInput label="Back image" fileName="backFile" altTextName="backAltText" mediaIdName="backMediaId" clearName="clearBack" existingMediaId={item?.backMediaId} /></div>
           <div className="grid gap-5 sm:grid-cols-2">
             <label className={labelClass}>Difficulty<select className={fieldClass} defaultValue={item?.difficulty ?? "MEDIUM"} name="difficulty"><option value="EASY">Easy</option><option value="MEDIUM">Medium</option><option value="HARD">Hard</option></select></label>
             <label className={labelClass}>Display order<input className={fieldClass} defaultValue={item?.displayOrder ?? 0} min="0" name="displayOrder" required type="number" /></label>

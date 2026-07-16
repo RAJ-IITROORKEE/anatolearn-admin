@@ -53,6 +53,8 @@ Install Chromium once with `npx playwright install chromium`.
 ### Media and audit
 
 - media pagination/filter normalization and page-size cap
+- direct resource uploads validate image files and required alt text, retain or clear existing media on edit, and compensate newly created assets when the parent mutation fails
+
 - non-empty alt-text updates
 - server-owned storage path construction independent of client filename
 - media `BigInt` byte-size serialization as a decimal DTO string
@@ -67,7 +69,8 @@ Install Chromium once with `npx playwright install chromium`.
 - pagination changes only `page` and retains active query filters
 - unexpected server-action exception messages are replaced by a safe generic message
 - seven-block lesson editing, validated preview, copy/reorder/confirmation/dirty guard
-- searchable paginated managed-media picker and integrations in content/learning forms
+- direct image inputs, local previews, existing-media retention/clear controls, and
+  indexed lesson/question upload fields
 - password visibility without field replacement/value loss; dialog focus, table labels,
   overflow, responsive pagination, breadcrumbs, and mobile-shell regressions
 

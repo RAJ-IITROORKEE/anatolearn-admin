@@ -11,70 +11,71 @@ import { questionActivitySchema, questionBulkStatusSchema, questionCreateSchema,
 import { requireAdminPage } from "@/lib/auth/session";
 import { phase4ActionError } from "./phase4-action-errors";
 import { moveToTrash } from "@/features/trash/service";
+import { cleanupDirectUploads, directUploadContext, formBoolean, formNullable, formValue, resolveMediaField } from "@/features/media/direct-upload";
 
-const value = (data: FormData, key: string) => String(data.get(key) ?? "").trim();
-const nullable = (data: FormData, key: string) => value(data, key) || null;
 const isRedirect = (error: unknown) => (error as { digest?: string }).digest?.startsWith("NEXT_REDIRECT");
 const context = async () => {
   const { profile } = await requireAdminPage();
   return { actorId: profile.id, requestId: crypto.randomUUID() };
 };
 
-function flashcardInput(data: FormData) {
+async function flashcardInput(data: FormData, ctx: ReturnType<typeof directUploadContext>) {
   return {
-    topicId: value(data, "topicId"),
-    frontText: value(data, "frontText"),
-    backText: value(data, "backText"),
-    frontMediaId: nullable(data, "frontMediaId"),
-    backMediaId: nullable(data, "backMediaId"),
-    difficulty: value(data, "difficulty"),
-    notes: nullable(data, "notes"),
-    displayOrder: Number(value(data, "displayOrder")),
+    topicId: formValue(data, "topicId"),
+    frontText: formValue(data, "frontText"),
+    backText: formValue(data, "backText"),
+    frontMediaId: await resolveMediaField(data, { fileKey: "frontFile", altText: formValue(data, "frontAltText"), existingId: formNullable(data, "frontMediaId"), clear: formBoolean(data, "clearFront") }, ctx),
+    backMediaId: await resolveMediaField(data, { fileKey: "backFile", altText: formValue(data, "backAltText"), existingId: formNullable(data, "backMediaId"), clear: formBoolean(data, "clearBack") }, ctx),
+    difficulty: formValue(data, "difficulty"),
+    notes: formNullable(data, "notes"),
+    displayOrder: Number(formValue(data, "displayOrder")),
   };
 }
 
-function questionInput(data: FormData) {
-  const count = Number(value(data, "optionCount"));
-  const correct = Number(value(data, "correctOption"));
+async function questionInput(data: FormData, ctx: ReturnType<typeof directUploadContext>) {
+  const count = Number(formValue(data, "optionCount"));
+  const correct = Number(formValue(data, "correctOption"));
   return {
-    topicId: value(data, "topicId"),
-    assessmentType: value(data, "assessmentType"),
-    questionText: value(data, "questionText"),
-    mediaId: nullable(data, "mediaId"),
-    explanation: value(data, "explanation"),
-    difficulty: value(data, "difficulty"),
-    conceptTag: nullable(data, "conceptTag"),
-    options: Number.isInteger(count) && count >= 0 ? Array.from({ length: count }, (_, index) => ({
-      ...(value(data, `optionId.${index}`) ? { id: value(data, `optionId.${index}`) } : {}),
-      optionText: value(data, `optionText.${index}`),
-      mediaId: nullable(data, `optionMediaId.${index}`),
+    topicId: formValue(data, "topicId"),
+    assessmentType: formValue(data, "assessmentType"),
+    questionText: formValue(data, "questionText"),
+    mediaId: await resolveMediaField(data, { fileKey: "questionFile", altText: formValue(data, "questionAltText"), existingId: formNullable(data, "mediaId"), clear: formBoolean(data, "clearQuestionImage") }, ctx),
+    explanation: formValue(data, "explanation"),
+    difficulty: formValue(data, "difficulty"),
+    conceptTag: formNullable(data, "conceptTag"),
+    options: Number.isInteger(count) && count >= 0 ? await Promise.all(Array.from({ length: count }, async (_, index) => ({
+      ...(formValue(data, `optionId.${index}`) ? { id: formValue(data, `optionId.${index}`) } : {}),
+      optionText: formValue(data, `optionText.${index}`),
+      mediaId: await resolveMediaField(data, { fileKey: `optionFile.${index}`, altText: formValue(data, `optionAltText.${index}`), existingId: formNullable(data, `optionMediaId.${index}`), clear: formBoolean(data, `clearOption.${index}`) }, ctx),
       isCorrect: index === correct,
-    })) : [],
+    }))) : [],
   };
 }
 
 export async function createFlashcardAction(_state: ActionState, data: FormData): Promise<ActionState> {
+  let uploadContext;
   try {
-    const parsed = flashcardCreateSchema.safeParse(flashcardInput(data));
-    if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the flashcard fields." };
-    const created = await createFlashcard(parsed.data, await context());
+    const ctx = await context(); uploadContext = directUploadContext(ctx.actorId, ctx.requestId); const parsed = flashcardCreateSchema.safeParse(await flashcardInput(data, uploadContext));
+    if (!parsed.success) { await cleanupDirectUploads(uploadContext); return { error: parsed.error.issues[0]?.message ?? "Check the flashcard fields." }; }
+    const created = await createFlashcard(parsed.data, ctx);
     revalidatePath("/flashcards");
     redirect(`/flashcards/${created.id}`);
   } catch (error) {
     if (isRedirect(error)) throw error;
-    return phase4ActionError(error);
+    if (uploadContext) await cleanupDirectUploads(uploadContext); return phase4ActionError(error);
   }
 }
 
 export async function updateFlashcardAction(id: string, _state: ActionState, data: FormData): Promise<ActionState> {
   void _state;
+  let uploadContext;
   try {
-    const parsed = flashcardUpdateSchema.safeParse(flashcardInput(data));
-    if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the flashcard fields." };
-    await updateFlashcard(id, parsed.data, await context());
+    const ctx = await context(); uploadContext = directUploadContext(ctx.actorId, ctx.requestId); const parsed = flashcardUpdateSchema.safeParse(await flashcardInput(data, uploadContext));
+    if (!parsed.success) { await cleanupDirectUploads(uploadContext); return { error: parsed.error.issues[0]?.message ?? "Check the flashcard fields." }; }
+    await updateFlashcard(id, parsed.data, ctx);
     revalidatePath(`/flashcards/${id}`);
     return { success: "Flashcard saved." };
-  } catch (error) { return phase4ActionError(error); }
+  } catch (error) { if (uploadContext) await cleanupDirectUploads(uploadContext); return phase4ActionError(error); }
 }
 
 export async function changeFlashcardStatusAction(id: string, status: string, _state: ActionState): Promise<ActionState> {
@@ -89,7 +90,7 @@ export async function changeFlashcardStatusAction(id: string, status: string, _s
 
 export async function bulkFlashcardStatusAction(_state: ActionState, data: FormData): Promise<ActionState> {
   try {
-    const parsed = flashcardBulkStatusSchema.safeParse({ ids: data.getAll("ids").map(String), status: value(data, "status") });
+    const parsed = flashcardBulkStatusSchema.safeParse({ ids: data.getAll("ids").map(String), status: formValue(data, "status") });
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Select at least one flashcard." };
     await bulkSetFlashcardStatus(parsed.data.ids, parsed.data.status, await context());
     revalidatePath("/flashcards");
@@ -98,27 +99,29 @@ export async function bulkFlashcardStatusAction(_state: ActionState, data: FormD
 }
 
 export async function createQuestionAction(_state: ActionState, data: FormData): Promise<ActionState> {
+  let uploadContext;
   try {
-    const parsed = questionCreateSchema.safeParse(questionInput(data));
-    if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the question fields." };
-    const created = await createQuestion(parsed.data, await context());
+    const ctx = await context(); uploadContext = directUploadContext(ctx.actorId, ctx.requestId); const parsed = questionCreateSchema.safeParse(await questionInput(data, uploadContext));
+    if (!parsed.success) { await cleanupDirectUploads(uploadContext); return { error: parsed.error.issues[0]?.message ?? "Check the question fields." }; }
+    const created = await createQuestion(parsed.data, ctx);
     revalidatePath(`/questions/${parsed.data.assessmentType.toLowerCase()}`);
     redirect(`/questions/${created.id}`);
   } catch (error) {
     if (isRedirect(error)) throw error;
-    return phase4ActionError(error);
+    if (uploadContext) await cleanupDirectUploads(uploadContext); return phase4ActionError(error);
   }
 }
 
 export async function updateQuestionAction(id: string, _state: ActionState, data: FormData): Promise<ActionState> {
   void _state;
+  let uploadContext;
   try {
-    const parsed = questionUpdateSchema.safeParse(questionInput(data));
-    if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the question fields." };
-    await updateQuestion(id, parsed.data, await context());
+    const ctx = await context(); uploadContext = directUploadContext(ctx.actorId, ctx.requestId); const parsed = questionUpdateSchema.safeParse(await questionInput(data, uploadContext));
+    if (!parsed.success) { await cleanupDirectUploads(uploadContext); return { error: parsed.error.issues[0]?.message ?? "Check the question fields." }; }
+    await updateQuestion(id, parsed.data, ctx);
     revalidatePath(`/questions/${id}`);
     return { success: "Question saved." };
-  } catch (error) { return phase4ActionError(error); }
+  } catch (error) { if (uploadContext) await cleanupDirectUploads(uploadContext); return phase4ActionError(error); }
 }
 
 export async function changeQuestionStatusAction(id: string, status: string, _state: ActionState): Promise<ActionState> {
@@ -168,7 +171,7 @@ export async function duplicateQuestionAction(id: string, _state: ActionState): 
 
 export async function bulkQuestionStatusAction(_state: ActionState, data: FormData): Promise<ActionState> {
   try {
-    const parsed = questionBulkStatusSchema.safeParse({ ids: data.getAll("ids").map(String), status: value(data, "status") });
+    const parsed = questionBulkStatusSchema.safeParse({ ids: data.getAll("ids").map(String), status: formValue(data, "status") });
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Select at least one question." };
     await bulkSetQuestionStatus(parsed.data.ids, parsed.data.status, await context());
     revalidatePath("/questions", "layout");

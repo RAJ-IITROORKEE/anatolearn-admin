@@ -224,6 +224,17 @@ and a published lesson must remain non-empty with valid unarchived media referen
 Send exactly `{ "status": "DRAFT"|"PUBLISHED"|"ARCHIVED" }`. A body that does not
 match this exact schema is parsed as a normal update.
 
+### Direct image upload form
+
+Content create/update endpoints also accept `multipart/form-data`. Text fields use the
+same names as the JSON properties. Image replacements use `coverFile`/`iconFile` or
+`lessonFile.{blockId}` with matching `coverAltText`, `iconAltText`, or
+`lessonAltText.{blockId}`. Existing IDs are sent as `coverMediaId`, `iconMediaId`, or
+the image block's `mediaId`; send `clearCover`, `clearIcon`, or `lessonClear.{blockId}`
+as `on` to remove an existing image. Lesson `contentBlocks` is a JSON-encoded array.
+Files are validated server-side, uploaded to private Storage, and newly created assets
+are archived if the parent mutation fails.
+
 - Draft and published states can move in either direction.
 - Archived state is terminal; restore attempts return `409 INVALID_STATUS_TRANSITION`.
 - Topic publication requires a published, active parent system.
@@ -300,6 +311,10 @@ Progress body is strict:
 ```json
 { "eventId": "550e8400-e29b-41d4-a716-446655440000", "isDifficult": true, "isMastered": false }
 ```
+Flashcard create/update endpoints also accept `multipart/form-data`. Use `frontFile` or
+`backFile` with `frontAltText` or `backAltText`; preserve an existing image with
+`frontMediaId`/`backMediaId`, or clear it with `clearFront`/`clearBack=on`.
+
 
 The flags are optional. A new `(user,eventId)` increments the card's view count once.
 Replay for the same card returns current progress; reuse for another card returns
@@ -341,6 +356,12 @@ options, and unarchived question/option media. Archived questions cannot be edit
 reactivated, or restored. Deactivation is independent of publication but removes a
 question from internal selection. Duplicate copies content/media/options to a new
 active draft and records the source ID only in the create audit snapshot.
+Question create/update endpoints also accept `multipart/form-data`. The main image uses
+`questionFile`, `questionAltText`, `mediaId`, and `clearQuestionImage=on`. Option fields
+are indexed by position: `optionText.{index}`, `optionFile.{index}`,
+`optionAltText.{index}`, `optionMediaId.{index}`, `clearOption.{index}`, and
+`optionId.{index}`. `optionCount` and `correctOption` describe the submitted aggregate.
+
 
 Common Phase 4 errors include `400 VALIDATION_ERROR`, `401 UNAUTHORIZED`, `403
 FORBIDDEN`/`INVALID_ORIGIN`, `404 NOT_FOUND`, `409 INVALID_STATUS_TRANSITION`,
@@ -794,8 +815,8 @@ hash and user agent. Database triggers reject audit-row updates and deletes.
 
 ## Admin UI routes implemented through Phase 7
 
-- `/organ-systems`, `/organ-systems/new`, `/organ-systems/[id]`
-- `/organ-systems/[id]/topics`
+- `/organ-systems`, `/organ-systems/new`, `/organ-systems/[slug]`
+- `/organ-systems/[slug]/topics`
 - `/topics`, `/topics/[id]`
 - `/content`, `/content/new`, `/content/[id]`
 - `/media`
@@ -820,8 +841,9 @@ confirmation, and unsaved-navigation protection. UI error handling is supplied b
 loading boundaries. Phase 4 adds flashcard grid/list views, filters, bulk lifecycle,
 front/back preview, separate text-and-color quiz/test lists, dynamic 2-6 answer option
 editing, correct-answer selection, question preview, activity, duplicate, and lifecycle
-controls. Searchable, paginated managed-media pickers are integrated into organ-system,
-topic, lesson, flashcard, question, and option forms. Phase 5 attempt pages are
+controls. Resource forms upload image files directly during their mutation, with
+field-specific alt text and explicit clear controls; the Media Library remains the
+searchable, paginated management surface for existing assets. Phase 5 attempt pages are
 read-only, responsive, paginated/filterable, preserve immutable snapshot labels/media,
 and hide results before submission. Phase 6 adds real dashboard range controls and
 accessible text/chart summaries; responsive table/card lists, filters, pagination,

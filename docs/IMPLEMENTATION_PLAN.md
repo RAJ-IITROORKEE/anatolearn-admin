@@ -188,7 +188,7 @@ DTOs exclude internal notes/review identities; provider tickets remain `TICKETED
 receipt-confirmed; campaign final states distinguish `SENT`, `PARTIAL`, and `FAILED`.
 Unit/route/component coverage passes. Phase 7 retains real Expo integration, notification
 worker database concurrency, authenticated Phase 6 E2E, distributed rate limiting, and
-existing media-picker/visual-editor gaps.
+remaining authenticated integration gaps.
 
 ## Phase 7: Hardening and delivery
 
@@ -199,7 +199,7 @@ distributed limiting with production-required paired credentials and development
 memory fallback; dual client/account auth quotas; registration enumeration resistance
 and compensation; permanent notification-failure handling; Prisma 6.19.3; deployed
 development RLS/revoke migrations with isolated role tests; visual seven-block lesson
-editing and managed-media pickers; accessibility/responsive/metadata/robots/password/
+editing and direct resource image uploads with managed-media retention; accessibility/responsive/metadata/robots/password/
 pagination/dialog/table fixes; strict 108-operation OpenAPI route parity; recoverable
 Trash lifecycle and protected purge worker; non-destructive seed/bootstrap tests; and
 axe/Playwright foundations.

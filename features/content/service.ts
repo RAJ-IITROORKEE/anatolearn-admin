@@ -48,6 +48,23 @@ async function audit(tx: Prisma.TransactionClient, context: MutationContext, act
   await tx.auditLog.create({ data: { actorId: context.actorId, action, entityType, entityId, beforeSnapshot: before == null ? Prisma.JsonNull : json(before), afterSnapshot: after == null ? Prisma.JsonNull : json(after), requestId: context.requestId, userAgent: context.userAgent } });
 }
 
+function slugify(value: string) {
+  const result = value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 100);
+  return result || "organ-system";
+}
+
+async function uniqueOrganSystemSlug(tx: Prisma.TransactionClient, name: string, requestedSlug?: string) {
+  const base = slugify(requestedSlug || name);
+  const rows = await tx.organSystem.findMany({ where: { OR: [{ slug: base }, { slug: { startsWith: `${base}-` } }] }, select: { slug: true } });
+  const used = new Set(rows.map((row) => row.slug));
+  if (!used.has(base)) return base;
+  for (let suffix = 2; ; suffix += 1) {
+    const suffixText = `-${suffix}`;
+    const candidate = `${base.slice(0, 100 - suffixText.length)}${suffixText}`;
+    if (!used.has(candidate)) return candidate;
+  }
+}
+
 export async function listAdmin(resource: Resource, input: ListInput) {
   const skip = (input.page - 1) * input.pageSize;
   if (resource === "organSystem") {
@@ -77,12 +94,19 @@ export async function getAdmin(resource: Resource, id: string) {
   return resource === "organSystem" ? organSystemDto(row as never, true) : resource === "topic" ? topicDto(row as never, true) : lessonDto(row as never, true);
 }
 
+export async function getAdminBySlug(resource: "organSystem", slug: string) {
+  const row = await prisma.organSystem.findFirst({ where: { slug, trashedAt: null } });
+  if (!row) throw new ContentError("NOT_FOUND", "Content was not found.", 404);
+  return organSystemDto(row, true);
+}
+
 export async function createContent(resource: Resource, input: Record<string, unknown>, context: MutationContext) {
   return prisma.$transaction(async (tx) => {
     let row: unknown;
     if (resource === "organSystem") {
       await validateMedia(tx, [input.coverMediaId as string, input.iconMediaId as string]);
-      row = await tx.organSystem.create({ data: input as Prisma.OrganSystemUncheckedCreateInput });
+      const data = { ...input, slug: await uniqueOrganSystemSlug(tx, input.name as string, input.slug as string | undefined) };
+      row = await tx.organSystem.create({ data: data as Prisma.OrganSystemUncheckedCreateInput });
     } else if (resource === "topic") {
       await lockAvailableParent(tx, "organSystem", input.organSystemId as string);
       await validateMedia(tx, [input.coverMediaId as string]);

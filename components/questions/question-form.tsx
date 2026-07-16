@@ -7,7 +7,7 @@ import type { FormAction } from "@/components/phase3/action-form";
 import { ActionForm } from "@/components/phase3/action-form";
 import { fieldClass, labelClass, panelClass } from "@/components/phase3/admin-ui";
 import { cn } from "@/lib/utils";
-import { ManagedMediaPicker } from "@/components/media/managed-media-picker";
+import { DirectImageInput } from "@/components/media/direct-image-input";
 
 type AssessmentType = "QUIZ" | "TEST";
 type Option = { id?: string; editorId?: string; optionText: string; mediaId?: string | null; isCorrect: boolean };
@@ -41,7 +41,7 @@ export function QuestionForm({ action, assessmentType, item, topics }: { action:
             <label className={labelClass}>Topic<select className={fieldClass} defaultValue={item?.topicId ?? ""} name="topicId" required><option value="">Select a topic</option>{topics.map((topic) => <option key={topic.id} value={topic.id}>{topic.label}</option>)}</select></label>
             <label className={labelClass}>Concept tag <span className="font-normal text-muted">Optional</span><input className={fieldClass} defaultValue={item?.conceptTag ?? ""} name="conceptTag" /></label>
           </div>
-          <div className="grid gap-5 sm:grid-cols-2"><label className={labelClass}>Difficulty<select className={fieldClass} defaultValue={item?.difficulty ?? "MEDIUM"} name="difficulty"><option value="EASY">Easy</option><option value="MEDIUM">Medium</option><option value="HARD">Hard</option></select></label><ManagedMediaPicker label="Question image" name="mediaId" value={item?.mediaId} /></div>
+           <div className="grid gap-5 sm:grid-cols-2"><label className={labelClass}>Difficulty<select className={fieldClass} defaultValue={item?.difficulty ?? "MEDIUM"} name="difficulty"><option value="EASY">Easy</option><option value="MEDIUM">Medium</option><option value="HARD">Hard</option></select></label><DirectImageInput label="Question image" fileName="questionFile" altTextName="questionAltText" mediaIdName="mediaId" clearName="clearQuestionImage" existingMediaId={item?.mediaId} /></div>
           <label className={labelClass}>Question text<textarea className={`${fieldClass} min-h-32 py-3`} name="questionText" onChange={(event) => setQuestionText(event.target.value)} required value={questionText} /></label>
           <fieldset className="grid gap-3">
             <div className="flex items-center justify-between gap-3"><legend className="text-sm font-semibold text-body">Answer options <span className="font-normal text-muted">2-6, exactly one correct</span></legend><button className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-border px-3 text-sm font-semibold disabled:opacity-50" data-form-dirty disabled={options.length >= 6} onClick={() => setOptions((current) => [...current, { editorId: crypto.randomUUID(), optionText: "", mediaId: null, isCorrect: false }])} type="button"><Plus className="size-4" />Add option</button></div>
@@ -50,7 +50,7 @@ export function QuestionForm({ action, assessmentType, item, topics }: { action:
               return <div className="grid gap-3 rounded-xl border border-border bg-subtle p-3 sm:grid-cols-[auto_minmax(0,1fr)_minmax(220px,.55fr)_auto] sm:items-end" key={option.editorId}>
                 <label className="flex min-h-11 items-center gap-2 text-sm font-semibold"><input aria-label={`Mark option ${label} correct`} checked={option.isCorrect} name="correctOption" onChange={() => markCorrect(index)} type="radio" value={index} /><span>{label}</span></label>
                 <label className={labelClass}>Option {label}<input aria-label={`Option ${label}`} className={fieldClass} name={`optionText.${index}`} onChange={(event) => update(index, { optionText: event.target.value })} required value={option.optionText} /></label>
-                <ManagedMediaPicker label={`Option ${label} image`} name={`optionMediaId.${index}`} onChange={(id) => update(index, { mediaId: id })} value={option.mediaId} />
+                 <DirectImageInput label={`Option ${label} image`} fileName={`optionFile.${index}`} altTextName={`optionAltText.${index}`} mediaIdName={`optionMediaId.${index}`} clearName={`clearOption.${index}`} existingMediaId={option.mediaId} />
                 {option.id && <input name={`optionId.${index}`} type="hidden" value={option.id} />}
                 <button aria-label={`Remove option ${label}`} className="inline-flex size-11 items-center justify-center rounded-xl border border-border text-muted hover:text-destructive disabled:opacity-40" data-form-dirty disabled={options.length <= 2} onClick={() => setOptions((current) => current.filter((_, optionIndex) => optionIndex !== index).map((entry, nextIndex) => ({ ...entry, isCorrect: entry.isCorrect || (nextIndex === 0 && !current.some((value, oldIndex) => oldIndex !== index && value.isCorrect)) })))} type="button"><Trash2 className="size-4" /></button>
               </div>;

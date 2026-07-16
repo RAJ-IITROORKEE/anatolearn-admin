@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
   transaction: vi.fn(),
   tx: {
     $queryRaw: vi.fn(),
-    organSystem: { findFirst: vi.fn(), update: vi.fn() },
+    organSystem: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
     topic: { findFirst: vi.fn(), update: vi.fn() },
     contentLesson: { findFirst: vi.fn(), update: vi.fn() },
     auditLog: { create: vi.fn() },
@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/db/prisma", () => ({ prisma: { $transaction: mocks.transaction } }));
 
-import { reorderContent, updateContent } from "./service";
+import { createContent, reorderContent, updateContent } from "./service";
 
 const context = { actorId: crypto.randomUUID(), requestId: crypto.randomUUID() };
 const parentId = crypto.randomUUID();
@@ -57,5 +57,22 @@ describe("content mutation locking", () => {
     expect(mocks.tx.$queryRaw.mock.calls[0][0].strings.join(" ")).toContain("FOR UPDATE");
     expect(mocks.tx.topic.findFirst).not.toHaveBeenCalled();
     expect(mocks.tx.topic.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("organ-system slug generation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.transaction.mockImplementation((callback: (tx: typeof mocks.tx) => unknown) => callback(mocks.tx));
+  });
+
+  it("normalizes the name and adds a unique suffix", async () => {
+    const row = { id: first, name: "Heart & Vessels", slug: "heart-vessels-2", shortDescription: "Circulation.", longDescription: null, coverImageUrl: null, coverMediaId: null, iconImageUrl: null, iconMediaId: null, displayOrder: 0, status: "DRAFT" as const, isActive: true, createdAt: new Date(), updatedAt: new Date() };
+    mocks.tx.organSystem.findMany.mockResolvedValue([{ slug: "heart-vessels" }]);
+    mocks.tx.organSystem.create.mockResolvedValue(row);
+
+    await createContent("organSystem", { name: row.name, shortDescription: row.shortDescription, displayOrder: row.displayOrder }, context);
+
+    expect(mocks.tx.organSystem.create).toHaveBeenCalledWith({ data: expect.objectContaining({ slug: "heart-vessels-2" }) });
   });
 });

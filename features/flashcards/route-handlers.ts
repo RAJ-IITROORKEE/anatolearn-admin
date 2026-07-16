@@ -21,6 +21,7 @@ import {
   updateFlashcard,
 } from "./service";
 import { moveToTrash } from "@/features/trash/service";
+import { cleanupDirectUploads, directUploadContext, formBoolean, formNullable, formNumber, formValue, resolveMediaField } from "@/features/media/direct-upload";
 
 async function requireAdmin(request: Request, requestId: string, mutation = false) {
   const identity = await resolveRequestIdentity(request);
@@ -32,6 +33,19 @@ async function requireAdmin(request: Request, requestId: string, mutation = fals
 
 function context(request: Request, actorId: string, requestId: string) {
   return { actorId, requestId, userAgent: request.headers.get("user-agent") };
+}
+
+async function multipartInput(request: Request, actorId: string, requestId: string) {
+  const data = await request.formData();
+  const uploads = directUploadContext(actorId, requestId, request.headers.get("user-agent"));
+  try {
+    return { uploads, input: {
+      topicId: formValue(data, "topicId"), frontText: formValue(data, "frontText"), backText: formValue(data, "backText"),
+      frontMediaId: await resolveMediaField(data, { fileKey: "frontFile", altText: formValue(data, "frontAltText"), existingId: formNullable(data, "frontMediaId"), clear: formBoolean(data, "clearFront") }, uploads),
+      backMediaId: await resolveMediaField(data, { fileKey: "backFile", altText: formValue(data, "backAltText"), existingId: formNullable(data, "backMediaId"), clear: formBoolean(data, "clearBack") }, uploads),
+      difficulty: formValue(data, "difficulty"), notes: formNullable(data, "notes"), displayOrder: formNumber(data, "displayOrder"),
+    } };
+  } catch (error) { await cleanupDirectUploads(uploads); throw error; }
 }
 
 async function routeId(params: Promise<{ id: string }>) {
@@ -49,8 +63,9 @@ export const adminFlashcardCollectionHandlers = {
   POST: (request: Request) => withApiErrors(async (requestId) => {
     const auth = await requireAdmin(request, requestId, true);
     if (auth.error || !auth.identity) return auth.error!;
-    const input = flashcardCreateSchema.parse(await request.json().catch(() => null));
-    return apiSuccess(await createFlashcard(input, context(request, auth.identity.profile.id, requestId)), { requestId }, 201);
+     if (request.headers.get("content-type")?.includes("multipart/form-data")) { const parsed = await multipartInput(request, auth.identity.profile.id, requestId); try { const input = flashcardCreateSchema.parse(parsed.input); return apiSuccess(await createFlashcard(input, context(request, auth.identity.profile.id, requestId)), { requestId }, 201); } catch (error) { await cleanupDirectUploads(parsed.uploads); throw error; } }
+     const input = flashcardCreateSchema.parse(await request.json().catch(() => null));
+     return apiSuccess(await createFlashcard(input, context(request, auth.identity.profile.id, requestId)), { requestId }, 201);
   }),
   PATCH: (request: Request) => withApiErrors(async (requestId) => {
     const auth = await requireAdmin(request, requestId, true);
@@ -69,13 +84,16 @@ export const adminFlashcardItemHandlers = {
   PATCH: (request: Request, { params }: { params: Promise<{ id: string }> }) => withApiErrors(async (requestId) => {
     const auth = await requireAdmin(request, requestId, true);
     if (auth.error || !auth.identity) return auth.error!;
-    const body: unknown = await request.json().catch(() => null);
+     let uploads: ReturnType<typeof directUploadContext> | undefined;
+     const body: unknown = request.headers.get("content-type")?.includes("multipart/form-data") ? (await multipartInput(request, auth.identity.profile.id, requestId).then((parsed) => { uploads = parsed.uploads; return parsed.input; })) : await request.json().catch(() => null);
     const status = flashcardStatusUpdateSchema.safeParse(body);
     const mutationContext = context(request, auth.identity.profile.id, requestId);
-    const result = status.success
-      ? await setFlashcardStatus(await routeId(params), status.data.status, mutationContext)
-      : await updateFlashcard(await routeId(params), flashcardUpdateSchema.parse(body), mutationContext);
-    return apiSuccess(result, { requestId });
+     try {
+       const result = status.success
+         ? await setFlashcardStatus(await routeId(params), status.data.status, mutationContext)
+         : await updateFlashcard(await routeId(params), flashcardUpdateSchema.parse(body), mutationContext);
+       return apiSuccess(result, { requestId });
+     } catch (error) { if (uploads) await cleanupDirectUploads(uploads); throw error; }
   }),
   DELETE: (request: Request, { params }: { params: Promise<{ id: string }> }) => withApiErrors(async (requestId) => {
     const auth = await requireAdmin(request, requestId, true);

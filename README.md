@@ -57,8 +57,8 @@ is not a claim that the product is deployed. The current application includes:
   DELETE/archive aliases hide items immediately, use a 30-day database-clock retention
   window, and restore content as unpublished DRAFT. Settings > Trash provides filtered,
   paginated restore controls.
-- Searchable/paginated managed-media pickers integrated into system, topic, lesson,
-  flashcard, question, and option forms
+- Direct image uploads in system, topic, lesson, flashcard, question, and option forms;
+  the searchable/paginated Media Library remains the asset-management surface
 - Accessibility, metadata/robots, password visibility, pagination, dialog, table, and
   overflow hardening, with Vitest/RTL and axe-enabled Playwright foundations
 

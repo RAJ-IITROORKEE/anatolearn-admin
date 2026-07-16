@@ -22,11 +22,27 @@ import {
   setQuestionStatus,
   updateQuestion,
 } from "./service";
+import { cleanupDirectUploads, directUploadContext, formBoolean, formNullable, formValue, resolveMediaField } from "@/features/media/direct-upload";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 function mutationContext(request: Request, actorId: string, requestId: string) {
   return { actorId, requestId, userAgent: request.headers.get("user-agent") };
+}
+
+async function multipartInput(request: Request, actorId: string, requestId: string) {
+  const data = await request.formData();
+  const uploads = directUploadContext(actorId, requestId, request.headers.get("user-agent"));
+  try {
+    const count = Number(formValue(data, "optionCount"));
+    const correct = Number(formValue(data, "correctOption"));
+    return { uploads, input: {
+      topicId: formValue(data, "topicId"), assessmentType: formValue(data, "assessmentType"), questionText: formValue(data, "questionText"),
+      mediaId: await resolveMediaField(data, { fileKey: "questionFile", altText: formValue(data, "questionAltText"), existingId: formNullable(data, "mediaId"), clear: formBoolean(data, "clearQuestionImage") }, uploads),
+      explanation: formValue(data, "explanation"), difficulty: formValue(data, "difficulty"), conceptTag: formNullable(data, "conceptTag"),
+      options: Number.isInteger(count) && count >= 0 ? await Promise.all(Array.from({ length: count }, async (_, index) => ({ ...(formValue(data, `optionId.${index}`) ? { id: formValue(data, `optionId.${index}`) } : {}), optionText: formValue(data, `optionText.${index}`), mediaId: await resolveMediaField(data, { fileKey: `optionFile.${index}`, altText: formValue(data, `optionAltText.${index}`), existingId: formNullable(data, `optionMediaId.${index}`), clear: formBoolean(data, `clearOption.${index}`) }, uploads), isCorrect: index === correct }))) : [],
+    } };
+  } catch (error) { await cleanupDirectUploads(uploads); throw error; }
 }
 
 async function handle(
@@ -60,8 +76,11 @@ export const questionCollectionHandlers = {
   },
   POST(request: Request) {
     return handle(request, true, async (actorId, requestId) => {
-      const input = questionCreateSchema.parse(await request.json().catch(() => null));
-      const result = await createQuestion(input, mutationContext(request, actorId, requestId));
+      let uploads: ReturnType<typeof directUploadContext> | undefined;
+      const body: unknown = request.headers.get("content-type")?.includes("multipart/form-data") ? (await multipartInput(request, actorId, requestId).then((parsed) => { uploads = parsed.uploads; return parsed.input; })) : await request.json().catch(() => null);
+      const input = questionCreateSchema.parse(body);
+      let result;
+      try { result = await createQuestion(input, mutationContext(request, actorId, requestId)); } catch (error) { if (uploads) await cleanupDirectUploads(uploads); throw error; }
       return apiSuccess(result, { requestId }, 201);
     });
   },
@@ -75,8 +94,11 @@ export const questionItemHandlers = {
   },
   PATCH(request: Request, context: RouteContext) {
     return handle(request, true, async (actorId, requestId) => {
-      const input = questionUpdateSchema.parse(await request.json().catch(() => null));
-      const result = await updateQuestion(await routeId(context), input, mutationContext(request, actorId, requestId));
+      let uploads: ReturnType<typeof directUploadContext> | undefined;
+      const body: unknown = request.headers.get("content-type")?.includes("multipart/form-data") ? (await multipartInput(request, actorId, requestId).then((parsed) => { uploads = parsed.uploads; return parsed.input; })) : await request.json().catch(() => null);
+      const input = questionUpdateSchema.parse(body);
+      let result;
+      try { result = await updateQuestion(await routeId(context), input, mutationContext(request, actorId, requestId)); } catch (error) { if (uploads) await cleanupDirectUploads(uploads); throw error; }
       return apiSuccess(result, { requestId });
     });
   },

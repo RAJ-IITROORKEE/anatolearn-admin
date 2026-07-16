@@ -2,7 +2,6 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => "/questions/new" }));
-vi.mock("@/app/(admin)/managed-media-actions", () => ({ searchManagedMediaAction: vi.fn().mockResolvedValue({ items: [], pagination: { page: 1, totalPages: 0 } }) }));
 
 import { QuestionForm } from "./question-form";
 
@@ -11,8 +10,8 @@ test("question editor starts with four options and enforces the 2-6 option contr
   const { container } = render(<QuestionForm action={vi.fn()} assessmentType="QUIZ" topics={[{ id: "topic-id", label: "Heart" }]} />);
 
   expect(screen.getAllByRole("textbox", { name: /option [A-D]/i })).toHaveLength(4);
-  expect(screen.getByRole("button", { name: "Choose Option A image" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Choose Option D image" })).toBeInTheDocument();
+  expect(container.querySelector('input[type="file"][name="optionFile.0"]')).toBeInTheDocument();
+  expect(container.querySelector('input[type="file"][name="optionFile.3"]')).toBeInTheDocument();
   expect(container.querySelector('input[type="hidden"][name="optionMediaId.0"]')).toHaveValue("");
   expect(container.querySelector('input[type="hidden"][name="optionMediaId.3"]')).toHaveValue("");
   expect(screen.getByText("Quiz question preview")).toHaveClass("text-quiz");

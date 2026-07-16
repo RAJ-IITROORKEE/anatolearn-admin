@@ -21,6 +21,14 @@ describe("content administration schemas", () => {
     expect(organSystemUpdateSchema.safeParse({}).success).toBe(false);
   });
 
+  it("allows the server to generate an organ-system slug", () => {
+    expect(organSystemCreateSchema.safeParse({
+      name: "Heart & Vessels",
+      shortDescription: "Circulation.",
+      displayOrder: 0,
+    }).success).toBe(true);
+  });
+
   it("accepts every supported structured lesson block", () => {
     expect(contentLessonCreateSchema.safeParse({
       topicId: crypto.randomUUID(),

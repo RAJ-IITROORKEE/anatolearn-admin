@@ -91,7 +91,7 @@ app/api/internal/trash/purge/             secret-authenticated daily Trash/stora
 components/phase3/             list cards, forms, statuses, and action feedback
 components/{flashcards,questions,admin}/ Phase 4 forms, previews, lists, bulk actions
 components/lessons/             seven-block visual editor and learner preview
-components/media/               private managed-media picker and upload controls
+components/media/               direct image inputs plus Media Library management controls
 features/content/              schemas, DTOs, lifecycle rules, services, handlers
 features/media/                image inspection, upload/storage, DTOs, schemas
 features/audit/                audit query schema and read service
@@ -433,9 +433,11 @@ Alt+Up/Alt+Down reordering, confirmation before deleting non-empty content, and 
 unsaved-navigation/before-unload guard. The serialized server input still passes through
 the same strict schema; the editor does not broaden the API contract.
 
-Managed-media selection is a server-action-backed, paginated/searchable dialog showing
-only unarchived assets with short-lived admin previews. It is used for system covers/
-icons, topic covers, lesson images, flashcard sides, questions, and question options.
+The Media Library remains the server-action-backed, paginated/searchable management
+surface for unarchived assets. Resource forms use direct file inputs instead of selecting
+from that library. The mutation uploads each supplied file, validates its alt text, and
+passes the resulting managed-media ID to the existing domain service. Existing IDs are
+retained on edits unless an image is replaced or explicitly cleared.
 
 ## Media flow
 
@@ -458,6 +460,10 @@ icons, topic covers, lesson images, flashcard sides, questions, and question opt
 Media listing is paginated and ordered newest first. It filters by filename/alt text,
 MIME, archive state, and uploader. Alt-text updates are audited. Archive is idempotent;
 an already archived asset is returned without another audit row. An unarchived asset
+Resource mutations use field-specific multipart names such as `coverFile`/
+`coverAltText`, `frontFile`/`frontAltText`, and `optionFile.{index}`/
+`optionAltText.{index}`. Newly created assets are archived on parent-mutation failure.
+
 referenced by an eligible published system cover/icon, topic cover, or published
 lesson, eligible flashcard side, active published question, or its option cannot be
 archived and returns `409 REFERENCED`. The legacy physical-media DELETE endpoint remains

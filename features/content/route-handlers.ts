@@ -5,6 +5,7 @@ import { hasSafeOrigin } from "@/lib/security/origin";
 import { contentLessonCreateSchema, contentLessonUpdateSchema, listQuerySchema, organSystemCreateSchema, organSystemUpdateSchema, reorderSchema, statusUpdateSchema, topicCreateSchema, topicUpdateSchema } from "./schemas";
 import { createContent, getAdmin, listAdmin, reorderContent, setStatus, updateContent } from "./service";
 import { moveToTrash } from "@/features/trash/service";
+import { cleanupDirectUploads, directUploadContext, formBoolean, formNullable, formNumber, formValue, resolveMediaField } from "@/features/media/direct-upload";
 
 export type Resource = "organSystem" | "topic" | "contentLesson";
 const schemas = {
@@ -25,6 +26,37 @@ function context(request: Request, actorId: string, id: string) {
   return { actorId, requestId: id, userAgent: request.headers.get("user-agent") };
 }
 
+async function multipartInput(request: Request, resource: Resource, actorId: string, requestId: string) {
+  const data = await request.formData();
+  const uploads = directUploadContext(actorId, requestId, request.headers.get("user-agent"));
+  try {
+    const input = resource === "organSystem" ? {
+      name: formValue(data, "name"), slug: formValue(data, "slug") || undefined, shortDescription: formValue(data, "shortDescription"), longDescription: formNullable(data, "longDescription"),
+      coverMediaId: await resolveMediaField(data, { fileKey: "coverFile", altText: formValue(data, "coverAltText"), existingId: formNullable(data, "coverMediaId"), clear: formBoolean(data, "clearCover") }, uploads),
+      iconMediaId: await resolveMediaField(data, { fileKey: "iconFile", altText: formValue(data, "iconAltText"), existingId: formNullable(data, "iconMediaId"), clear: formBoolean(data, "clearIcon") }, uploads), displayOrder: formNumber(data, "displayOrder"), isActive: formBoolean(data, "isActive"),
+    } : resource === "topic" ? {
+      organSystemId: formValue(data, "organSystemId"), title: formValue(data, "title"), slug: formValue(data, "slug"), summary: formNullable(data, "summary"),
+      coverMediaId: await resolveMediaField(data, { fileKey: "coverFile", altText: formValue(data, "coverAltText"), existingId: formNullable(data, "coverMediaId"), clear: formBoolean(data, "clearCover") }, uploads), displayOrder: formNumber(data, "displayOrder"),
+    } : {
+      topicId: formValue(data, "topicId"), title: formValue(data, "title"), slug: formValue(data, "slug"), summary: formNullable(data, "summary"), estimatedReadingMinutes: formNumber(data, "estimatedReadingMinutes"), displayOrder: formNumber(data, "displayOrder"),
+      contentBlocks: await lessonBlocks(data, uploads),
+    };
+    return { input, uploads };
+  } catch (error) { await cleanupDirectUploads(uploads); throw error; }
+}
+
+async function lessonBlocks(data: FormData, uploads: ReturnType<typeof directUploadContext>) {
+  let blocks: unknown;
+  try { blocks = JSON.parse(formValue(data, "contentBlocks")); } catch { throw new Error("Lesson blocks must be valid JSON."); }
+  if (!Array.isArray(blocks)) return blocks;
+  return Promise.all(blocks.map(async (block) => {
+    if (!block || typeof block !== "object" || (block as { type?: unknown }).type !== "image") return block;
+    const image = block as { id?: unknown; mediaId?: unknown; altText?: unknown };
+    const id = String(image.id ?? "");
+    return { ...image, mediaId: await resolveMediaField(data, { fileKey: `lessonFile.${id}`, altText: formValue(data, `lessonAltText.${id}`) || String(image.altText ?? ""), existingId: typeof image.mediaId === "string" ? image.mediaId : null, clear: formBoolean(data, `lessonClear.${id}`) }, uploads) };
+  }));
+}
+
 export function adminCollectionHandlers(resource: Resource) {
   return {
     GET: (request: Request) => withApiErrors(async (id) => {
@@ -35,8 +67,9 @@ export function adminCollectionHandlers(resource: Resource) {
     }),
     POST: (request: Request) => withApiErrors(async (id) => {
       const auth = await admin(request, id, true); if (auth.error || !auth.identity) return auth.error!;
-      const input = schemas[resource].create.parse(await request.json().catch(() => null));
-      return apiSuccess(await createContent(resource, input, context(request, auth.identity.profile.id, id)), { requestId: id }, 201);
+       if (request.headers.get("content-type")?.includes("multipart/form-data")) { const parsed = await multipartInput(request, resource, auth.identity.profile.id, id); try { const input = schemas[resource].create.parse(parsed.input); return apiSuccess(await createContent(resource, input, context(request, auth.identity.profile.id, id)), { requestId: id }, 201); } catch (error) { await cleanupDirectUploads(parsed.uploads); throw error; } }
+       const input = schemas[resource].create.parse(await request.json().catch(() => null));
+       return apiSuccess(await createContent(resource, input, context(request, auth.identity.profile.id, id)), { requestId: id }, 201);
     }),
     PATCH: (request: Request) => withApiErrors(async (id) => {
       const auth = await admin(request, id, true); if (auth.error || !auth.identity) return auth.error!;
@@ -55,10 +88,12 @@ export function adminItemHandlers(resource: Resource) {
     }),
     PATCH: (request: Request, { params }: { params: Promise<{ id: string }> }) => withApiErrors(async (id) => {
       const auth = await admin(request, id, true); if (auth.error || !auth.identity) return auth.error!;
-      const body: unknown = await request.json().catch(() => null);
+       let uploads: ReturnType<typeof directUploadContext> | undefined;
+       const body: unknown = request.headers.get("content-type")?.includes("multipart/form-data") ? (await multipartInput(request, resource, auth.identity.profile.id, id).then((parsed) => { uploads = parsed.uploads; return parsed.input; })) : await request.json().catch(() => null);
       const target = (await params).id;
       const status = statusUpdateSchema.safeParse(body);
-      const result = status.success ? await setStatus(resource, target, status.data.status, context(request, auth.identity.profile.id, id)) : await updateContent(resource, target, schemas[resource].update.parse(body), context(request, auth.identity.profile.id, id));
+       let result;
+       try { result = status.success ? await setStatus(resource, target, status.data.status, context(request, auth.identity.profile.id, id)) : await updateContent(resource, target, schemas[resource].update.parse(body), context(request, auth.identity.profile.id, id)); } catch (error) { if (uploads) await cleanupDirectUploads(uploads); throw error; }
       return apiSuccess(result, { requestId: id });
     }),
     DELETE: (request: Request, { params }: { params: Promise<{ id: string }> }) => withApiErrors(async (id) => {

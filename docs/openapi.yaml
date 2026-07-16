@@ -922,6 +922,8 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/OrganSystemInput' }
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/OrganSystemMultipartInput' }
       responses: &adminCreateResponses
         '201': { $ref: '#/components/responses/Success' }
         '400': { $ref: '#/components/responses/BadRequest' }
@@ -992,6 +994,8 @@ paths:
       requestBody:
         required: true
         content:
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/TopicMultipartInput' }
           application/json:
             schema: { $ref: '#/components/schemas/TopicInput' }
       responses: *adminCreateResponses
@@ -1043,6 +1047,8 @@ paths:
       operationId: createContentLesson
       x-required-role: ADMIN
       requestBody:
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/ContentLessonMultipartInput' }
         required: true
         content:
           application/json:
@@ -1104,10 +1110,7 @@ paths:
       operationId: createFlashcard
       x-required-role: ADMIN
       requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/FlashcardCreateInput' }
+        $ref: '#/components/requestBodies/FlashcardCreateBody'
       responses:
         '201': { $ref: '#/components/responses/FlashcardAdminSuccess' }
         '400': { $ref: '#/components/responses/BadRequest' }
@@ -1153,13 +1156,7 @@ paths:
       operationId: updateAdminFlashcard
       x-required-role: ADMIN
       requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              oneOf:
-                - { $ref: '#/components/schemas/FlashcardUpdateInput' }
-                - { $ref: '#/components/schemas/StatusInput' }
+        $ref: '#/components/requestBodies/FlashcardUpdateBody'
       responses: *adminMutationResponses
     delete:
       tags: [Admin flashcards]
@@ -1221,8 +1218,7 @@ paths:
       operationId: createQuestion
       x-required-role: ADMIN
       requestBody:
-        required: true
-        content: { application/json: { schema: { $ref: '#/components/schemas/QuestionCreateInput' } } }
+        $ref: '#/components/requestBodies/QuestionCreateBody'
       responses:
         '201': { $ref: '#/components/responses/QuestionSuccess' }
         '400': { $ref: '#/components/responses/BadRequest' }
@@ -1257,8 +1253,7 @@ paths:
       operationId: updateAdminQuestion
       x-required-role: ADMIN
       requestBody:
-        required: true
-        content: { application/json: { schema: { $ref: '#/components/schemas/QuestionUpdateInput' } } }
+        $ref: '#/components/requestBodies/QuestionUpdateBody'
       responses: *adminMutationResponses
     delete:
       tags: [Admin questions]
@@ -1636,6 +1631,54 @@ components:
       type: object
       additionalProperties: false
       required: [email, password]
+        multipart/form-data:
+          schema: { $ref: '#/components/schemas/ContentMutationMultipartInput' }
+    OrganSystemMultipartBody:
+      required: true
+      content:
+        multipart/form-data:
+          schema: { $ref: '#/components/schemas/OrganSystemMultipartInput' }
+    TopicMultipartBody:
+      required: true
+      content:
+        multipart/form-data:
+          schema: { $ref: '#/components/schemas/TopicMultipartInput' }
+    ContentLessonMultipartBody:
+      required: true
+      content:
+        multipart/form-data:
+          schema: { $ref: '#/components/schemas/ContentLessonMultipartInput' }
+    FlashcardCreateBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/FlashcardCreateInput' }
+        multipart/form-data:
+          schema: { $ref: '#/components/schemas/FlashcardMultipartInput' }
+    FlashcardUpdateBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - { $ref: '#/components/schemas/FlashcardUpdateInput' }
+              - { $ref: '#/components/schemas/StatusInput' }
+        multipart/form-data:
+          schema: { $ref: '#/components/schemas/FlashcardMultipartInput' }
+    QuestionCreateBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/QuestionCreateInput' }
+        multipart/form-data:
+          schema: { $ref: '#/components/schemas/QuestionMultipartInput' }
+    QuestionUpdateBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/QuestionUpdateInput' }
+        multipart/form-data:
+          schema: { $ref: '#/components/schemas/QuestionMultipartInput' }
       properties:
         email: { type: string, format: email }
         password: { type: string, minLength: 8, maxLength: 128, format: password }
@@ -2455,6 +2498,87 @@ components:
         status: { type: string, enum: [DRAFT] }
     TrashPurgeResult:
       type: object
+    ContentMutationMultipartInput:
+      type: object
+      additionalProperties: false
+      description: Resource-specific partial form fields plus direct image fields. Lesson image fields are keyed by block ID, for example `lessonFile.intro`.
+      properties:
+        name: { type: string, maxLength: 120 }
+        slug: { type: string, maxLength: 100 }
+        shortDescription: { type: string, maxLength: 500 }
+        longDescription: { type: string, maxLength: 5000 }
+        organSystemId: { type: string, format: uuid }
+        topicId: { type: string, format: uuid }
+        title: { type: string, maxLength: 200 }
+        summary: { type: string, maxLength: 1000 }
+    OrganSystemMultipartInput:
+      type: object
+      additionalProperties: false
+      required: [name, shortDescription, displayOrder]
+      description: Form values are strings. Upload fields accept PNG, JPEG, or WebP files; a replacement requires its matching non-empty alt-text field.
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        slug: { $ref: '#/components/schemas/Slug' }
+        shortDescription: { type: string, minLength: 1, maxLength: 500 }
+        longDescription: { type: string, maxLength: 5000 }
+        coverFile: { type: string, format: binary }
+    TopicMultipartInput:
+      type: object
+      additionalProperties: false
+      required: [organSystemId, title, slug, displayOrder]
+      description: Form values are strings. `coverFile` accepts PNG, JPEG, or WebP; replacing it requires `coverAltText`.
+      properties:
+        organSystemId: { type: string, format: uuid }
+        title: { type: string, minLength: 1, maxLength: 160 }
+        slug: { $ref: '#/components/schemas/Slug' }
+        summary: { type: string, maxLength: 1000 }
+        coverFile: { type: string, format: binary }
+        coverAltText: { type: string, maxLength: 500 }
+        coverMediaId: { type: string, format: uuid }
+        clearCover: { type: string, enum: [on] }
+        displayOrder: { type: integer, minimum: 0 }
+    ContentLessonMultipartInput:
+      type: object
+      additionalProperties: false
+      required: [topicId, title, slug, contentBlocks, estimatedReadingMinutes, displayOrder]
+      description: `contentBlocks` is a JSON-encoded block array. Image upload fields use the block ID, for example `lessonFile.intro`, `lessonAltText.intro`, and `lessonClear.intro`.
+      properties:
+        topicId: { type: string, format: uuid }
+        title: { type: string, minLength: 1, maxLength: 200 }
+        slug: { $ref: '#/components/schemas/Slug' }
+        summary: { type: string, maxLength: 1000 }
+        contentBlocks: { type: string, description: JSON-encoded ContentBlock array. }
+        estimatedReadingMinutes: { type: integer, minimum: 0, maximum: 600 }
+        displayOrder: { type: integer, minimum: 0 }
+      patternProperties:
+        '^lessonFile\\..+$': { type: string, format: binary }
+        '^lessonAltText\\..+$': { type: string, maxLength: 500 }
+        '^lessonClear\\..+$': { type: string, enum: [on] }
+        coverAltText: { type: string, maxLength: 500 }
+        coverMediaId: { type: string, format: uuid }
+        clearCover: { type: string, enum: [on] }
+        iconFile: { type: string, format: binary }
+        iconAltText: { type: string, maxLength: 500 }
+        iconMediaId: { type: string, format: uuid }
+        clearIcon: { type: string, enum: [on] }
+        displayOrder: { type: integer, minimum: 0 }
+        isActive: { type: string, enum: [on] }
+        contentBlocks: { type: string, description: JSON-encoded ContentBlock array. }
+        estimatedReadingMinutes: { type: integer, minimum: 0, maximum: 600 }
+        displayOrder: { type: integer, minimum: 0 }
+        isActive: { type: string, enum: [on] }
+        coverFile: { type: string, format: binary }
+        coverAltText: { type: string, maxLength: 500 }
+        coverMediaId: { type: string, format: uuid }
+        clearCover: { type: string, enum: [on] }
+        iconFile: { type: string, format: binary }
+        iconAltText: { type: string, maxLength: 500 }
+        iconMediaId: { type: string, format: uuid }
+        clearIcon: { type: string, enum: [on] }
+      patternProperties:
+        '^lessonFile\\..+$': { type: string, format: binary }
+        '^lessonAltText\\..+$': { type: string, maxLength: 500 }
+        '^lessonClear\\..+$': { type: string, enum: [on] }
       additionalProperties: false
       required: [claimed, purged, blocked, storageClaimed, storageRemoved, storageRetried, batches]
       properties:
@@ -2501,7 +2625,7 @@ components:
     OrganSystemInput:
       type: object
       additionalProperties: false
-      required: [name, slug, shortDescription, displayOrder]
+      required: [name, shortDescription, displayOrder]
       properties:
         name: { type: string, minLength: 1, maxLength: 120 }
         slug: { $ref: '#/components/schemas/Slug' }
@@ -2525,6 +2649,26 @@ components:
     ContentLessonInput:
       type: object
       additionalProperties: false
+    FlashcardMultipartInput:
+      type: object
+      additionalProperties: false
+      required: [topicId, frontText, backText, displayOrder]
+      description: Form values are strings. `frontFile` and `backFile` accept PNG, JPEG, or WebP and require matching alt-text fields when supplied.
+      properties:
+        topicId: { type: string, format: uuid }
+        frontText: { type: string, minLength: 1, maxLength: 5000 }
+        backText: { type: string, minLength: 1, maxLength: 5000 }
+        frontFile: { type: string, format: binary }
+        frontAltText: { type: string, maxLength: 500 }
+        frontMediaId: { type: string, format: uuid }
+        clearFront: { type: string, enum: [on] }
+        backFile: { type: string, format: binary }
+        backAltText: { type: string, maxLength: 500 }
+        backMediaId: { type: string, format: uuid }
+        clearBack: { type: string, enum: [on] }
+        difficulty: { type: string, enum: [EASY, MEDIUM, HARD] }
+        notes: { type: string, maxLength: 5000 }
+        displayOrder: { type: integer, minimum: 0 }
       required: [topicId, title, slug, contentBlocks, estimatedReadingMinutes, displayOrder]
       properties:
         topicId: { type: string, format: uuid }
@@ -2604,6 +2748,27 @@ components:
       type: object
       additionalProperties: false
       required: [type]
+    QuestionMultipartInput:
+      type: object
+      additionalProperties: false
+      required: [topicId, assessmentType, questionText, explanation, optionCount, correctOption]
+      description: Form values are strings. Options use indexed fields such as `optionText.0`, `optionFile.0`, `optionAltText.0`, `optionMediaId.0`, `clearOption.0`, and `optionId.0`.
+      properties:
+        topicId: { type: string, format: uuid }
+        assessmentType: { type: string, enum: [QUIZ, TEST] }
+        questionText: { type: string, minLength: 1, maxLength: 5000 }
+        questionFile: { type: string, format: binary }
+        questionAltText: { type: string, maxLength: 500 }
+        mediaId: { type: string, format: uuid }
+        clearQuestionImage: { type: string, enum: [on] }
+        explanation: { type: string, minLength: 1, maxLength: 5000 }
+        difficulty: { type: string, enum: [EASY, MEDIUM, HARD] }
+        conceptTag: { type: string, maxLength: 100 }
+        optionCount: { type: integer, minimum: 0, maximum: 6 }
+        correctOption: { type: integer, minimum: 0, maximum: 5 }
+      patternProperties:
+        '^option(Id|Text|File|AltText|MediaId)\\.[0-9]+$': { type: [string, 'null'] }
+        '^clearOption\\.[0-9]+$': { type: string, enum: [on] }
       properties:
         id: { type: string, minLength: 1, maxLength: 100 }
         type: { const: divider }
