@@ -8,6 +8,10 @@ export const registerSchema = loginSchema.extend({
   password: z.string().min(8).max(128),
   fullName: z.string().trim().min(2).max(100),
 });
+export const verifySignupOtpSchema = z.object({
+  email: emailSchema.shape.email,
+  otp: z.string().regex(/^\d{6}$/),
+}).strict();
 export const profileUpdateSchema = z.object({
   fullName: z.string().trim().min(2).max(100).optional(),
   avatarUrl: z.url().nullable().optional(),

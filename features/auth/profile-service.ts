@@ -1,13 +1,18 @@
 import "server-only";
 
 import type { User } from "@supabase/supabase-js";
+import { z } from "zod";
 
 import { prisma } from "@/lib/db/prisma";
+
+const profileNameSchema = z.string().trim().min(2).max(100);
 
 export async function provisionUserProfile(user: User, fullName?: string) {
   if (!user.email) throw new Error("Authenticated user has no email address.");
   const emailNormalized = user.email.trim().toLowerCase();
-  const resolvedName = fullName?.trim() || String(user.user_metadata.full_name ?? "Learner");
+  const suppliedName = fullName ?? user.user_metadata.full_name;
+  const parsedName = profileNameSchema.safeParse(suppliedName);
+  const resolvedName = parsedName.success ? parsedName.data : "Learner";
 
   return prisma.profile.upsert({
     where: { id: user.id },

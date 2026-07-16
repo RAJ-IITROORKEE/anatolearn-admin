@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { changePasswordSchema, deviceTokenSchema, emailSchema, loginSchema, profileUpdateSchema, registerSchema } from "./api-schemas";
+import { changePasswordSchema, deviceTokenSchema, emailSchema, loginSchema, profileUpdateSchema, registerSchema, verifySignupOtpSchema } from "./api-schemas";
 
 describe("authentication API schemas", () => {
   it("keeps strength rules for new passwords but accepts a short existing password", () => {
@@ -19,6 +19,16 @@ describe("authentication API schemas", () => {
 
   it("does not allow account fields in profile updates", () => {
     expect(profileUpdateSchema.safeParse({ fullName: "Alex Admin", role: "ADMIN" }).success).toBe(false);
+  });
+
+  it("accepts only a normalized email and six-digit signup OTP", () => {
+    expect(verifySignupOtpSchema.parse({ email: " User@Example.COM ", otp: "123456" })).toEqual({
+      email: "user@example.com",
+      otp: "123456",
+    });
+    expect(verifySignupOtpSchema.safeParse({ email: "user@example.com", otp: "12345" }).success).toBe(false);
+    expect(verifySignupOtpSchema.safeParse({ email: "user@example.com", otp: "abcdef" }).success).toBe(false);
+    expect(verifySignupOtpSchema.safeParse({ email: "user@example.com", otp: "123456", role: "ADMIN" }).success).toBe(false);
   });
 
   it.each([
