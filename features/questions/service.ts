@@ -62,9 +62,10 @@ async function getParent(tx: Prisma.TransactionClient, topicId: string) {
 async function validateMedia(tx: Prisma.TransactionClient, ids: Array<string | null | undefined>) {
   const unique = [...new Set(ids.filter((id): id is string => Boolean(id)))];
   if (!unique.length) return;
+  const mediaIds = unique.map((id) => Prisma.sql`${id}::uuid`);
   const rows = await tx.$queryRaw<Array<{ id: string; archivedAt: Date | null }>>(Prisma.sql`
     SELECT "id", "archivedAt" FROM "MediaAsset"
-    WHERE "id" IN (${Prisma.join(unique)}) AND "trashedAt" IS NULL FOR SHARE
+    WHERE "id" IN (${Prisma.join(mediaIds)}) AND "trashedAt" IS NULL FOR SHARE
   `);
   if (rows.length !== unique.length || rows.some((row) => row.archivedAt !== null)) {
     throw new QuestionError("INVALID_MEDIA_REFERENCE", "A question media reference is absent or archived.", 422);

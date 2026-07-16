@@ -58,6 +58,21 @@ describe("content mutation locking", () => {
     expect(mocks.tx.topic.findFirst).not.toHaveBeenCalled();
     expect(mocks.tx.topic.update).not.toHaveBeenCalled();
   });
+
+  it("casts managed media IDs to UUIDs when validating an organ-system update", async () => {
+    const mediaId = crypto.randomUUID();
+    const row = { id: first, name: "Respiratory", slug: "respiratory", shortDescription: "Respiratory system.", longDescription: null, coverImageUrl: null, coverMediaId: null, iconImageUrl: null, iconMediaId: null, displayOrder: 2, status: "PUBLISHED" as const, isActive: true, createdAt: new Date(), updatedAt: new Date(), trashedAt: null, purgeAfter: null, nextPurgeAttemptAt: null };
+    const updated = { ...row, iconMediaId: mediaId };
+    mocks.tx.$queryRaw.mockResolvedValueOnce([{ id: first }]).mockResolvedValueOnce([{ id: mediaId, archivedAt: null }]);
+    mocks.tx.organSystem.findFirst.mockResolvedValue(row);
+    mocks.tx.organSystem.update.mockResolvedValue(updated);
+
+    await updateContent("organSystem", first, { iconMediaId: mediaId }, context);
+
+    const mediaQuery = mocks.tx.$queryRaw.mock.calls[1][0];
+    expect(mediaQuery.strings.join(" ")).toContain("::uuid");
+    expect(mediaQuery.values).toContain(mediaId);
+  });
 });
 
 describe("organ-system slug generation", () => {

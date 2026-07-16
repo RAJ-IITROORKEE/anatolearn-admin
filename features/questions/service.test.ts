@@ -58,6 +58,26 @@ describe("question transactional writes", () => {
     expect(tx.auditLog.create).toHaveBeenCalledOnce();
   });
 
+  it("casts managed media IDs to UUIDs when validating a create", async () => {
+    const mediaId = crypto.randomUUID();
+    tx.$queryRaw
+      .mockResolvedValueOnce([{ id: topicId }])
+      .mockResolvedValueOnce([{ id: mediaId, archivedAt: null }]);
+    tx.question.create.mockImplementation(async ({ data }: { data: { options: { create: unknown[] } } }) => storedQuestion({ ...data, options: data.options.create }));
+
+    await createQuestion({
+      topicId, assessmentType: "QUIZ", questionText: "Question", mediaId, explanation: "Explanation",
+      difficulty: "MEDIUM", options: [
+        { optionText: "One", isCorrect: true },
+        { optionText: "Two", isCorrect: false },
+      ],
+    }, context);
+
+    const mediaQuery = tx.$queryRaw.mock.calls[1][0];
+    expect(mediaQuery.strings.join(" ")).toContain("::uuid");
+    expect(mediaQuery.values).toContain(mediaId);
+  });
+
   it("fully replaces options while retaining validated existing IDs and keys", async () => {
     const before = storedQuestion();
     tx.question.findFirst.mockResolvedValue(before);

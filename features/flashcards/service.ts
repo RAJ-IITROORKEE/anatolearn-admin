@@ -34,9 +34,10 @@ async function audit(tx: Prisma.TransactionClient, context: MutationContext, act
 async function validateMedia(tx: Prisma.TransactionClient, ids: Array<string | null | undefined>) {
   const unique = [...new Set(ids.filter((id): id is string => Boolean(id)))];
   if (!unique.length) return true;
+  const mediaIds = unique.map((id) => Prisma.sql`${id}::uuid`);
   const rows = await tx.$queryRaw<Array<{ id: string; archivedAt: Date | null }>>(Prisma.sql`
     SELECT "id", "archivedAt" FROM "MediaAsset"
-    WHERE "id" IN (${Prisma.join(unique)}) AND "trashedAt" IS NULL FOR SHARE
+    WHERE "id" IN (${Prisma.join(mediaIds)}) AND "trashedAt" IS NULL FOR SHARE
   `);
   const eligible = rows.length === unique.length && rows.every((row) => row.archivedAt === null);
   if (!eligible) throw new FlashcardError("INVALID_MEDIA_REFERENCE", "A media reference is absent or archived.", 422);

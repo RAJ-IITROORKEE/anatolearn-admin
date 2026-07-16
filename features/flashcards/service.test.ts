@@ -151,6 +151,20 @@ describe("flashcard mutation locks", () => {
     expect(mocks.tx.$queryRaw.mock.calls[0][0].values).toContain(flashcardId);
   });
 
+  it("casts managed media IDs to UUIDs when validating an update", async () => {
+    const mediaId = crypto.randomUUID();
+    mocks.tx.$queryRaw
+      .mockResolvedValueOnce([{ id: flashcardId }])
+      .mockResolvedValueOnce([{ id: card.topicId }])
+      .mockResolvedValueOnce([{ id: mediaId, archivedAt: null }]);
+
+    await updateFlashcard(flashcardId, { frontMediaId: mediaId }, { actorId: userId, requestId: eventId });
+
+    const mediaQuery = mocks.tx.$queryRaw.mock.calls[2][0];
+    expect(mediaQuery.strings.join(" ")).toContain("::uuid");
+    expect(mediaQuery.values).toContain(mediaId);
+  });
+
   it("locks the UUID row before changing status", async () => {
     await setFlashcardStatus(flashcardId, "PUBLISHED", { actorId: userId, requestId: eventId });
     expect(mocks.tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(mocks.tx.flashcard.findUnique.mock.invocationCallOrder[0]);
