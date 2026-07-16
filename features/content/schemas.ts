@@ -10,7 +10,7 @@ export const publishStatusSchema = z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]);
 export const contentBlockSchema = z.discriminatedUnion("type", [
   z.object({ id: blockId, type: z.literal("heading"), level: z.union([z.literal(2), z.literal(3), z.literal(4)]), text: text(200) }).strict(),
   z.object({ id: blockId, type: z.literal("paragraph"), text: text(5000) }).strict(),
-  z.object({ id: blockId, type: z.literal("image"), mediaId: uuid, altText: text(300), caption: optionalText(500) }).strict(),
+  z.object({ id: blockId, type: z.literal("image"), mediaId: uuid, altText: z.string().trim().max(300), caption: optionalText(500) }).strict(),
   z.object({ id: blockId, type: z.literal("callout"), tone: z.enum(["info", "warning", "success"]), title: optionalText(200), text: text(2000) }).strict(),
   z.object({ id: blockId, type: z.literal("bulletList"), items: z.array(text(1000)).min(1).max(50) }).strict(),
   z.object({ id: blockId, type: z.literal("numberedList"), items: z.array(text(1000)).min(1).max(50) }).strict(),

@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 
 vi.mock("@/app/(admin)/phase6-actions", () => ({ changeFeedbackStatusAction: vi.fn(), updateFeedbackNotesAction: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 import { FeedbackDetail } from "./feedback-detail";
 

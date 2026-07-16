@@ -7,7 +7,7 @@ type TopicDtoSource = Omit<Topic, "trashedAt" | "purgeAfter" | "nextPurgeAttempt
 type ContentLessonDtoSource = Omit<ContentLesson, "trashedAt" | "purgeAfter" | "nextPurgeAttemptAt">;
 
 export function organSystemDto(value: OrganSystemDtoSource, admin = false) {
-  return { id: value.id, name: value.name, slug: value.slug, shortDescription: value.shortDescription, longDescription: value.longDescription, coverImageUrl: value.coverImageUrl, iconImageUrl: value.iconImageUrl, displayOrder: value.displayOrder, isActive: value.isActive, ...(admin ? { status: value.status, coverMediaId: value.coverMediaId, iconMediaId: value.iconMediaId, createdAt: value.createdAt, updatedAt: value.updatedAt } : {}) };
+  return { id: value.id, name: value.name, slug: value.slug, shortDescription: value.shortDescription, longDescription: value.longDescription, coverImageUrl: value.coverImageUrl, iconImageUrl: value.iconImageUrl, coverMediaId: value.coverMediaId, iconMediaId: value.iconMediaId, displayOrder: value.displayOrder, isActive: value.isActive, ...(admin ? { status: value.status, createdAt: value.createdAt, updatedAt: value.updatedAt } : {}) };
 }
 
 export function topicDto(value: TopicDtoSource, admin = false) {

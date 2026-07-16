@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 
 import type { ActionState } from "@/components/phase3/action-form";
 import { bulkSetFlashcardStatus, createFlashcard, setFlashcardStatus, updateFlashcard } from "@/features/flashcards/service";
@@ -13,7 +12,6 @@ import { phase4ActionError } from "./phase4-action-errors";
 import { moveToTrash } from "@/features/trash/service";
 import { cleanupDirectUploads, directUploadContext, formBoolean, formNullable, formValue, resolveMediaField } from "@/features/media/direct-upload";
 
-const isRedirect = (error: unknown) => (error as { digest?: string }).digest?.startsWith("NEXT_REDIRECT");
 const context = async () => {
   const { profile } = await requireAdminPage();
   return { actorId: profile.id, requestId: crypto.randomUUID() };
@@ -59,9 +57,8 @@ export async function createFlashcardAction(_state: ActionState, data: FormData)
     if (!parsed.success) { await cleanupDirectUploads(uploadContext); return { error: parsed.error.issues[0]?.message ?? "Check the flashcard fields." }; }
     const created = await createFlashcard(parsed.data, ctx);
     revalidatePath("/flashcards");
-    redirect(`/flashcards/${created.id}`);
+    return { success: "Flashcard created.", redirectTo: `/flashcards/${created.id}` };
   } catch (error) {
-    if (isRedirect(error)) throw error;
     if (uploadContext) await cleanupDirectUploads(uploadContext); return phase4ActionError(error);
   }
 }
@@ -105,9 +102,8 @@ export async function createQuestionAction(_state: ActionState, data: FormData):
     if (!parsed.success) { await cleanupDirectUploads(uploadContext); return { error: parsed.error.issues[0]?.message ?? "Check the question fields." }; }
     const created = await createQuestion(parsed.data, ctx);
     revalidatePath(`/questions/${parsed.data.assessmentType.toLowerCase()}`);
-    redirect(`/questions/${created.id}`);
+    return { success: "Question created.", redirectTo: `/questions/${created.id}` };
   } catch (error) {
-    if (isRedirect(error)) throw error;
     if (uploadContext) await cleanupDirectUploads(uploadContext); return phase4ActionError(error);
   }
 }
@@ -162,9 +158,8 @@ export async function duplicateQuestionAction(id: string, _state: ActionState): 
   try {
     const created = await duplicateQuestion(id, await context());
     revalidatePath("/questions", "layout");
-    redirect(`/questions/${created.id}`);
+    return { success: "Question duplicated.", redirectTo: `/questions/${created.id}` };
   } catch (error) {
-    if (isRedirect(error)) throw error;
     return phase4ActionError(error);
   }
 }

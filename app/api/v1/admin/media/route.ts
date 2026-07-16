@@ -18,6 +18,6 @@ export async function POST(request: Request) {
   const form = await request.formData().catch(() => null);
   const file = form?.get("file");
   const input = mediaUploadSchema.safeParse({ altText: form?.get("altText") });
-  if (!(file instanceof File) || !input.success) return apiError("VALIDATION_ERROR", "A valid image and alt text are required.", 400, auth.id, input.success ? undefined : input.error.flatten().fieldErrors);
+  if (!(file instanceof File) || !input.success) return apiError("VALIDATION_ERROR", "A valid image is required.", 400, auth.id, input.success ? undefined : input.error.flatten().fieldErrors);
   try { return apiSuccess(await uploadMedia(file, input.data.altText, auth.identity.profile.id, auth.id), { requestId: auth.id }, 201); } catch (error) { return mediaError(error, auth.id); }
 }

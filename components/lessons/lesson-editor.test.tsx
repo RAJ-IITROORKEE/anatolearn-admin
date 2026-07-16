@@ -82,3 +82,9 @@ test("only newly added semantically empty blocks remove without confirmation", a
   await user.click(within(screen.getByTestId("lesson-block")).getByRole("button", { name: "Remove block" }));
   expect(screen.getByRole("alertdialog", { name: "Remove Divider block?" })).toBeVisible();
 });
+
+test("keeps lesson image alt text optional", () => {
+  render(<LessonEditor initialBlocks={[{ type: "image", mediaId: crypto.randomUUID(), altText: "", caption: null }]} />);
+
+  expect(screen.getByRole("textbox", { name: /Image alt text/ })).not.toBeRequired();
+});

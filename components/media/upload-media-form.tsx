@@ -13,7 +13,7 @@ export function UploadMediaForm({ action }: { action: FormAction }) {
   return <ActionForm action={action} label="Upload image" pendingLabel="Uploading">
     <label className={labelClass}>Image file<input accept="image/png,image/jpeg,image/webp" className={`${fieldClass} py-2`} name="file" onChange={(event) => { const file = event.target.files?.[0]; setPreview(file ? { name: file.name, url: URL.createObjectURL(file) } : null); }} required type="file" /></label>
     {preview ? <figure><div className="aspect-[4/3] overflow-hidden rounded-xl bg-subtle"><img alt={`Local preview of ${preview.name}`} className="h-full w-full object-contain" src={preview.url} /></div><figcaption className="mt-2 text-xs text-muted">Local preview. The image has not been uploaded yet.</figcaption></figure> : null}
-    <label className={labelClass}>Alt text<textarea className={`${fieldClass} min-h-24 py-3`} maxLength={500} name="altText" required /></label>
+    <label className={labelClass}>Alt text <span className="font-normal text-muted">Optional</span><textarea className={`${fieldClass} min-h-24 py-3`} maxLength={500} name="altText" /></label>
     <p className="text-xs leading-5 text-muted">PNG, JPEG, or WebP. The server verifies image contents and configured size limits.</p>
   </ActionForm>;
 }

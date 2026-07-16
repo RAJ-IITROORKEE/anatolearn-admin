@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { auditLogListSchema } from "@/features/audit/schemas";
-import { buildMediaPath, mediaListSchema, mediaUpdateSchema } from "./schemas";
+import { buildMediaPath, mediaListSchema, mediaUpdateSchema, mediaUploadSchema } from "./schemas";
 
 describe("media schemas", () => {
   it("normalizes bounded list filters", () => {
@@ -12,6 +12,11 @@ describe("media schemas", () => {
   it("requires a meaningful update", () => {
     expect(mediaUpdateSchema.safeParse({}).success).toBe(false);
     expect(mediaUpdateSchema.parse({ altText: "  Labeled heart  " })).toEqual({ altText: "Labeled heart" });
+  });
+
+  it("allows upload alt text to be omitted or blank", () => {
+    expect(mediaUploadSchema.parse({})).toEqual({ altText: "" });
+    expect(mediaUploadSchema.parse({ altText: "   " })).toEqual({ altText: "" });
   });
 
   it("builds paths without using the client filename", () => {

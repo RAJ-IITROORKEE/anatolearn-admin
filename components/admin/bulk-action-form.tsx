@@ -1,14 +1,20 @@
 "use client";
 
 import { useActionState, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import { PendingButton } from "@/components/shared/pending-button";
 import { ActionNotice, fieldClass } from "@/components/phase3/admin-ui";
-import type { FormAction } from "@/components/phase3/action-form";
+import type { ActionState, FormAction } from "@/components/phase3/action-form";
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog";
 
 export function BulkActionForm({ action, children }: { action: FormAction; children: React.ReactNode }) {
-  const [state, formAction, pending] = useActionState(action, {});
+  const [state, formAction, pending] = useActionState(async (previous: ActionState, data: FormData) => {
+    const next = await action(previous, data);
+    if (next.error) toast.error(next.error);
+    if (next.success) toast.success(next.success);
+    return next;
+  }, {});
   const [selection, setSelection] = useState({ count: 0, status: "PUBLISHED" });
   const formRef = useRef<HTMLFormElement>(null);
   const refreshSelection = () => {

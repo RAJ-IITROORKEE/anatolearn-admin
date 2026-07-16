@@ -103,7 +103,6 @@ export default async function MediaPage({
                         className={`${fieldClass} min-h-20 py-2`}
                         defaultValue={item.altText}
                         name="altText"
-                        required
                       />
                     </label>
                   </ActionForm>

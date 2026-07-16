@@ -51,6 +51,16 @@ describe("direct upload helpers", () => {
     expect(context.uploadedMediaIds).toEqual(["new-media-id"]);
   });
 
+  it("uploads an image when optional alt text is blank", async () => {
+    mocks.uploadMedia.mockResolvedValueOnce({ id: "unlabeled-media-id" });
+    const context = directUploadContext("actor", "request");
+    const data = new FormData();
+    data.set("file", new File(["image"], "icon.png", { type: "image/png" }));
+
+    await expect(resolveMediaField(data, { fileKey: "file", altText: "" }, context)).resolves.toBe("unlabeled-media-id");
+    expect(mocks.uploadMedia).toHaveBeenCalledWith(expect.any(File), "", "actor", "request");
+  });
+
   it("archives tracked uploads during parent-mutation cleanup", async () => {
     const context = directUploadContext("actor", "request");
     context.uploadedMediaIds.push("media-one", "media-two");

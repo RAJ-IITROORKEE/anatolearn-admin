@@ -1,7 +1,38 @@
-import type { ContentLesson } from "@prisma/client";
+import type { ContentLesson, OrganSystem } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 
-import { lessonDto } from "./dto";
+import { lessonDto, organSystemDto } from "./dto";
+
+describe("organSystemDto", () => {
+  it("exposes managed cover and icon IDs to learners without editorial fields", () => {
+    const system = {
+      id: crypto.randomUUID(),
+      name: "Circulatory",
+      slug: "circulatory",
+      shortDescription: "Blood circulation.",
+      longDescription: null,
+      coverImageUrl: null,
+      iconImageUrl: null,
+      coverMediaId: crypto.randomUUID(),
+      iconMediaId: crypto.randomUUID(),
+      displayOrder: 1,
+      isActive: true,
+      status: "PUBLISHED",
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+      trashedAt: null,
+      purgeAfter: null,
+      purgeAttemptCount: 0,
+      nextPurgeAttemptAt: null,
+    } as OrganSystem;
+
+    expect(organSystemDto(system)).toMatchObject({
+      coverMediaId: system.coverMediaId,
+      iconMediaId: system.iconMediaId,
+    });
+    expect(organSystemDto(system)).not.toHaveProperty("status");
+  });
+});
 
 describe("lessonDto", () => {
   it("projects stored lesson blocks with stable IDs", () => {

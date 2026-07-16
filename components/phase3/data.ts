@@ -4,8 +4,8 @@ import { getAdmin as getContent, getAdminBySlug as getContentBySlug, listAdmin a
 import type { ContentBlock } from "@/features/content/schemas";
 
 type Pagination = { page: number; pageSize: number; total: number; totalPages: number };
-export type AdminSystem = { id: string; name: string; slug: string; shortDescription: string; longDescription: string | null; coverMediaId: string | null; iconMediaId: string | null; displayOrder: number; isActive: boolean; status: PublishStatus; createdAt: Date; updatedAt: Date };
-export type AdminTopic = { id: string; organSystemId: string; title: string; slug: string; summary: string | null; coverMediaId: string | null; displayOrder: number; status: PublishStatus; createdAt: Date; updatedAt: Date };
+export type AdminSystem = { id: string; name: string; slug: string; shortDescription: string; longDescription: string | null; coverImageUrl: string | null; iconImageUrl: string | null; coverMediaId: string | null; iconMediaId: string | null; displayOrder: number; isActive: boolean; status: PublishStatus; createdAt: Date; updatedAt: Date };
+export type AdminTopic = { id: string; organSystemId: string; title: string; slug: string; summary: string | null; coverImageUrl: string | null; coverMediaId: string | null; displayOrder: number; status: PublishStatus; createdAt: Date; updatedAt: Date };
 export type AdminLesson = { id: string; topicId: string; title: string; slug: string; summary: string | null; contentBlocks: ContentBlock[]; estimatedReadingMinutes: number; displayOrder: number; status: PublishStatus; createdAt: Date; updatedAt: Date };
 type Input = Parameters<typeof listContent>[1];
 

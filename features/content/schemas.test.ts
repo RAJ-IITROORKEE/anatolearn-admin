@@ -48,13 +48,14 @@ describe("content administration schemas", () => {
     }).success).toBe(true);
   });
 
-  it("rejects raw HTML and malformed image blocks", () => {
+  it("accepts optional image alt text but rejects raw HTML and malformed image IDs", () => {
     const base = {
       topicId: crypto.randomUUID(), title: "Overview", slug: "overview",
       estimatedReadingMinutes: 4, displayOrder: 0,
     };
     expect(contentLessonCreateSchema.safeParse({ ...base, contentBlocks: [{ type: "html", html: "<b>unsafe</b>" }] }).success).toBe(false);
-    expect(contentLessonCreateSchema.safeParse({ ...base, contentBlocks: [{ type: "image", mediaId: crypto.randomUUID(), altText: "" }] }).success).toBe(false);
+    expect(contentLessonCreateSchema.safeParse({ ...base, contentBlocks: [{ type: "image", mediaId: crypto.randomUUID(), altText: "" }] }).success).toBe(true);
+    expect(contentLessonCreateSchema.safeParse({ ...base, contentBlocks: [{ type: "image", mediaId: "invalid", altText: "" }] }).success).toBe(false);
   });
 
   it("accepts unique stable block IDs and rejects duplicates", () => {

@@ -12,10 +12,10 @@ export const mediaListSchema = z.object({
   uploadedById: z.uuid().optional(),
 });
 
-export const mediaUpdateSchema = z.object({ altText: z.string().trim().min(1).max(500).optional() })
+export const mediaUpdateSchema = z.object({ altText: z.string().trim().max(500).optional() })
   .refine((value) => Object.keys(value).length > 0, "At least one field is required.");
 
-export const mediaUploadSchema = z.object({ altText: z.string().trim().min(1).max(500) });
+export const mediaUploadSchema = z.object({ altText: z.string().trim().max(500).optional().default("") });
 export const mediaIdSchema = z.uuid();
 
 export function buildMediaPath(actorId: string, assetId: string, mimeType: string) {

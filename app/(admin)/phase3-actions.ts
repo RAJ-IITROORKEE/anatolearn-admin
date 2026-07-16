@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { requireAdminPage } from "@/lib/auth/session";
 import { createContent, setStatus, updateContent } from "@/features/content/service";
 import { contentBlocksSchema, contentLessonCreateSchema, contentLessonUpdateSchema, organSystemCreateSchema, organSystemUpdateSchema, statusUpdateSchema, topicCreateSchema, topicUpdateSchema } from "@/features/content/schemas";
@@ -42,8 +41,8 @@ export async function createResource(resource: Resource, _state: ActionState, da
     if (!parsed.success) { await cleanupDirectUploads(uploadContext); return { error: parsed.error.issues[0]?.message ?? "Check the form fields." }; }
     const created = await createContent(resource, parsed.data, ctx);
     revalidatePath(resource === "organSystem" ? "/organ-systems" : resource === "topic" ? "/topics" : "/content");
-    redirect(resource === "organSystem" ? `/organ-systems/${created.slug}` : resource === "topic" ? `/topics/${created.id}` : `/content/${created.id}`);
-  } catch (error) { if ((error as { digest?: string }).digest?.startsWith("NEXT_REDIRECT")) throw error; if (uploadContext) await cleanupDirectUploads(uploadContext); return phase3ActionError(error); }
+    return { success: `${resource === "organSystem" ? "Organ system" : resource === "topic" ? "Topic" : "Lesson"} created.`, redirectTo: resource === "organSystem" ? `/organ-systems/${created.slug}` : resource === "topic" ? `/topics/${created.id}` : `/content/${created.id}` };
+  } catch (error) { if (uploadContext) await cleanupDirectUploads(uploadContext); return phase3ActionError(error); }
 }
 
 export async function updateResource(resource: Resource, id: string, _state: ActionState, data: FormData): Promise<ActionState> {
@@ -55,9 +54,8 @@ export async function updateResource(resource: Resource, id: string, _state: Act
     if (!parsed.success) { await cleanupDirectUploads(uploadContext); return { error: parsed.error.issues[0]?.message ?? "Check the form fields." }; }
     const updated = await updateContent(resource, id, parsed.data, ctx);
     revalidatePath(resource === "organSystem" ? `/organ-systems/${updated.slug}` : resource === "topic" ? `/topics/${id}` : `/content/${id}`);
-    if (resource === "organSystem") redirect(`/organ-systems/${updated.slug}`);
-    return { success: "Changes saved." };
-  } catch (error) { if ((error as { digest?: string }).digest?.startsWith("NEXT_REDIRECT")) throw error; if (uploadContext) await cleanupDirectUploads(uploadContext); return phase3ActionError(error); }
+    return { success: "Changes saved.", ...(resource === "organSystem" ? { redirectTo: `/organ-systems/${updated.slug}` } : {}) };
+  } catch (error) { if (uploadContext) await cleanupDirectUploads(uploadContext); return phase3ActionError(error); }
 }
 
 export async function changeResourceStatus(resource: Resource, id: string, status: string, _state: ActionState): Promise<ActionState> {
