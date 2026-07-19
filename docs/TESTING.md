@@ -37,7 +37,10 @@ Install Chromium once with `npx playwright install chromium`.
 - Upstash adapter behavior, paired production environment validation, bounded memory
   fallback, fail-closed errors, and separate client/account auth quotas
 - authentication and profile request schemas
-- registration existing-account obfuscation and Auth-user compensation paths
+- non-enumerating OTP registration/resend, strict six-digit verification, deferred profile
+  provisioning, server-owned marker writes, immediate-session deletion compensation,
+  session-token omission, marked-only missing-profile repair, validated name fallback,
+  provider transient/error classification, and invalid/expired OTP behavior
 - shared empty and confirmation UI states
 - anonymous protected-page redirect and narrow-screen login controls
 
@@ -46,15 +49,22 @@ Install Chromium once with `npx playwright install chromium`.
 - strict mutation schemas reject unknown fields and empty updates
 - every supported lesson block is accepted
 - raw HTML and malformed image blocks are rejected
+- rich lesson documents enforce allowlisted nodes/marks/attributes, bounded depth/node/
+  text limits, exact generated legacy fallbacks, and managed-media extraction
+- black-box admin lesson POST/PATCH coverage resolves stable rich `uploadId` multipart
+  files, strips pending IDs, regenerates untrusted fallback data, and dispatches only
+  validated managed-media UUIDs
 - page-size cap and unique reorder IDs
 - draft/published transitions and recoverable Trash behavior
 - published-state invariant validation for systems, topics, and lessons
 
 ### Media and audit
 
-- media pagination/filter normalization and page-size cap
-- direct resource uploads validate image files and required alt text, retain or clear existing media on edit, and compensate newly created assets when the parent mutation fails
+- direct resource uploads validate image files and optional alt text, retain or clear existing media on edit, and compensate newly created assets when the parent mutation fails
+- rich lesson uploads are sequential and compensate completed assets after a later upload
+  or parent mutation failure; invalid generated fallbacks are rejected before upload
 
+- media pagination/filter normalization and page-size cap
 - non-empty alt-text updates
 - server-owned storage path construction independent of client filename
 - media `BigInt` byte-size serialization as a decimal DTO string
@@ -69,8 +79,10 @@ Install Chromium once with `npx playwright install chromium`.
 - pagination changes only `page` and retains active query filters
 - unexpected server-action exception messages are replaced by a safe generic message
 - seven-block lesson editing, validated preview, copy/reorder/confirmation/dirty guard
+- continuous lesson-canvas rendering, accessible dialog preview, image insertion/drop
+  between blocks, pending local-image preview, and independent object-URL cleanup
 - direct image inputs, local previews, existing-media retention/clear controls, and
-  indexed lesson/question upload fields
+  indexed lesson/question upload fields, including compact preview mode
 - password visibility without field replacement/value loss; dialog focus, table labels,
   overflow, responsive pagination, breadcrumbs, and mobile-shell regressions
 
@@ -86,6 +98,11 @@ Install Chromium once with `npx playwright install chromium`.
   order, stored aggregate fail-closed validation, and publication/activity/lifecycle
 - question route authorization/origin/error mapping and admin method delegation
 - duplicate/bulk/audit service behavior with mocked Prisma transaction boundaries
+- responsive semantic flashcard/question tables and equivalent mobile rows, topic-title
+  presentation, stable page-relative numbering, explicit edit/Delete actions, selection
+  controls, and confirmed bulk actions
+- atomic bulk Trash locks IDs deterministically, rejects incomplete selections before
+  mutation, updates the selected set in one transaction, and audits every item
 - internal selection accepts only published, active, parent-eligible, media-eligible
   questions with 2-6 options and exactly one correct answer
 - question option form add/remove/correct-answer interaction and safe Phase 4 action
@@ -171,15 +188,22 @@ Install Chromium once with `npx playwright install chromium`.
   documented rate limits, and representative DTO privacy
 - isolated PostgreSQL role tests prove `anon` and `authenticated` cannot read or write
   application tables while the normal Prisma role remains operational
-- non-destructive canonical seed and bootstrap create/find, compensation, pagination,
-  secret-redaction, and exit behavior
+- non-destructive canonical seed; canonical-only demo publication with exact row-count
+  rollback checks; and bootstrap create/find, compensation, pagination, secret-redaction,
+  and exit behavior
 - axe runs on public pages and is wired into authenticated desktop/mobile projects
 
 ### Recoverable Trash
 
-- Trash schemas, DTO retention/eligibility states, restore deadline/parent checks, six
+- Trash schemas, DTO retention/eligibility states, restore deadline/parent checks, seven
   resource types, audit actions, purge ordering, dependency blockers, and storage retry
   semantics are covered by unit/route tests.
+- Feedback-specific coverage verifies normal-list/detail exclusion, workflow-status
+  preservation, deterministic full-set bulk Trash, redacted audits, row/bulk actions,
+  synchronized responsive selection, and Feedback-before-media purge order.
+- Follow-up regressions cover dashboard NEW/recent visibility, learner feedback counts,
+  attachment share-lock/rejection without metadata leakage, and stale bulk selection
+  intersection after current-page IDs change.
 - The PostgreSQL Trash suite passed 4/4 in an isolated schema, covering direct-delete
   protection, the exact database-clock restore deadline, MediaPurgeJob access control,
   and a representative foreign-key blocker. The default conditional DB run skips these
@@ -192,16 +216,22 @@ Install Chromium once with `npx playwright install chromium`.
 | --- | --- |
 | `npm run lint` | Passed |
 | `npm run typecheck` | Passed |
-| `npm run test` | Passed: 139 files, 3 skipped; 445 tests, 13 skipped |
+| Focused signup OTP routes | Passed: 13/13 tests |
+| Related focused auth set | Passed: 29/29 tests |
+| Final full `npm run test` | Passed: 160 files/600 tests; 3 files/14 tests skipped |
 | Isolated `TEST_DATABASE_URL` run | Passed: 2 files/9 tests (4 assessment lifecycle + 5 direct database access) |
 | `npm run prisma:deploy` | Passed; the Phase 7 RLS/revoke migrations, including Prisma metadata protection, are deployed to the configured database |
-| Prisma migration status | Current: all ten migrations, including both Trash migrations and Prisma metadata protection |
+| Prisma migration status | Current: all twelve migrations, including Feedback Trash and Prisma metadata protection |
 | `npm run test:e2e` | 17 passed, 14 skipped |
-| `npm run build` | Passed: 40 static-generation units under dynamic nonce CSP output; all routes included |
+| `npm run build` | Passed: 44 static-generation units under dynamic nonce CSP output; all routes included |
 | `npm run env:check` | Passed locally; production deployment values remain an external gate |
-| `npm run openapi:validate` | Passed: 108 operations and 108 unique operation IDs with exact route parity |
+| `npm run openapi:validate` | Passed: 110 operations and 110 unique operation IDs with exact route parity |
 | `npm audit` | 0 high/critical; 2 moderate PostCSS findings through Next.js remain |
 | `git diff --check` | Passed; line-ending conversion warnings only |
+
+The later admin UX and review follow-ups have passing focused tests. Their final integrated
+verification passed Prisma generation and validation, lint, typecheck, the 160-file/600-test
+full suite, OpenAPI validation, the 44-unit production build, and a blocker-focused review.
 
 Authenticated admin tests did **not** pass or run: `E2E_ADMIN_EMAIL` and
 `E2E_ADMIN_PASSWORD` were absent. The 14 skips comprise auth setup, 12 authenticated
@@ -213,8 +243,8 @@ so `npm audit fix --force` was not used.
 The default Vitest suite conditionally skips isolated database files without a distinct
 `TEST_DATABASE_URL`. The separate 9-test run covered the four assessment lifecycle cases
 and five `anon`/`authenticated` direct-access/Prisma-operability cases. The access-control
-migrations are deployed to configured development, not production. The failed
-`env:check` passes locally; production
+migrations are deployed to configured development, not production. `env:check` passes
+locally; production
 validation additionally requires one complete supported Upstash pair. Unit coverage accepts
 both Vercel's `KV_REST_API_*` names and the self-managed `UPSTASH_REDIS_REST_*` names while
 rejecting incomplete pairs.
@@ -251,6 +281,12 @@ No current automated test proves the following end to end or against real provid
 Most external provider behavior still uses mocks. Isolated PostgreSQL suites passed, but
 real Supabase Auth email/redirect/private Storage, Expo/EAS devices, Vercel/GitHub cron, backup/
 restore, and production deployment remain unverified.
+
+OTP release acceptance additionally requires the hosted Supabase six-digit token template,
+email-confirmation settings, expiry/rate controls, and production SMTP delivery. Mocked
+route tests do not prove those hosted settings. A native client can still invoke public
+Supabase signup directly; tests prove only that an unmarked identity cannot receive
+missing-profile repair through the application login route.
 
 ## Remaining external test layers
 

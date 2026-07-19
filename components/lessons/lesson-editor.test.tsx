@@ -1,90 +1,214 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { expect, test } from "vitest";
+import { beforeEach, expect, test, vi } from "vitest";
 
+import type { ContentBlock } from "@/features/content/schemas";
 import { LessonEditor } from "./lesson-editor";
 
-test("adds all seven block types and serializes stable schema-valid IDs", async () => {
-  const user = userEvent.setup();
-  const { container } = render(<LessonEditor initialBlocks={[]} />);
-  const add = screen.getByRole("combobox", { name: "Block type" });
+const createObjectURL = vi.fn(() => "blob:lesson-image");
+const revokeObjectURL = vi.fn();
 
-  for (const type of ["heading", "paragraph", "image", "callout", "bulletList", "numberedList", "divider"]) {
-    await user.selectOptions(add, type);
-    await user.click(screen.getByRole("button", { name: "Add block" }));
-  }
-
-  expect(screen.getAllByTestId("lesson-block")).toHaveLength(7);
-  const value = JSON.parse((container.querySelector('input[name="contentBlocks"]') as HTMLInputElement).value) as Array<{ id: string; type: string }>;
-  expect(value.map((block) => block.type)).toEqual(["heading", "paragraph", "image", "callout", "bulletList", "numberedList", "divider"]);
-  expect(new Set(value.map((block) => block.id)).size).toBe(7);
+beforeEach(() => {
+  createObjectURL.mockClear();
+  revokeObjectURL.mockClear();
+  vi.stubGlobal("URL", { createObjectURL, revokeObjectURL });
 });
 
-test("duplicates, keyboard-moves, removes blocks, and renders validated learner preview", async () => {
-  const user = userEvent.setup();
-  const { container } = render(<LessonEditor initialBlocks={[{ type: "heading", level: 2, text: "Anatomy" }, { type: "paragraph", text: "Learner copy" }]} />);
-  const blocks = screen.getAllByTestId("lesson-block");
-  await user.click(within(blocks[0]).getByRole("button", { name: "Duplicate block" }));
-  expect(screen.getAllByText("Anatomy")).toHaveLength(2);
+function serialized(container: HTMLElement) {
+  return JSON.parse((container.querySelector('input[name="contentBlocks"]') as HTMLInputElement).value) as {
+    version: 2;
+    richContent: { type: string; content: Array<Record<string, unknown>> };
+    fallbackBlocks: ContentBlock[];
+  };
+}
 
-  blocks[0].focus();
-  await user.keyboard("{Alt>}{ArrowDown}{/Alt}");
-  let value = JSON.parse((container.querySelector('input[name="contentBlocks"]') as HTMLInputElement).value) as Array<{ id: string; type: string }>;
-  expect(value[0].type).toBe("heading");
-  expect(value[0].id).not.toBe(value[1].id);
+test("loads all legacy lesson blocks losslessly into one true rich-text surface", () => {
+  const mediaId = crypto.randomUUID();
+  const blocks: ContentBlock[] = [
+    { id: "heading", type: "heading", level: 2, text: "Heart" },
+    { id: "paragraph", type: "paragraph", text: "Cardiac text" },
+    { id: "image", type: "image", mediaId, altText: "Heart diagram", caption: "Anterior" },
+    { id: "callout", type: "callout", tone: "info", title: "Remember", text: "Four chambers" },
+    { id: "bullets", type: "bulletList", items: ["Atrium", "Ventricle"] },
+    { id: "numbers", type: "numberedList", items: ["Fill", "Pump"] },
+    { id: "divider", type: "divider" },
+  ];
+  const { container } = render(<LessonEditor existingMedia={{ [mediaId]: { signedUrl: "https://signed.test/heart", altText: "Stored heart" } }} initialBlocks={blocks} />);
 
-  await user.click(within(screen.getAllByTestId("lesson-block")[2]).getByRole("button", { name: "Remove block" }));
-  await user.click(screen.getByRole("button", { name: "Delete block" }));
-  value = JSON.parse((container.querySelector('input[name="contentBlocks"]') as HTMLInputElement).value);
-  expect(value).toHaveLength(2);
-  expect(screen.getByRole("complementary", { name: "Learner lesson preview" })).toHaveTextContent("Anatomy");
+  expect(screen.getByRole("textbox", { name: "Lesson rich text editor" })).toBeVisible();
+  expect(screen.queryByTestId("lesson-block")).not.toBeInTheDocument();
+  expect(serialized(container).fallbackBlocks).toEqual(blocks);
+  expect(screen.getByRole("img", { name: "Heart diagram" })).toHaveAttribute("src", "https://signed.test/heart");
 });
 
-test("requires keyboard confirmation for non-empty blocks and cancel preserves editor state and focus", async () => {
-  const user = userEvent.setup();
-  const { container } = render(<LessonEditor initialBlocks={[{ type: "paragraph", text: "Keep this learner content" }]} />);
-  const serialized = () => (container.querySelector('input[name="contentBlocks"]') as HTMLInputElement).value;
-  const before = serialized();
-  const remove = screen.getByRole("button", { name: "Remove block" });
+test("does not mark existing content changed until an explicit editor action", async () => {
+  const onInteraction = vi.fn();
+  render(<form onClick={(event) => { if ((event.target as Element).closest("[data-form-dirty]")) onInteraction(); }}><LessonEditor initialBlocks={[{ type: "paragraph", text: "Existing deterministic lesson" }]} /></form>);
 
-  remove.focus();
-  await user.keyboard("{Enter}");
-  expect(screen.getByRole("alertdialog", { name: "Remove Paragraph block?" })).toBeVisible();
-  expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+  await waitFor(() => expect(screen.getByRole("textbox", { name: "Lesson rich text editor" })).toBeVisible());
+  expect(onInteraction).not.toHaveBeenCalled();
 
-  await user.keyboard("{Escape}");
-  await waitFor(() => expect(remove).toHaveFocus());
-  expect(serialized()).toBe(before);
-  expect(screen.getAllByTestId("lesson-block")).toHaveLength(1);
-
-  await user.keyboard("{Enter}");
-  await user.tab();
-  expect(screen.getByRole("button", { name: "Delete block" })).toHaveFocus();
-  await user.keyboard("{Enter}");
-  expect(screen.queryAllByTestId("lesson-block")).toHaveLength(0);
+  fireEvent.focus(screen.getByRole("textbox", { name: "Lesson rich text editor" }));
+  fireEvent.keyDown(screen.getByRole("textbox", { name: "Lesson rich text editor" }), { key: "a", code: "KeyA", ctrlKey: true });
+  await userEvent.setup().click(screen.getByRole("button", { name: "Bold" }));
+  await waitFor(() => expect(onInteraction).toHaveBeenCalled());
 });
 
-test("only newly added semantically empty blocks remove without confirmation", async () => {
+test("persists toolbar formatting in the strict rich AST and compatible text fallback", async () => {
   const user = userEvent.setup();
+  const { container } = render(<LessonEditor initialBlocks={[{ type: "paragraph", text: "Cardiac anatomy" }]} />);
+  const editor = screen.getByRole("textbox", { name: "Lesson rich text editor" });
+
+  fireEvent.focus(editor);
+  fireEvent.keyDown(editor, { key: "a", code: "KeyA", ctrlKey: true });
+  await user.click(screen.getByRole("button", { name: "Bold" }));
+  await user.click(screen.getByRole("button", { name: "Underline" }));
+  await user.selectOptions(screen.getByRole("combobox", { name: "Font size" }), "20px");
+  await user.click(screen.getByRole("button", { name: "Align center" }));
+
+  await waitFor(() => {
+    const value = serialized(container);
+    expect(value.fallbackBlocks).toEqual([{ type: "paragraph", text: "Cardiac anatomy" }]);
+    expect(JSON.stringify(value.richContent)).toContain('"type":"bold"');
+    expect(JSON.stringify(value.richContent)).toContain('"type":"underline"');
+    expect(JSON.stringify(value.richContent)).toContain('"fontSize":"20px"');
+    expect(JSON.stringify(value.richContent)).toContain('"textAlign":"center"');
+  });
+});
+
+test("does not duplicate legacy IDs when Enter splits a legacy paragraph", async () => {
+  const user = userEvent.setup();
+  const { container } = render(<LessonEditor initialBlocks={[{ id: "stable-paragraph", type: "paragraph", text: "Cardiac anatomy" }]} />);
+  const editor = screen.getByRole("textbox", { name: "Lesson rich text editor" });
+
+  fireEvent.focus(editor);
+  await user.keyboard("{End}{Enter}");
+
+  await waitFor(() => {
+    const ids = serialized(container).richContent.content.flatMap((node) => {
+      const id = (node.attrs as { legacyId?: string } | undefined)?.legacyId;
+      return id ? [id] : [];
+    });
+    expect(ids).toEqual(["stable-paragraph"]);
+  });
+});
+
+test("normalizes duplicate legacy IDs introduced by copy and paste", async () => {
+  const user = userEvent.setup();
+  const { container } = render(<LessonEditor initialBlocks={[{ id: "copied-paragraph", type: "paragraph", text: "Copy me" }]} />);
+  const editor = screen.getByRole("textbox", { name: "Lesson rich text editor" });
+
+  fireEvent.focus(editor);
+  fireEvent.keyDown(editor, { key: "a", code: "KeyA", ctrlKey: true });
+  await user.keyboard("{Control>}c{/Control}{End}{Enter}{Control>}v{/Control}");
+
+  await waitFor(() => {
+    const ids = serialized(container).richContent.content.flatMap((node) => {
+      const id = (node.attrs as { legacyId?: string } | undefined)?.legacyId;
+      return id ? [id] : [];
+    });
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+test("offers only allowlisted editor controls and no raw import or table surface", () => {
   render(<LessonEditor initialBlocks={[]} />);
-  const type = screen.getByRole("combobox", { name: "Block type" });
 
-  for (const blockType of ["heading", "paragraph", "image", "callout", "bulletList", "numberedList"]) {
-    await user.selectOptions(type, blockType);
-    await user.click(screen.getByRole("button", { name: "Add block" }));
-    await user.click(within(screen.getByTestId("lesson-block")).getByRole("button", { name: "Remove block" }));
-    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
-    expect(screen.queryAllByTestId("lesson-block")).toHaveLength(0);
+  for (const name of ["Paragraph", "Heading 2", "Heading 3", "Heading 4", "Bold", "Italic", "Underline", "Strike", "Bulleted list", "Ordered list", "Block quote", "Add link", "Undo", "Redo", "Insert managed image"]) {
+    expect(screen.getByRole("button", { name })).toBeInTheDocument();
   }
-
-  await user.selectOptions(type, "divider");
-  await user.click(screen.getByRole("button", { name: "Add block" }));
-  await user.click(within(screen.getByTestId("lesson-block")).getByRole("button", { name: "Remove block" }));
-  expect(screen.getByRole("alertdialog", { name: "Remove Divider block?" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: /table|html|docx|url image/i })).not.toBeInTheDocument();
 });
 
-test("keeps lesson image alt text optional", () => {
-  render(<LessonEditor initialBlocks={[{ type: "image", mediaId: crypto.randomUUID(), altText: "", caption: null }]} />);
+test("drops a managed image using a stable multipart name without serializing its blob URL", async () => {
+  const { container } = render(<LessonEditor initialBlocks={[{ type: "paragraph", text: "Before image" }]} />);
+  const file = new File(["image"], "heart.webp", { type: "image/webp" });
 
-  expect(screen.getByRole("textbox", { name: /Image alt text/ })).not.toBeRequired();
+  fireEvent.drop(screen.getByRole("textbox", { name: "Lesson rich text editor" }), {
+    dataTransfer: { files: [file], types: ["Files"] },
+  });
+
+  await waitFor(() => expect(container.querySelector('input[type="file"][name^="lessonFile."]')).toBeInTheDocument());
+  const value = serialized(container);
+  const image = value.richContent.content.find((node) => node.type === "image") as { attrs: { uploadId: string; src?: string } };
+  expect(image.attrs.uploadId).toMatch(/^[0-9a-f-]{36}$/);
+  expect(image.attrs).not.toHaveProperty("src");
+  expect(container.querySelector(`input[name="lessonFile.${image.attrs.uploadId}"]`)).toBeInTheDocument();
+});
+
+test("submits only pending image files still referenced by the rich document", async () => {
+  const user = userEvent.setup();
+  const submitted = vi.fn();
+  const { container } = render(
+    <form onSubmit={(event) => { event.preventDefault(); submitted(new FormData(event.currentTarget)); }}>
+      <LessonEditor initialBlocks={[{ type: "paragraph", text: "Keep active images" }]} />
+      <button type="submit">Save lesson</button>
+    </form>,
+  );
+  const picker = container.querySelector('section input[type="file"]:not([name])') as HTMLInputElement;
+  const editor = screen.getByRole("textbox", { name: "Lesson rich text editor" });
+
+  await user.upload(picker, new File(["first"], "first.png", { type: "image/png" }));
+  fireEvent.keyDown(editor, { key: "ArrowLeft", code: "ArrowLeft" });
+  await user.upload(picker, new File(["second"], "second.png", { type: "image/png" }));
+
+  await waitFor(() => {
+    expect(container.querySelectorAll('input[name^="lessonFile."]')).toHaveLength(2);
+    expect(serialized(container).richContent.content.filter((node) => node.type === "image")).toHaveLength(2);
+  });
+  const beforeRemoval = serialized(container).richContent.content.filter((node) => node.type === "image") as Array<{ attrs: { uploadId: string } }>;
+  const removedUploadId = beforeRemoval[1].attrs.uploadId;
+  const activeUploadId = beforeRemoval[0].attrs.uploadId;
+  const editorImages = container.querySelectorAll(".ProseMirror img");
+  const elementFromPoint = document.elementFromPoint;
+  const rangeGetBoundingClientRect = Range.prototype.getBoundingClientRect;
+  const rangeGetClientRects = Range.prototype.getClientRects;
+  Object.defineProperty(document, "elementFromPoint", { configurable: true, value: () => editorImages[1] });
+  Object.defineProperty(Range.prototype, "getBoundingClientRect", { configurable: true, value: () => new DOMRect() });
+  Object.defineProperty(Range.prototype, "getClientRects", { configurable: true, value: () => [] });
+
+  await new Promise((resolve) => setTimeout(resolve, 550));
+  await user.click(editorImages[1]);
+  fireEvent.keyDown(editor, { key: "Backspace", code: "Backspace" });
+
+  await waitFor(() => {
+    expect(container.querySelector(`input[name="lessonFile.${removedUploadId}"]`)).not.toBeInTheDocument();
+    expect(container.querySelector(`input[name="lessonFile.${activeUploadId}"]`)).toBeInTheDocument();
+  });
+  Object.defineProperty(document, "elementFromPoint", { configurable: true, value: elementFromPoint });
+  Object.defineProperty(Range.prototype, "getBoundingClientRect", { configurable: true, value: rangeGetBoundingClientRect });
+  Object.defineProperty(Range.prototype, "getClientRects", { configurable: true, value: rangeGetClientRects });
+  await user.click(screen.getByRole("button", { name: "Save lesson" }));
+
+  const data = submitted.mock.calls[0][0] as FormData;
+  expect(data.has(`lessonFile.${removedUploadId}`)).toBe(false);
+  expect(data.has(`lessonFile.${activeUploadId}`)).toBe(true);
+  expect(revokeObjectURL).not.toHaveBeenCalled();
+
+  await user.click(screen.getByRole("button", { name: "Undo" }));
+  await waitFor(() => expect(container.querySelector(`input[name="lessonFile.${removedUploadId}"]`)).toBeInTheDocument());
+});
+
+test("shows current text and pending managed images in the accessible top preview dialog", async () => {
+  const user = userEvent.setup();
+  render(<LessonEditor initialBlocks={[{ type: "paragraph", text: "Learner preview copy" }]} />);
+  fireEvent.drop(screen.getByRole("textbox", { name: "Lesson rich text editor" }), {
+    dataTransfer: { files: [new File(["image"], "heart.png", { type: "image/png" })], types: ["Files"] },
+  });
+
+  await user.click(screen.getByRole("button", { name: "Preview" }));
+  const dialog = screen.getByRole("dialog", { name: "Learner preview" });
+  expect(dialog).toHaveTextContent("Learner preview copy");
+  expect(dialog.querySelector("img")).toHaveAttribute("src", "blob:lesson-image");
+});
+
+test("revokes pending image object URLs only when replaced or unmounted", async () => {
+  const { unmount } = render(<LessonEditor initialBlocks={[]} />);
+  const editor = screen.getByRole("textbox", { name: "Lesson rich text editor" });
+  fireEvent.drop(editor, { dataTransfer: { files: [new File(["one"], "one.png", { type: "image/png" })], types: ["Files"] } });
+  fireEvent.drop(editor, { dataTransfer: { files: [new File(["two"], "two.png", { type: "image/png" })], types: ["Files"] } });
+
+  expect(revokeObjectURL).not.toHaveBeenCalled();
+  unmount();
+  expect(revokeObjectURL).toHaveBeenCalledTimes(2);
 });

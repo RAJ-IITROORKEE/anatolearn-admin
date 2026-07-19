@@ -4,6 +4,7 @@ export const TRASH_TYPES = [
   "content-lesson",
   "flashcard",
   "question",
+  "feedback",
   "media-asset",
 ] as const;
 

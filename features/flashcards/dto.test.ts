@@ -18,11 +18,12 @@ const card = {
   status: "PUBLISHED" as const,
   createdAt: now,
   updatedAt: now,
+  topic: { title: "Cardiac chambers" },
 };
 
 describe("flashcard DTO", () => {
   it("retains notes for administrators", () => {
-    expect(flashcardDto(card, true)).toMatchObject({ notes: card.notes, status: "PUBLISHED" });
+    expect(flashcardDto(card, true)).toMatchObject({ notes: card.notes, status: "PUBLISHED", topicTitle: "Cardiac chambers" });
   });
 
   it("does not expose editorial notes to learners", () => {

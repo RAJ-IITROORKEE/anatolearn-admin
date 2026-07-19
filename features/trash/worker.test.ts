@@ -65,4 +65,39 @@ describe("trash metadata purge worker", () => {
     expect(mocks.tx.$executeRaw).toHaveBeenCalledOnce();
     expect(mocks.tx.auditLog.create).not.toHaveBeenCalled();
   });
+
+  it("checks legacy and v2 lesson media references before purging an asset", async () => {
+    const mediaId = crypto.randomUUID();
+    mocks.tx.$queryRaw
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: mediaId, bucket: "private", path: "media/heart.png" }])
+      .mockResolvedValueOnce([{ count: 2 }]);
+
+    await expect(purgeDueTrash({ limit: 1 })).resolves.toEqual({ claimed: 1, purged: 0, blocked: 1 });
+
+    const blockerQuery = mocks.tx.$queryRaw.mock.calls.at(-1)![0].strings.join(" ");
+    expect(blockerQuery).toContain("jsonb_typeof(lesson.\"contentBlocks\") = 'array'");
+    expect(blockerQuery).toContain("lesson.\"contentBlocks\"->'fallbackBlocks'");
+  });
+
+  it("purges due feedback before resources that its attachment can block", async () => {
+    const feedbackId = crypto.randomUUID();
+    mocks.tx.$queryRaw
+      .mockResolvedValueOnce([{ id: feedbackId }])
+      .mockResolvedValueOnce([{ count: 0 }]);
+
+    await expect(purgeDueTrash({ limit: 1 })).resolves.toEqual({ claimed: 1, purged: 1, blocked: 0 });
+
+    const claim = mocks.tx.$queryRaw.mock.calls[0][0];
+    expect(claim.strings.join(" ")).toContain('FROM "Feedback"');
+    expect(mocks.tx.auditLog.create).toHaveBeenCalledWith({ data: {
+      action: "PURGE", entityType: "Feedback", entityId: feedbackId,
+      beforeSnapshot: { trashed: true }, afterSnapshot: { purged: true },
+    } });
+  });
 });

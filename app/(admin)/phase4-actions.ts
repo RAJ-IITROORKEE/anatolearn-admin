@@ -9,7 +9,7 @@ import { archiveQuestion, bulkSetQuestionStatus, createQuestion, duplicateQuesti
 import { questionActivitySchema, questionBulkStatusSchema, questionCreateSchema, questionStatusSchema, questionUpdateSchema } from "@/features/questions/schemas";
 import { requireAdminPage } from "@/lib/auth/session";
 import { phase4ActionError } from "./phase4-action-errors";
-import { moveToTrash } from "@/features/trash/service";
+import { bulkMoveToTrash, moveToTrash } from "@/features/trash/service";
 import { cleanupDirectUploads, directUploadContext, formBoolean, formNullable, formValue, resolveMediaField } from "@/features/media/direct-upload";
 
 const context = async () => {
@@ -87,11 +87,13 @@ export async function changeFlashcardStatusAction(id: string, status: string, _s
 
 export async function bulkFlashcardStatusAction(_state: ActionState, data: FormData): Promise<ActionState> {
   try {
-    const parsed = flashcardBulkStatusSchema.safeParse({ ids: data.getAll("ids").map(String), status: formValue(data, "status") });
+    const operation = formValue(data, "operation");
+    const parsed = flashcardBulkStatusSchema.safeParse({ ids: data.getAll("ids").map(String), status: operation === "TRASH" ? "DRAFT" : operation });
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Select at least one flashcard." };
-    await bulkSetFlashcardStatus(parsed.data.ids, parsed.data.status, await context());
+    if (operation === "TRASH") await bulkMoveToTrash("flashcard", parsed.data.ids, await context());
+    else await bulkSetFlashcardStatus(parsed.data.ids, parsed.data.status, await context());
     revalidatePath("/flashcards");
-    return { success: `${parsed.data.ids.length} flashcard${parsed.data.ids.length === 1 ? "" : "s"} updated.` };
+    return { success: operation === "TRASH" ? `${parsed.data.ids.length} flashcard${parsed.data.ids.length === 1 ? "" : "s"} moved to Trash.` : `${parsed.data.ids.length} flashcard${parsed.data.ids.length === 1 ? "" : "s"} updated.` };
   } catch (error) { return phase4ActionError(error); }
 }
 
@@ -133,14 +135,16 @@ export async function changeQuestionStatusAction(id: string, status: string, _st
   } catch (error) { return phase4ActionError(error); }
 }
 
-export async function trashFlashcardAction(id: string, _state: ActionState): Promise<ActionState> {
+export async function trashFlashcardAction(id: string, _state: ActionState, _data?: FormData): Promise<ActionState> {
   void _state;
-  try { await moveToTrash("flashcard", id, await context()); revalidatePath("/flashcards"); return { success: "Moved to Trash." }; } catch (error) { return phase4ActionError(error); }
+  void _data;
+  try { await moveToTrash("flashcard", id, await context()); revalidatePath("/flashcards"); return { success: "Moved to Trash.", redirectTo: "/flashcards" }; } catch (error) { return phase4ActionError(error); }
 }
 
-export async function trashQuestionAction(id: string, _state: ActionState): Promise<ActionState> {
+export async function trashQuestionAction(redirectTo: string, id: string, _state: ActionState, _data?: FormData): Promise<ActionState> {
   void _state;
-  try { await moveToTrash("question", id, await context()); revalidatePath("/questions", "layout"); return { success: "Moved to Trash." }; } catch (error) { return phase4ActionError(error); }
+  void _data;
+  try { await moveToTrash("question", id, await context()); revalidatePath("/questions", "layout"); return { success: "Moved to Trash.", redirectTo }; } catch (error) { return phase4ActionError(error); }
 }
 
 export async function changeQuestionActivityAction(id: string, isActive: boolean, _state: ActionState): Promise<ActionState> {
@@ -166,10 +170,12 @@ export async function duplicateQuestionAction(id: string, _state: ActionState): 
 
 export async function bulkQuestionStatusAction(_state: ActionState, data: FormData): Promise<ActionState> {
   try {
-    const parsed = questionBulkStatusSchema.safeParse({ ids: data.getAll("ids").map(String), status: formValue(data, "status") });
+    const operation = formValue(data, "operation");
+    const parsed = questionBulkStatusSchema.safeParse({ ids: data.getAll("ids").map(String), status: operation === "TRASH" ? "DRAFT" : operation });
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Select at least one question." };
-    await bulkSetQuestionStatus(parsed.data.ids, parsed.data.status, await context());
+    if (operation === "TRASH") await bulkMoveToTrash("question", parsed.data.ids, await context());
+    else await bulkSetQuestionStatus(parsed.data.ids, parsed.data.status, await context());
     revalidatePath("/questions", "layout");
-    return { success: `${parsed.data.ids.length} question${parsed.data.ids.length === 1 ? "" : "s"} updated.` };
+    return { success: operation === "TRASH" ? `${parsed.data.ids.length} question${parsed.data.ids.length === 1 ? "" : "s"} moved to Trash.` : `${parsed.data.ids.length} question${parsed.data.ids.length === 1 ? "" : "s"} updated.` };
   } catch (error) { return phase4ActionError(error); }
 }

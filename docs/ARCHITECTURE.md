@@ -2,7 +2,7 @@
 
 ## Status
 
-Phases 0-7 are implemented in the repository and all nine migrations are current in the
+Phases 0-7 are implemented in the repository and all twelve migrations are current in the
 configured development database. Production readiness remains externally gated by cron,
 Upstash, provider, authenticated-E2E, backup/restore, and deployment work. This document
 describes current behavior; it does not claim a production deployment.
@@ -16,6 +16,9 @@ SRS is present.
 - Tailwind CSS 4 semantic tokens and shadcn-compatible source components
 - Prisma 6.19.3 over Supabase PostgreSQL
 - Supabase Auth, SSR cookie sessions, bearer-token verification, and private Storage
+- Signup uses Supabase password identities plus six-digit email OTP verification. The
+  Prisma profile is provisioned idempotently only after confirmation; password login can
+  repair a marked identity after a transient provisioning failure.
 - Zod 4 request/content/environment validation
 - Vitest/React Testing Library and Playwright
 
@@ -52,6 +55,16 @@ privileged server-only Auth operations.
   active `Profile`; role is never accepted from request data.
 - Published-content APIs require any active profile. Admin resource and audit/media
   APIs require an active `ADMIN` profile.
+- Signup verification calls Supabase `verifyOtp`, then uses the server-only admin client
+  to set `app_metadata.signup_otp_verified: true` before idempotent profile provisioning.
+  The marker is not accepted from client metadata. Password login repairs a profile only
+  when it is missing and this marker is exactly `true`; a confirmed but unmarked identity
+  receives `ACCOUNT_SETUP_RETRY` and cannot cross the application-profile authorization
+  boundary. New profile names use validated, trimmed 2-100 character Auth `full_name`
+  metadata, otherwise the bounded fallback `Learner`.
+- Registration treats an immediate provider session as confirmation misconfiguration,
+  attempts to delete a newly created identity, and returns `AUTH_CONFIGURATION_ERROR`.
+  This compensation is best effort and its failure is logged only as a redacted event.
 - Cookie-authenticated mutations require an `Origin` whose exact parsed origin matches
   `NEXT_PUBLIC_APP_URL`. Missing/malformed origins fail closed; bearer requests do not
   depend on browser Origin headers.
@@ -110,6 +123,16 @@ lib/auth/                      cookie/bearer identity and page guards
 Admin Server Components and REST handlers call the same feature services. Route
 handlers remain responsible for authentication, origin checks, parsing, and
 envelope/status mapping.
+
+### Canonical admin topic navigation
+
+Admin topic editing uses the browser-only canonical route
+`/organ-systems/{systemSlug}/topics/{topicSlug}`. Topic lookup scopes the topic slug to
+the parent system slug, list DTOs used by the admin pages carry the parent slug, and
+create/update server actions redirect to the resulting canonical route. The legacy
+`/topics/{id}` admin page remains a compatibility entry point and redirects after UUID
+lookup; `/topics/new` remains outside a specific system so the form can select its
+parent. This does not change the UUID-based `/api/v1/topics/{id}` or admin REST routes.
 
 ## Phase 4 learning-item flows
 
@@ -303,6 +326,11 @@ support review/resolve transitions. Feedback audit snapshots contain status/time
 and an `adminNotesChanged` boolean, never the learner message, notes text, or submitter
 PII. No-op updates create no audit event.
 
+Trashed feedback is excluded from learner/admin feedback lists and details, the admin
+dashboard NEW/recent-feedback projections, and learner feedback counts. Restore preserves
+workflow status and share-locks an optional attachment; feedback cannot be restored while
+that `MediaAsset` remains in Trash.
+
 ### Notification lifecycle and evidence
 
 The notification environment schema is isolated from shared runtime validation.
@@ -373,7 +401,7 @@ and flashcard lists are ordered by `displayOrder`, then ID; they are not paginat
   and status.
 - `ContentLesson`: unique slug within a topic, validated structured JSON blocks,
   estimated reading minutes, display order, and status.
-- `MediaAsset`: private storage object metadata, required alt text, image dimensions,
+- `MediaAsset`: private storage object metadata, optional alt text stored as an empty string when omitted, image dimensions,
   uploader, and optional archive timestamp.
 - `AuditLog`: actor/action/entity, snapshots, request ID, and timestamp. A database
   trigger rejects updates and deletes, making rows append-only.
@@ -388,14 +416,22 @@ and flashcard lists are ordered by `displayOrder`, then ID; they are not paginat
   from authoritative lesson, flashcard, and attempt data.
 
 Content starts as `DRAFT`. Draft and published content may move between those states.
-Trash is the recoverable lifecycle for six resource types: organ systems, topics, lessons,
-flashcards, questions, and media. DELETE/archive aliases set archive state and Trash
+Trash is the recoverable lifecycle for seven resource types: organ systems, topics, lessons,
+flashcards, questions, feedback, and media. DELETE/archive aliases set archive state and Trash
 metadata using the database clock, hide the item immediately, and set a 30-day
 `purgeAfter`. Restore is allowed only before that deadline; restored content is DRAFT and
-is never republished automatically. Parent restore requires an available parent.
+is never republished automatically. Feedback retains its `NEW`, `REVIEWED`, or `RESOLVED`
+workflow status through Trash and restore. Parent restore requires an available parent.
 
 Normal lesson-editor block deletion is separate from resource Trash and is confirmed
 before the lesson is saved.
+
+Flashcard and question bulk Delete in the admin UI calls the shared Trash service rather
+than treating `ARCHIVED` as a cosmetic bulk status. `bulkMoveToTrash` validates unique
+UUIDs, sorts and locks every selected row, verifies the complete set before writing,
+updates Trash timestamps/status in one transaction, and appends one `TRASH` audit per
+item. A missing or already-trashed selection aborts the transaction, so the operation is
+all-or-nothing. This is a server-action workflow; no bulk-Trash REST route was added.
 
 Publishing a topic requires its organ system to be published and active. Publishing a
 lesson requires a published topic, a published/active organ system, and at least one
@@ -412,11 +448,11 @@ The service does not require the sequence to contain every sibling in that paren
 
 ## Structured lessons
 
-Allowed blocks are:
+Legacy-compatible lesson blocks are:
 
 - heading at level 2, 3, or 4
 - paragraph
-- image with a managed media UUID, required alt text, and optional caption
+- image with a managed media UUID and optional alt text/caption
 - info, warning, or success callout
 - bullet or numbered list with 1-50 items
 - divider
@@ -427,6 +463,16 @@ unique within the lesson. Managed image references must exist and be unarchived 
 the lesson is created or when its blocks are updated. Stored blocks are revalidated
 while building DTOs; malformed stored content produces a safe `500` response.
 
+Version 2 lessons store an allowlisted rich-text document together with a deterministic
+legacy-block fallback. Rich input permits only the declared document nodes, marks,
+links, colors, font sizes, and alignments; arbitrary attributes and raw HTML remain
+invalid. JSON mutations must supply an exact fallback. Multipart create/update instead
+accepts a draft document: pending image nodes carry a UUID `uploadId`, and files use
+`lessonFile.<uploadId>`. A shared server-only parser used by both admin server actions
+and REST handlers validates fallback limits before upload, resolves images sequentially
+to managed-media UUIDs, strips pending IDs, regenerates the fallback, and validates the
+stored value. Client-supplied draft fallback data is never trusted.
+
 The admin UI now edits this contract visually rather than as raw JSON. It supports all
 seven block types, validated side-by-side learner preview, duplication, button and
 Alt+Up/Alt+Down reordering, confirmation before deleting non-empty content, and an
@@ -435,13 +481,13 @@ the same strict schema; the editor does not broaden the API contract.
 
 The Media Library remains the server-action-backed, paginated/searchable management
 surface for unarchived assets. Resource forms use direct file inputs instead of selecting
-from that library. The mutation uploads each supplied file, validates its alt text, and
+from that library. The mutation uploads each supplied file, normalizes optional alt text, and
 passes the resulting managed-media ID to the existing domain service. Existing IDs are
 retained on edits unless an image is replaced or explicitly cleared.
 
 ## Media flow
 
-1. An admin submits multipart `file` and `altText`.
+1. An admin submits multipart `file` and optional `altText`.
 2. The server enforces the configured byte limit and uses Sharp 0.35.3 to identify and
    fully decode PNG/JPEG/WebP input. Decoding fails on image errors and is limited to
    12,000 pixels per axis and 40,000,000 total pixels. The detected type must be
@@ -457,13 +503,17 @@ retained on edits unless an image is replaced or explicitly cleared.
    already committed upload or metadata mutation as failed. Object compensation runs
    only when metadata/audit persistence fails.
 
+Resource mutations use field-specific multipart names such as `coverFile`/
+`coverAltText`, `frontFile`/`frontAltText`, and `optionFile.{index}`/
+`optionAltText.{index}`. Rich lesson drafts use `lessonFile.<uploadId>` while legacy
+lesson blocks retain `lessonFile.<blockId>` and associated alt/clear fields. Upload IDs
+are request-local references and are never persisted. Newly created assets are tracked
+as each upload completes and archived when a later upload, validation, or parent mutation
+fails.
+
 Media listing is paginated and ordered newest first. It filters by filename/alt text,
 MIME, archive state, and uploader. Alt-text updates are audited. Archive is idempotent;
 an already archived asset is returned without another audit row. An unarchived asset
-Resource mutations use field-specific multipart names such as `coverFile`/
-`coverAltText`, `frontFile`/`frontAltText`, and `optionFile.{index}`/
-`optionAltText.{index}`. Newly created assets are archived on parent-mutation failure.
-
 referenced by an eligible published system cover/icon, topic cover, or published
 lesson, eligible flashcard side, active published question, or its option cannot be
 archived and returns `409 REFERENCED`. The legacy physical-media DELETE endpoint remains
@@ -527,6 +577,12 @@ Storage removal is confirmed before a `MediaPurgeJob` is deleted; failures relea
 lease and retry after one day. Legacy `ARCHIVED` rows without Trash metadata are not
 automatically purged.
 
+`20260720120000_add_feedback_trash` adds the same retention metadata, partial due index,
+consistency constraint, and hard-delete/restore-deadline triggers to `Feedback`. Feedback
+is purged before media because an attachment reference blocks media deletion. Trash,
+restore, and purge audits contain only lifecycle metadata and never feedback subject,
+message, admin notes, or submitter/reviewer data.
+
 ## Pagination, filtering, and sorting
 
 Admin lists default to page 1 and page size 20 and cap page size at 100. Content,
@@ -548,6 +604,15 @@ List API metadata is currently nested as:
 ```json
 { "meta": { "requestId": "uuid", "pagination": { "page": 1, "pageSize": 20, "total": 0, "totalPages": 0 } } }
 ```
+
+## Canonical demo publication
+
+`npm run db:seed` remains the safe default and creates deterministic canonical records as
+drafts without overwriting edits. `npm run db:publish-demo` is a separate, explicit MVP
+operation: it validates the canonical plan, creates missing records, and publishes only
+the known system/topic/lesson/flashcard/question IDs in one transaction. Expected update
+counts are checked so a partial or mismatched dataset rolls back. Unrelated editorial
+records are never selected by this operation.
 
 ## Audit behavior
 
@@ -587,6 +652,12 @@ audit events.
   without a distinct `TEST_DATABASE_URL`.
 - Supabase provider/auth and signed-URL integration is mocked. Authenticated full CRUD
   and full learner assessment browser coverage is absent.
+- Because the Supabase URL and publishable key are public by design, a native client can
+  still call hosted Supabase signup directly, creating residual identity and signup-email
+  abuse surface subject to Supabase's own controls. Such a flow cannot set the server-owned
+  signup marker or create a Prisma `Profile`; even a provider-confirmed unmarked identity
+  remains unauthorized for application APIs. Hosted OTP-template and SMTP behavior must
+  therefore be accepted separately from repository tests.
 - Cron finalization requires a deployment `CRON_SECRET` of at least 32 characters, the
   Vercel daily schedule, and the GitHub Actions workflow secrets. Cron-only validation is
   isolated from shared runtime startup, and the production build passes without a

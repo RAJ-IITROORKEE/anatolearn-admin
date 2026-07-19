@@ -58,7 +58,8 @@ operations and are not a reason to describe the repository as bootstrap-pending.
 - Confirm development Supabase project, private bucket strategy, redirect allowlist,
   pooled/direct URLs, and runtime environment schemas without printing values.
 - Implement the reviewed Prisma schema, a new initial migration, client singleton,
-  idempotent eleven-system/demo seed, and explicit bootstrap-admin script.
+  idempotent eleven-system/demo seed, explicit canonical demo-publication command, and
+  explicit bootstrap-admin script.
 - Implement browser/server/admin Supabase clients, auth callback, cookie sessions,
   bearer verification, profile reconciliation, role/active guards, and CSRF-safe
   mutation pattern.
@@ -67,7 +68,7 @@ operations and are not a reason to describe the repository as bootstrap-pending.
 
 **Acceptance**
 
-- Migration/generate/seed/bootstrap work in the intended development environment.
+- Migration/generate/seed/demo-publication/bootstrap work in the intended environment.
 - Admin can authenticate; non-admin/inactive identities are denied server-side.
 - No secrets are exposed or printed; auth tests and all verification commands pass.
 
@@ -201,10 +202,15 @@ and compensation; permanent notification-failure handling; Prisma 6.19.3; deploy
 development RLS/revoke migrations with isolated role tests; visual seven-block lesson
 editing and direct resource image uploads with managed-media retention; accessibility/responsive/metadata/robots/password/
 pagination/dialog/table fixes; strict 108-operation OpenAPI route parity; recoverable
-Trash lifecycle and protected purge worker; non-destructive seed/bootstrap tests; and
+Trash lifecycle and protected purge worker; non-destructive seed, canonical-only demo
+publication, and bootstrap tests; and
 axe/Playwright foundations.
 
-Final gates passed: lint, typecheck, default Vitest (139 files passed, 3 skipped; 445
+The 2026-07-20 hardening follow-up extends recoverable Trash to feedback with a new
+migration, status-preserving restore, atomic row/bulk admin actions, responsive selection,
+privacy-safe audits, normal-read exclusion, and dependency-ordered purge.
+
+Final gates passed: lint, typecheck, default Vitest (139 files passed, 3 skipped; 448
 tests passed, 13 skipped), isolated database run (2 files/9 tests), build (42 static-
 generation units with nonce dynamic CSP output), and OpenAPI validation (108 unique parity-
 checked operations). Playwright was 17 passed/14 skipped; authenticated admin coverage did

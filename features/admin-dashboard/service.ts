@@ -74,7 +74,7 @@ export async function getAdminDashboard(input: AdminDashboardQuery): Promise<Adm
             AND "assessmentType" = 'QUIZ'::"AssessmentType")::int AS "quizQuestions",
           (SELECT COUNT(*) FROM "Question" WHERE "status" <> 'ARCHIVED'::"PublishStatus"
             AND "assessmentType" = 'TEST'::"AssessmentType")::int AS "testQuestions",
-          (SELECT COUNT(*) FROM "Feedback" WHERE "status" = 'NEW'::"FeedbackStatus")::int AS "newFeedback",
+          (SELECT COUNT(*) FROM "Feedback" WHERE "status" = 'NEW'::"FeedbackStatus" AND "trashedAt" IS NULL)::int AS "newFeedback",
           (SELECT COUNT(*) FROM "AssessmentAttempt" WHERE "assessmentType" = 'QUIZ'::"AssessmentType"
             AND "status" IN ('COMPLETED'::"AttemptStatus", 'AUTO_SUBMITTED'::"AttemptStatus"))::int AS "completedQuizzes",
           (SELECT COUNT(*) FROM "AssessmentAttempt" WHERE "assessmentType" = 'TEST'::"AssessmentType"
@@ -147,6 +147,7 @@ export async function getAdminDashboard(input: AdminDashboardQuery): Promise<Adm
         take: 5,
       }),
       tx.feedback.findMany({
+        where: { trashedAt: null },
         select: {
           id: true, type: true, subject: true, status: true, createdAt: true,
           user: { select: { id: true, fullName: true, email: true } },

@@ -5,8 +5,10 @@ import { ZodError } from "zod";
 
 import type { ActionState } from "@/components/phase3/action-form";
 import { FeedbackError } from "@/features/feedback/domain";
-import { adminFeedbackUpdateSchema, feedbackIdSchema } from "@/features/feedback/schemas";
+import { adminFeedbackUpdateSchema, feedbackBulkTrashSchema, feedbackIdSchema } from "@/features/feedback/schemas";
 import { updateFeedback } from "@/features/feedback/service";
+import { TrashError } from "@/features/trash/domain";
+import { bulkMoveToTrash, moveToTrash } from "@/features/trash/service";
 import { UserManagementError } from "@/features/users/domain";
 import { updateUserActivitySchema, userIdSchema } from "@/features/users/schemas";
 import { setLearnerActivity } from "@/features/users/service";
@@ -20,7 +22,7 @@ async function mutationContext() {
 function safeActionError(error: unknown): ActionState {
   if ((error as { digest?: string }).digest?.startsWith("NEXT_REDIRECT")) throw error;
   if (error instanceof ZodError) return { error: error.issues[0]?.message ?? "Check the submitted values." };
-  if (error instanceof FeedbackError || error instanceof UserManagementError) return { error: error.message };
+  if (error instanceof FeedbackError || error instanceof TrashError || error instanceof UserManagementError) return { error: error.message };
   return { error: "The change could not be saved. Please try again." };
 }
 
@@ -56,5 +58,27 @@ export async function changeFeedbackStatusAction(id: string, status: string, _st
     await updateFeedback(validId, input, await mutationContext());
     revalidatePath("/feedback", "layout");
     return { success: `Feedback marked ${input.status?.toLowerCase()}.` };
+  } catch (error) { return safeActionError(error); }
+}
+
+export async function trashFeedbackAction(id: string, _state: ActionState): Promise<ActionState> {
+  void _state;
+  try {
+    const validId = feedbackIdSchema.parse(id);
+    await moveToTrash("feedback", validId, await mutationContext());
+    revalidatePath("/feedback", "layout");
+    revalidatePath("/settings/trash");
+    return { success: "Moved to Trash." };
+  } catch (error) { return safeActionError(error); }
+}
+
+export async function bulkTrashFeedbackAction(_state: ActionState, data: FormData): Promise<ActionState> {
+  void _state;
+  try {
+    const parsed = feedbackBulkTrashSchema.parse({ ids: data.getAll("ids").map(String) });
+    await bulkMoveToTrash("feedback", parsed.ids, await mutationContext());
+    revalidatePath("/feedback", "layout");
+    revalidatePath("/settings/trash");
+    return { success: `${parsed.ids.length} feedback item${parsed.ids.length === 1 ? "" : "s"} moved to Trash.` };
   } catch (error) { return safeActionError(error); }
 }

@@ -14,6 +14,7 @@ type QuestionWithOptions = {
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
+  topic?: { title: string };
   options: Array<{
     id: string;
     key: string;
@@ -39,6 +40,7 @@ export function questionDto(value: QuestionWithOptions) {
   return {
     id: value.id,
     topicId: value.topicId,
+    topicTitle: value.topic?.title ?? null,
     assessmentType: value.assessmentType,
     questionText: value.questionText,
     imageUrl: value.imageUrl,

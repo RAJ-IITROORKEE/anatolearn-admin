@@ -50,18 +50,47 @@ paths:
     post:
       tags: [Auth]
       operationId: register
+      x-error-codes: [VALIDATION_ERROR, RATE_LIMITED, AUTH_UNAVAILABLE, AUTH_CONFIGURATION_ERROR]
+      description: Starts non-enumerating password signup and sends a six-digit email OTP. Account-dependent provider 4xx outcomes retain the same 202 response. Transport, 429, and 5xx provider failures return 503 AUTH_UNAVAILABLE. An unexpected immediate session triggers best-effort deletion of a newly created identity and returns 503 AUTH_CONFIGURATION_ERROR. No application profile or session is created by this response.
       security: []
       requestBody: { $ref: '#/components/requestBodies/RegisterBody' }
       responses:
-        '201': { $ref: '#/components/responses/RegisterSuccess' }
+        '202': { $ref: '#/components/responses/RegisterSuccess' }
         '400': { $ref: '#/components/responses/BadRequest' }
-        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/InternalError' }
+  /auth/verify-signup-otp:
+    post:
+      tags: [Auth]
+      operationId: verifySignupOtp
+      x-error-codes: [VALIDATION_ERROR, RATE_LIMITED, INVALID_OR_EXPIRED_OTP, AUTH_UNAVAILABLE, ACCOUNT_SETUP_RETRY]
+      description: Verifies a six-digit signup OTP, requires confirmed email, then writes server-controlled app_metadata.signup_otp_verified=true before idempotently provisioning the application profile. Provider session tokens are discarded. Invalid/expired OTP is a 400 account outcome; transport, 429, and 5xx provider failures return 503 AUTH_UNAVAILABLE.
+      security: []
+      requestBody: { $ref: '#/components/requestBodies/VerifySignupOtpBody' }
+      responses:
+        '200': { $ref: '#/components/responses/SignupOtpVerifiedSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/InternalError' }
+  /auth/resend-signup-otp:
+    post:
+      tags: [Auth]
+      operationId: resendSignupOtp
+      x-error-codes: [VALIDATION_ERROR, RATE_LIMITED, AUTH_UNAVAILABLE]
+      description: Non-enumerating resend request for a pending signup OTP. Account-dependent provider 4xx outcomes retain the same 202 response; transport, 429, and 5xx provider failures return 503 AUTH_UNAVAILABLE.
+      security: []
+      requestBody: { $ref: '#/components/requestBodies/EmailBody' }
+      responses:
+        '202': { $ref: '#/components/responses/RegisterSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '503': { $ref: '#/components/responses/InternalError' }
   /auth/login:
     post:
       tags: [Auth]
       operationId: login
+      x-error-codes: [VALIDATION_ERROR, RATE_LIMITED, EMAIL_CONFIRMATION_REQUIRED, INVALID_CREDENTIALS, ACCOUNT_SETUP_RETRY, ACCOUNT_INACTIVE]
+      description: Returns EMAIL_CONFIRMATION_REQUIRED when credentials are valid but Supabase email confirmation is still pending; other authentication failures remain INVALID_CREDENTIALS. If no Profile exists, repair is allowed only when server-controlled app_metadata.signup_otp_verified is exactly true; otherwise ACCOUNT_SETUP_RETRY is returned. Repair validates a 2-100 character full_name and falls back to Learner.
       security: []
       requestBody: { $ref: '#/components/requestBodies/LoginBody' }
       responses:
@@ -70,6 +99,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/InternalError' }
   /auth/forgot-password:
     post:
       tags: [Auth]
@@ -815,7 +845,7 @@ paths:
       tags: [Admin content]
       operationId: restoreAdminTrashItem
       x-required-role: ADMIN
-      description: Restores strictly before the database-clock deadline. Cookie requests require the configured exact Origin. Parent resources must exist and not be trashed.
+      description: Restores strictly before the database-clock deadline. Cookie requests require the configured exact Origin. Parent resources must exist and not be trashed. Publishable content restores as DRAFT; feedback preserves its NEW, REVIEWED, or RESOLVED workflow status and requires any attachment to be outside Trash.
       requestBody:
         required: false
         content: { application/json: { schema: { $ref: '#/components/schemas/EmptyMutation' } } }
@@ -994,10 +1024,10 @@ paths:
       requestBody:
         required: true
         content:
-          multipart/form-data:
-            schema: { $ref: '#/components/schemas/TopicMultipartInput' }
           application/json:
             schema: { $ref: '#/components/schemas/TopicInput' }
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/TopicMultipartInput' }
       responses: *adminCreateResponses
     patch:
       tags: [Admin content]
@@ -1047,12 +1077,12 @@ paths:
       operationId: createContentLesson
       x-required-role: ADMIN
       requestBody:
-          multipart/form-data:
-            schema: { $ref: '#/components/schemas/ContentLessonMultipartInput' }
         required: true
         content:
           application/json:
             schema: { $ref: '#/components/schemas/ContentLessonInput' }
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/ContentLessonMultipartInput' }
       responses: *adminCreateResponses
     patch:
       tags: [Admin content]
@@ -1399,10 +1429,10 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [file, altText]
+              required: [file]
               properties:
                 file: { type: string, format: binary }
-                altText: { type: string, minLength: 1, maxLength: 500 }
+                altText: { type: string, maxLength: 500, default: '' }
       responses:
         '201': { $ref: '#/components/responses/AdminMediaSuccess' }
         '400': { $ref: '#/components/responses/BadRequest' }
@@ -1435,7 +1465,7 @@ paths:
               additionalProperties: false
               required: [altText]
               properties:
-                altText: { type: string, minLength: 1, maxLength: 500 }
+                altText: { type: string, maxLength: 500 }
       responses:
         '200': { $ref: '#/components/responses/AdminMediaSuccess' }
         '400': { $ref: '#/components/responses/BadRequest' }
@@ -1604,6 +1634,9 @@ components:
     LoginBody:
       required: true
       content: { application/json: { schema: { $ref: '#/components/schemas/LoginInput' } } }
+    VerifySignupOtpBody:
+      required: true
+      content: { application/json: { schema: { $ref: '#/components/schemas/VerifySignupOtpInput' } } }
     EmailBody:
       required: true
       content: { application/json: { schema: { $ref: '#/components/schemas/EmailInput' } } }
@@ -1626,11 +1659,6 @@ components:
               - type: object
                 minProperties: 1
                 description: A strict non-empty partial of the resource's create schema.
-  schemas:
-    LoginInput:
-      type: object
-      additionalProperties: false
-      required: [email, password]
         multipart/form-data:
           schema: { $ref: '#/components/schemas/ContentMutationMultipartInput' }
     OrganSystemMultipartBody:
@@ -1679,6 +1707,11 @@ components:
           schema: { $ref: '#/components/schemas/QuestionUpdateInput' }
         multipart/form-data:
           schema: { $ref: '#/components/schemas/QuestionMultipartInput' }
+  schemas:
+    LoginInput:
+      type: object
+      additionalProperties: false
+      required: [email, password]
       properties:
         email: { type: string, format: email }
         password: { type: string, minLength: 8, maxLength: 128, format: password }
@@ -1690,6 +1723,13 @@ components:
         email: { type: string, format: email }
         password: { type: string, minLength: 8, maxLength: 128, format: password }
         fullName: { type: string, minLength: 2, maxLength: 100 }
+    VerifySignupOtpInput:
+      type: object
+      additionalProperties: false
+      required: [email, otp]
+      properties:
+        email: { type: string, format: email }
+        otp: { type: string, pattern: '^\d{6}$' }
     EmailInput:
       type: object
       additionalProperties: false
@@ -1744,10 +1784,16 @@ components:
     RegisterResult:
       type: object
       additionalProperties: false
-      required: [userId, emailConfirmationRequired]
+      required: [verificationRequired, message]
       properties:
-        userId: { type: string, format: uuid }
-        emailConfirmationRequired: { type: boolean }
+        verificationRequired: { type: boolean, const: true }
+        message: { type: string }
+    SignupOtpVerifiedResult:
+      type: object
+      additionalProperties: false
+      required: [verified]
+      properties:
+        verified: { type: boolean, const: true }
     LoginResult:
       type: object
       additionalProperties: false
@@ -1761,7 +1807,7 @@ components:
     PublishedOrganSystem:
       type: object
       additionalProperties: false
-      required: [id, name, slug, shortDescription, longDescription, coverImageUrl, iconImageUrl, displayOrder, isActive]
+      required: [id, name, slug, shortDescription, longDescription, coverImageUrl, iconImageUrl, coverMediaId, iconMediaId, displayOrder, isActive]
       properties:
         id: { type: string, format: uuid }
         name: { type: string }
@@ -1770,6 +1816,8 @@ components:
         longDescription: { type: [string, 'null'] }
         coverImageUrl: { type: [string, 'null'] }
         iconImageUrl: { type: [string, 'null'] }
+        coverMediaId: { type: [string, 'null'], format: uuid }
+        iconMediaId: { type: [string, 'null'], format: uuid }
         displayOrder: { type: integer, minimum: 0 }
         isActive: { type: boolean, const: true }
     PublishedTopic:
@@ -2458,7 +2506,7 @@ components:
         batches: { type: integer, minimum: 1, maximum: 10 }
     TrashType:
       type: string
-      enum: [organ-system, topic, content-lesson, flashcard, question, media-asset]
+      enum: [organ-system, topic, content-lesson, flashcard, question, feedback, media-asset]
     TrashSort:
       type: string
       default: trashedAt-desc
@@ -2490,6 +2538,7 @@ components:
     TrashRestoreResult:
       type: object
       additionalProperties: false
+      description: Publishable content includes status DRAFT. Media and feedback omit status; restored feedback retains its existing NEW, REVIEWED, or RESOLVED workflow status.
       required: [id, type, restored]
       properties:
         id: { type: string, format: uuid }
@@ -2498,87 +2547,6 @@ components:
         status: { type: string, enum: [DRAFT] }
     TrashPurgeResult:
       type: object
-    ContentMutationMultipartInput:
-      type: object
-      additionalProperties: false
-      description: Resource-specific partial form fields plus direct image fields. Lesson image fields are keyed by block ID, for example `lessonFile.intro`.
-      properties:
-        name: { type: string, maxLength: 120 }
-        slug: { type: string, maxLength: 100 }
-        shortDescription: { type: string, maxLength: 500 }
-        longDescription: { type: string, maxLength: 5000 }
-        organSystemId: { type: string, format: uuid }
-        topicId: { type: string, format: uuid }
-        title: { type: string, maxLength: 200 }
-        summary: { type: string, maxLength: 1000 }
-    OrganSystemMultipartInput:
-      type: object
-      additionalProperties: false
-      required: [name, shortDescription, displayOrder]
-      description: Form values are strings. Upload fields accept PNG, JPEG, or WebP files; a replacement requires its matching non-empty alt-text field.
-      properties:
-        name: { type: string, minLength: 1, maxLength: 120 }
-        slug: { $ref: '#/components/schemas/Slug' }
-        shortDescription: { type: string, minLength: 1, maxLength: 500 }
-        longDescription: { type: string, maxLength: 5000 }
-        coverFile: { type: string, format: binary }
-    TopicMultipartInput:
-      type: object
-      additionalProperties: false
-      required: [organSystemId, title, slug, displayOrder]
-      description: Form values are strings. `coverFile` accepts PNG, JPEG, or WebP; replacing it requires `coverAltText`.
-      properties:
-        organSystemId: { type: string, format: uuid }
-        title: { type: string, minLength: 1, maxLength: 160 }
-        slug: { $ref: '#/components/schemas/Slug' }
-        summary: { type: string, maxLength: 1000 }
-        coverFile: { type: string, format: binary }
-        coverAltText: { type: string, maxLength: 500 }
-        coverMediaId: { type: string, format: uuid }
-        clearCover: { type: string, enum: [on] }
-        displayOrder: { type: integer, minimum: 0 }
-    ContentLessonMultipartInput:
-      type: object
-      additionalProperties: false
-      required: [topicId, title, slug, contentBlocks, estimatedReadingMinutes, displayOrder]
-      description: `contentBlocks` is a JSON-encoded block array. Image upload fields use the block ID, for example `lessonFile.intro`, `lessonAltText.intro`, and `lessonClear.intro`.
-      properties:
-        topicId: { type: string, format: uuid }
-        title: { type: string, minLength: 1, maxLength: 200 }
-        slug: { $ref: '#/components/schemas/Slug' }
-        summary: { type: string, maxLength: 1000 }
-        contentBlocks: { type: string, description: JSON-encoded ContentBlock array. }
-        estimatedReadingMinutes: { type: integer, minimum: 0, maximum: 600 }
-        displayOrder: { type: integer, minimum: 0 }
-      patternProperties:
-        '^lessonFile\\..+$': { type: string, format: binary }
-        '^lessonAltText\\..+$': { type: string, maxLength: 500 }
-        '^lessonClear\\..+$': { type: string, enum: [on] }
-        coverAltText: { type: string, maxLength: 500 }
-        coverMediaId: { type: string, format: uuid }
-        clearCover: { type: string, enum: [on] }
-        iconFile: { type: string, format: binary }
-        iconAltText: { type: string, maxLength: 500 }
-        iconMediaId: { type: string, format: uuid }
-        clearIcon: { type: string, enum: [on] }
-        displayOrder: { type: integer, minimum: 0 }
-        isActive: { type: string, enum: [on] }
-        contentBlocks: { type: string, description: JSON-encoded ContentBlock array. }
-        estimatedReadingMinutes: { type: integer, minimum: 0, maximum: 600 }
-        displayOrder: { type: integer, minimum: 0 }
-        isActive: { type: string, enum: [on] }
-        coverFile: { type: string, format: binary }
-        coverAltText: { type: string, maxLength: 500 }
-        coverMediaId: { type: string, format: uuid }
-        clearCover: { type: string, enum: [on] }
-        iconFile: { type: string, format: binary }
-        iconAltText: { type: string, maxLength: 500 }
-        iconMediaId: { type: string, format: uuid }
-        clearIcon: { type: string, enum: [on] }
-      patternProperties:
-        '^lessonFile\\..+$': { type: string, format: binary }
-        '^lessonAltText\\..+$': { type: string, maxLength: 500 }
-        '^lessonClear\\..+$': { type: string, enum: [on] }
       additionalProperties: false
       required: [claimed, purged, blocked, storageClaimed, storageRemoved, storageRetried, batches]
       properties:
@@ -2622,6 +2590,35 @@ components:
       required: [status]
       properties:
         status: { $ref: '#/components/schemas/PublishStatus' }
+    ContentMutationMultipartInput:
+      type: object
+      additionalProperties: false
+      description: Resource-specific partial form fields plus direct image fields. Lesson image fields are keyed by block ID, for example `lessonFile.intro`.
+      properties:
+        name: { type: string, maxLength: 120 }
+        slug: { type: string, maxLength: 100 }
+        shortDescription: { type: string, maxLength: 500 }
+        longDescription: { type: string, maxLength: 5000 }
+        organSystemId: { type: string, format: uuid }
+        topicId: { type: string, format: uuid }
+        title: { type: string, maxLength: 200 }
+        summary: { type: string, maxLength: 1000 }
+        contentBlocks: { type: string, description: JSON-encoded ContentBlock array. }
+        estimatedReadingMinutes: { type: integer, minimum: 0, maximum: 600 }
+        displayOrder: { type: integer, minimum: 0 }
+        isActive: { type: string, enum: [on] }
+        coverFile: { type: string, format: binary }
+        coverAltText: { type: string, maxLength: 500 }
+        coverMediaId: { type: string, format: uuid }
+        clearCover: { type: string, enum: [on] }
+        iconFile: { type: string, format: binary }
+        iconAltText: { type: string, maxLength: 500 }
+        iconMediaId: { type: string, format: uuid }
+        clearIcon: { type: string, enum: [on] }
+      patternProperties:
+        '^lessonFile\\..+$': { type: string, format: binary }
+        '^lessonAltText\\..+$': { type: string, maxLength: 500 }
+        '^lessonClear\\..+$': { type: string, enum: [on] }
     OrganSystemInput:
       type: object
       additionalProperties: false
@@ -2635,6 +2632,26 @@ components:
         iconMediaId: { type: [string, 'null'], format: uuid }
         displayOrder: { type: integer, minimum: 0 }
         isActive: { type: boolean }
+    OrganSystemMultipartInput:
+      type: object
+      additionalProperties: false
+      required: [name, shortDescription, displayOrder]
+      description: Form values are strings. Upload fields accept PNG, JPEG, or WebP files; a replacement requires its matching non-empty alt-text field.
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        slug: { $ref: '#/components/schemas/Slug' }
+        shortDescription: { type: string, minLength: 1, maxLength: 500 }
+        longDescription: { type: string, maxLength: 5000 }
+        coverFile: { type: string, format: binary }
+        coverAltText: { type: string, maxLength: 500 }
+        coverMediaId: { type: string, format: uuid }
+        clearCover: { type: string, enum: [on] }
+        iconFile: { type: string, format: binary }
+        iconAltText: { type: string, maxLength: 500 }
+        iconMediaId: { type: string, format: uuid }
+        clearIcon: { type: string, enum: [on] }
+        displayOrder: { type: integer, minimum: 0 }
+        isActive: { type: string, enum: [on] }
     TopicInput:
       type: object
       additionalProperties: false
@@ -2646,29 +2663,24 @@ components:
         summary: { type: [string, 'null'], maxLength: 1000 }
         coverMediaId: { type: [string, 'null'], format: uuid }
         displayOrder: { type: integer, minimum: 0 }
+    TopicMultipartInput:
+      type: object
+      additionalProperties: false
+      required: [organSystemId, title, slug, displayOrder]
+      description: Form values are strings. `coverFile` accepts PNG, JPEG, or WebP; replacing it requires `coverAltText`.
+      properties:
+        organSystemId: { type: string, format: uuid }
+        title: { type: string, minLength: 1, maxLength: 160 }
+        slug: { $ref: '#/components/schemas/Slug' }
+        summary: { type: string, maxLength: 1000 }
+        coverFile: { type: string, format: binary }
+        coverAltText: { type: string, maxLength: 500 }
+        coverMediaId: { type: string, format: uuid }
+        clearCover: { type: string, enum: [on] }
+        displayOrder: { type: integer, minimum: 0 }
     ContentLessonInput:
       type: object
       additionalProperties: false
-    FlashcardMultipartInput:
-      type: object
-      additionalProperties: false
-      required: [topicId, frontText, backText, displayOrder]
-      description: Form values are strings. `frontFile` and `backFile` accept PNG, JPEG, or WebP and require matching alt-text fields when supplied.
-      properties:
-        topicId: { type: string, format: uuid }
-        frontText: { type: string, minLength: 1, maxLength: 5000 }
-        backText: { type: string, minLength: 1, maxLength: 5000 }
-        frontFile: { type: string, format: binary }
-        frontAltText: { type: string, maxLength: 500 }
-        frontMediaId: { type: string, format: uuid }
-        clearFront: { type: string, enum: [on] }
-        backFile: { type: string, format: binary }
-        backAltText: { type: string, maxLength: 500 }
-        backMediaId: { type: string, format: uuid }
-        clearBack: { type: string, enum: [on] }
-        difficulty: { type: string, enum: [EASY, MEDIUM, HARD] }
-        notes: { type: string, maxLength: 5000 }
-        displayOrder: { type: integer, minimum: 0 }
       required: [topicId, title, slug, contentBlocks, estimatedReadingMinutes, displayOrder]
       properties:
         topicId: { type: string, format: uuid }
@@ -2676,11 +2688,30 @@ components:
         slug: { $ref: '#/components/schemas/Slug' }
         summary: { type: [string, 'null'], maxLength: 1000 }
         contentBlocks:
-          type: array
-          maxItems: 200
-          items: { $ref: '#/components/schemas/ContentBlock' }
+          oneOf:
+            - type: array
+              maxItems: 200
+              items: { $ref: '#/components/schemas/ContentBlock' }
+            - { $ref: '#/components/schemas/RichLessonContent' }
         estimatedReadingMinutes: { type: integer, minimum: 0, maximum: 600 }
         displayOrder: { type: integer, minimum: 0 }
+    ContentLessonMultipartInput:
+      type: object
+      additionalProperties: false
+      required: [topicId, title, slug, contentBlocks, estimatedReadingMinutes, displayOrder]
+      description: `contentBlocks` is either a JSON-encoded legacy block array or a version 2 rich-content draft. Managed rich images use stable `uploadId` multipart names such as `lessonFile.<uploadId>`; the server replaces them with private media UUIDs.
+      properties:
+        topicId: { type: string, format: uuid }
+        title: { type: string, minLength: 1, maxLength: 200 }
+        slug: { $ref: '#/components/schemas/Slug' }
+        summary: { type: string, maxLength: 1000 }
+        contentBlocks: { type: string, description: JSON-encoded ContentBlock array or strict version 2 rich-content draft. }
+        estimatedReadingMinutes: { type: integer, minimum: 0, maximum: 600 }
+        displayOrder: { type: integer, minimum: 0 }
+      patternProperties:
+        '^lessonFile\\..+$': { type: string, format: binary }
+        '^lessonAltText\\..+$': { type: string, maxLength: 500 }
+        '^lessonClear\\..+$': { type: string, enum: [on] }
     ContentBlock:
       oneOf:
         - $ref: '#/components/schemas/HeadingBlock'
@@ -2691,6 +2722,185 @@ components:
         - $ref: '#/components/schemas/NumberedListBlock'
         - $ref: '#/components/schemas/DividerBlock'
       discriminator: { propertyName: type }
+    RichLessonContent:
+      type: object
+      additionalProperties: false
+      required: [version, richContent, fallbackBlocks]
+      description: Stored rich document plus its deterministic legacy-client fallback. The server verifies that the fallback exactly matches the document.
+      properties:
+        version: { type: integer, const: 2 }
+        richContent: { $ref: '#/components/schemas/RichTextDocument' }
+        fallbackBlocks:
+          type: array
+          maxItems: 200
+          items: { $ref: '#/components/schemas/ContentBlock' }
+    RichTextDocument:
+      type: object
+      additionalProperties: false
+      required: [type, content]
+      description: Strict TipTap-compatible AST. The server additionally limits total nodes to 2000, depth to 8, and total text to 100000 characters.
+      properties:
+        type: { type: string, const: doc }
+        content:
+          type: array
+          maxItems: 200
+          items: { $ref: '#/components/schemas/RichTextNode' }
+    RichTextNode:
+      oneOf:
+        - { $ref: '#/components/schemas/RichParagraph' }
+        - { $ref: '#/components/schemas/RichHeading' }
+        - { $ref: '#/components/schemas/RichManagedImage' }
+        - { $ref: '#/components/schemas/RichBlockquote' }
+        - { $ref: '#/components/schemas/RichList' }
+        - { $ref: '#/components/schemas/RichHorizontalRule' }
+      discriminator: { propertyName: type }
+    RichTextInline:
+      type: object
+      additionalProperties: false
+      required: [type, text]
+      properties:
+        type: { type: string, const: text }
+        text: { type: string, minLength: 1, maxLength: 10000 }
+        marks:
+          type: array
+          maxItems: 6
+          items: { $ref: '#/components/schemas/RichTextMark' }
+    RichTextMark:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [type]
+          properties: { type: { type: string, enum: [bold, italic, underline, strike] } }
+        - type: object
+          additionalProperties: false
+          required: [type, attrs]
+          properties:
+            type: { type: string, const: link }
+            attrs:
+              type: object
+              additionalProperties: false
+              required: [href]
+              properties: { href: { type: string, maxLength: 2048, pattern: '^(https?://|mailto:|/(?!/))' } }
+        - type: object
+          additionalProperties: false
+          required: [type, attrs]
+          properties:
+            type: { type: string, const: highlight }
+            attrs:
+              type: object
+              additionalProperties: false
+              required: [color]
+              properties: { color: { type: string, enum: ['#DBEAFE', '#EDE9FE', '#FEF3C7', '#DCFCE7', '#FEE2E2'] } }
+        - type: object
+          additionalProperties: false
+          required: [type, attrs]
+          properties:
+            type: { type: string, const: textStyle }
+            attrs:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                fontSize: { type: string, enum: [12px, 14px, 16px, 18px, 20px, 24px] }
+                color: { type: string, enum: ['#0F172A', '#334155', '#2563EB', '#7C3AED', '#DC2626', '#16A34A'] }
+    RichBlockAttrs:
+      type: object
+      additionalProperties: false
+      properties:
+        legacyId: { type: string, minLength: 1, maxLength: 100 }
+        textAlign: { type: string, enum: [left, center, right] }
+    RichParagraph:
+      type: object
+      additionalProperties: false
+      description: Combined paragraph text is limited to 5000 characters.
+      required: [type]
+      properties:
+        type: { type: string, const: paragraph }
+        attrs: { $ref: '#/components/schemas/RichBlockAttrs' }
+        content: { type: array, maxItems: 500, items: { $ref: '#/components/schemas/RichTextInline' } }
+    RichHeading:
+      type: object
+      additionalProperties: false
+      description: Combined heading text is limited to 200 characters.
+      required: [type, attrs]
+      properties:
+        type: { type: string, const: heading }
+        attrs:
+          type: object
+          additionalProperties: false
+          required: [level]
+          properties:
+            level: { type: integer, enum: [2, 3, 4] }
+            legacyId: { type: string, minLength: 1, maxLength: 100 }
+            textAlign: { type: string, enum: [left, center, right] }
+        content: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/RichTextInline' } }
+    RichManagedImage:
+      type: object
+      additionalProperties: false
+      required: [type, attrs]
+      properties:
+        type: { type: string, const: image }
+        attrs:
+          type: object
+          additionalProperties: false
+          required: [mediaId, alt]
+          properties:
+            mediaId: { type: string, format: uuid }
+            alt: { type: string, maxLength: 300 }
+            caption: { type: [string, 'null'], maxLength: 500 }
+            legacyId: { type: string, minLength: 1, maxLength: 100 }
+    RichBlockquote:
+      type: object
+      additionalProperties: false
+      description: Contains paragraphs only; combined text including paragraph separators is limited to 2000 characters. Managed images are top-level nodes only.
+      required: [type, content]
+      properties:
+        type: { type: string, const: blockquote }
+        attrs:
+          type: object
+          additionalProperties: false
+          properties:
+            legacyId: { type: string, minLength: 1, maxLength: 100 }
+            tone: { type: string, enum: [info, warning, success] }
+            title: { type: [string, 'null'], maxLength: 200 }
+        content: { type: array, minItems: 1, maxItems: 50, items: { $ref: '#/components/schemas/RichParagraph' } }
+    RichList:
+      type: object
+      additionalProperties: false
+      description: A bulletList renders unordered items; an orderedList renders the same item structure with ordinal markers.
+      required: [type, content]
+      properties:
+        type: { type: string, enum: [bulletList, orderedList] }
+        attrs:
+          type: object
+          additionalProperties: false
+          properties: { legacyId: { type: string, minLength: 1, maxLength: 100 } }
+        content: { type: array, minItems: 1, maxItems: 50, items: { $ref: '#/components/schemas/RichListItem' } }
+      examples:
+        - {"type":"bulletList","content":[{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"Vena cava"}]}]}]}
+        - {"type":"orderedList","content":[{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"Trace blood flow"}]}]}]}
+    RichListItem:
+      type: object
+      additionalProperties: false
+      description: Contains paragraphs only; combined text including paragraph separators is limited to 1000 characters.
+      required: [type, content]
+      properties:
+        type: { type: string, const: listItem }
+        content:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items: { $ref: '#/components/schemas/RichParagraph' }
+    RichHorizontalRule:
+      type: object
+      additionalProperties: false
+      required: [type]
+      properties:
+        type: { type: string, const: horizontalRule }
+        attrs:
+          type: object
+          additionalProperties: false
+          properties: { legacyId: { type: string, minLength: 1, maxLength: 100 } }
     HeadingBlock:
       type: object
       additionalProperties: false
@@ -2716,7 +2926,7 @@ components:
         id: { type: string, minLength: 1, maxLength: 100 }
         type: { const: image }
         mediaId: { type: string, format: uuid }
-        altText: { type: string, minLength: 1, maxLength: 300 }
+        altText: { type: string, maxLength: 300 }
         caption: { type: [string, 'null'], maxLength: 500 }
     CalloutBlock:
       type: object
@@ -2748,27 +2958,6 @@ components:
       type: object
       additionalProperties: false
       required: [type]
-    QuestionMultipartInput:
-      type: object
-      additionalProperties: false
-      required: [topicId, assessmentType, questionText, explanation, optionCount, correctOption]
-      description: Form values are strings. Options use indexed fields such as `optionText.0`, `optionFile.0`, `optionAltText.0`, `optionMediaId.0`, `clearOption.0`, and `optionId.0`.
-      properties:
-        topicId: { type: string, format: uuid }
-        assessmentType: { type: string, enum: [QUIZ, TEST] }
-        questionText: { type: string, minLength: 1, maxLength: 5000 }
-        questionFile: { type: string, format: binary }
-        questionAltText: { type: string, maxLength: 500 }
-        mediaId: { type: string, format: uuid }
-        clearQuestionImage: { type: string, enum: [on] }
-        explanation: { type: string, minLength: 1, maxLength: 5000 }
-        difficulty: { type: string, enum: [EASY, MEDIUM, HARD] }
-        conceptTag: { type: string, maxLength: 100 }
-        optionCount: { type: integer, minimum: 0, maximum: 6 }
-        correctOption: { type: integer, minimum: 0, maximum: 5 }
-      patternProperties:
-        '^option(Id|Text|File|AltText|MediaId)\\.[0-9]+$': { type: [string, 'null'] }
-        '^clearOption\\.[0-9]+$': { type: string, enum: [on] }
       properties:
         id: { type: string, minLength: 1, maxLength: 100 }
         type: { const: divider }
@@ -2813,6 +3002,26 @@ components:
         backMediaId: { type: [string, 'null'], format: uuid }
         difficulty: { $ref: '#/components/schemas/Difficulty' }
         notes: { type: [string, 'null'], maxLength: 5000 }
+        displayOrder: { type: integer, minimum: 0 }
+    FlashcardMultipartInput:
+      type: object
+      additionalProperties: false
+      required: [topicId, frontText, backText, displayOrder]
+      description: Form values are strings. `frontFile` and `backFile` accept PNG, JPEG, or WebP and require matching alt-text fields when supplied.
+      properties:
+        topicId: { type: string, format: uuid }
+        frontText: { type: string, minLength: 1, maxLength: 5000 }
+        backText: { type: string, minLength: 1, maxLength: 5000 }
+        frontFile: { type: string, format: binary }
+        frontAltText: { type: string, maxLength: 500 }
+        frontMediaId: { type: string, format: uuid }
+        clearFront: { type: string, enum: [on] }
+        backFile: { type: string, format: binary }
+        backAltText: { type: string, maxLength: 500 }
+        backMediaId: { type: string, format: uuid }
+        clearBack: { type: string, enum: [on] }
+        difficulty: { type: string, enum: [EASY, MEDIUM, HARD] }
+        notes: { type: string, maxLength: 5000 }
         displayOrder: { type: integer, minimum: 0 }
     FlashcardUpdateInput:
       type: object
@@ -2863,6 +3072,7 @@ components:
       properties:
         id: { type: string, format: uuid }
         topicId: { type: string, format: uuid }
+        topicTitle: { type: [string, 'null'], description: Admin-only presentation field; omitted from learner flashcard responses. }
         frontText: { type: string }
         backText: { type: string }
         frontImageUrl: { type: [string, 'null'] }
@@ -2913,6 +3123,27 @@ components:
         difficulty: { $ref: '#/components/schemas/Difficulty' }
         conceptTag: { type: [string, 'null'], maxLength: 100 }
         options: { $ref: '#/components/schemas/QuestionOptionsInput' }
+    QuestionMultipartInput:
+      type: object
+      additionalProperties: false
+      required: [topicId, assessmentType, questionText, explanation, optionCount, correctOption]
+      description: Form values are strings. Options use indexed fields such as `optionText.0`, `optionFile.0`, `optionAltText.0`, `optionMediaId.0`, `clearOption.0`, and `optionId.0`.
+      properties:
+        topicId: { type: string, format: uuid }
+        assessmentType: { type: string, enum: [QUIZ, TEST] }
+        questionText: { type: string, minLength: 1, maxLength: 5000 }
+        questionFile: { type: string, format: binary }
+        questionAltText: { type: string, maxLength: 500 }
+        mediaId: { type: string, format: uuid }
+        clearQuestionImage: { type: string, enum: [on] }
+        explanation: { type: string, minLength: 1, maxLength: 5000 }
+        difficulty: { type: string, enum: [EASY, MEDIUM, HARD] }
+        conceptTag: { type: string, maxLength: 100 }
+        optionCount: { type: integer, minimum: 0, maximum: 6 }
+        correctOption: { type: integer, minimum: 0, maximum: 5 }
+      patternProperties:
+        '^option(Id|Text|File|AltText|MediaId)\\.[0-9]+$': { type: [string, 'null'] }
+        '^clearOption\\.[0-9]+$': { type: string, enum: [on] }
     QuestionUpdateInput:
       type: object
       additionalProperties: false
@@ -2966,10 +3197,11 @@ components:
     Question:
       type: object
       additionalProperties: false
-      required: [id, topicId, assessmentType, questionText, imageUrl, mediaId, explanation, difficulty, conceptTag, status, isActive, options, createdAt, updatedAt]
+      required: [id, topicId, topicTitle, assessmentType, questionText, imageUrl, mediaId, explanation, difficulty, conceptTag, status, isActive, options, createdAt, updatedAt]
       properties:
         id: { type: string, format: uuid }
         topicId: { type: string, format: uuid }
+        topicTitle: { type: [string, 'null'], description: Topic title included for admin presentation. }
         assessmentType: { $ref: '#/components/schemas/AssessmentType' }
         questionText: { type: string }
         imageUrl: { type: [string, 'null'] }
@@ -3071,6 +3303,14 @@ components:
       properties:
         success: { type: boolean, const: true }
         data: { $ref: '#/components/schemas/RegisterResult' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
+    SignupOtpVerifiedEnvelope:
+      type: object
+      additionalProperties: false
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/SignupOtpVerifiedResult' }
         meta: { $ref: '#/components/schemas/RequestMeta' }
     LoginEnvelope:
       type: object
@@ -3516,12 +3756,16 @@ components:
         Cache-Control: { $ref: '#/components/headers/HealthCacheControl' }
       content: { application/json: { schema: { $ref: '#/components/schemas/HealthEnvelope' } } }
     RegisterSuccess:
-      description: Non-enumerating registration result; a new identity and USER profile may have been created
+      description: Non-enumerating pending signup result; no user ID, session, or application profile is exposed
       headers: &privateResponseHeaders
         X-Request-ID: { $ref: '#/components/headers/XRequestId' }
         Cache-Control: { $ref: '#/components/headers/PrivateCacheControl' }
         Vary: { $ref: '#/components/headers/PrivateVary' }
       content: { application/json: { schema: { $ref: '#/components/schemas/RegisterEnvelope' } } }
+    SignupOtpVerifiedSuccess:
+      description: Signup OTP verified and application profile provisioned; no session tokens are returned
+      headers: *privateResponseHeaders
+      content: { application/json: { schema: { $ref: '#/components/schemas/SignupOtpVerifiedEnvelope' } } }
     LoginSuccess:
       description: Provider session tokens and safe profile summary
       headers: *privateResponseHeaders

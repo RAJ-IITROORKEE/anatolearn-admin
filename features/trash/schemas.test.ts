@@ -26,4 +26,8 @@ describe("trash schemas", () => {
     expect(() => trashListSchema.parse({ page: "1", unknown: "value" })).toThrow();
     expect(() => trashTypeSchema.parse("profile")).toThrow();
   });
+
+  it("accepts feedback as a recoverable Trash resource", () => {
+    expect(trashTypeSchema.parse("feedback")).toBe("feedback");
+  });
 });

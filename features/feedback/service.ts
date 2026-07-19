@@ -18,7 +18,7 @@ export async function createFeedback(userId: string, input: CreateFeedbackInput)
 }
 
 export async function listMyFeedback(userId: string, input: MineFeedbackListInput) {
-  const where: Prisma.FeedbackWhereInput = { userId, type: input.type, status: input.status };
+  const where: Prisma.FeedbackWhereInput = { userId, type: input.type, status: input.status, trashedAt: null };
   const [items, total] = await prisma.$transaction([
     prisma.feedback.findMany({ where, orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: (input.page - 1) * input.pageSize, take: input.pageSize }),
     prisma.feedback.count({ where }),
@@ -28,7 +28,7 @@ export async function listMyFeedback(userId: string, input: MineFeedbackListInpu
 
 export async function listAdminFeedback(input: AdminFeedbackListInput) {
   const where: Prisma.FeedbackWhereInput = {
-    type: input.type, status: input.status, userId: input.userId,
+    type: input.type, status: input.status, userId: input.userId, trashedAt: null,
     ...(input.createdFrom || input.createdTo ? { createdAt: { gte: input.createdFrom, lte: input.createdTo } } : {}),
     ...(input.q ? { OR: [
       { subject: { contains: input.q, mode: "insensitive" } },
@@ -47,15 +47,15 @@ export async function listAdminFeedback(input: AdminFeedbackListInput) {
 }
 
 export async function getAdminFeedback(id: string) {
-  const value = await prisma.feedback.findUnique({ where: { id }, include: adminInclude });
+  const value = await prisma.feedback.findFirst({ where: { id, trashedAt: null }, include: adminInclude });
   if (!value) throw new FeedbackError("NOT_FOUND", "Feedback was not found.", 404);
   return adminFeedbackDto(value);
 }
 
 export async function updateFeedback(id: string, input: AdminFeedbackUpdateInput, context: FeedbackMutationContext) {
   return prisma.$transaction(async (tx) => {
-    await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Feedback" WHERE "id" = ${id}::uuid FOR UPDATE`);
-    const before = await tx.feedback.findUnique({ where: { id }, include: adminInclude });
+    await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Feedback" WHERE "id" = ${id}::uuid AND "trashedAt" IS NULL FOR UPDATE`);
+    const before = await tx.feedback.findFirst({ where: { id, trashedAt: null }, include: adminInclude });
     if (!before) throw new FeedbackError("NOT_FOUND", "Feedback was not found.", 404);
     const now = new Date();
     const plan = planFeedbackUpdate(before, input, context.actorId, now);

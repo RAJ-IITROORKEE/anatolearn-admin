@@ -39,6 +39,35 @@ integrationDescribe("safe trash PostgreSQL boundaries", () => {
     })).rejects.toThrow(/hard delete is forbidden/i);
   });
 
+  it("guards feedback hard deletion without rewriting its workflow status", async () => {
+    await expect(client.$transaction(async (tx) => {
+      const suffix = crypto.randomUUID();
+      const user = await tx.profile.create({ data: {
+        id: crypto.randomUUID(),
+        fullName: "Trash feedback learner",
+        email: `trash-${suffix}@example.com`,
+        emailNormalized: `trash-${suffix}@example.com`,
+      } });
+      const feedback = await tx.feedback.create({ data: {
+        userId: user.id,
+        type: "GENERAL",
+        subject: "Rollback-only feedback fixture",
+        message: "No production data is retained.",
+        status: "REVIEWED",
+      } });
+      await tx.$executeRaw(Prisma.sql`
+        WITH clock AS (SELECT clock_timestamp() AS now)
+        UPDATE "Feedback" SET "trashedAt" = clock.now,
+          "purgeAfter" = clock.now + interval '30 days',
+          "nextPurgeAttemptAt" = clock.now + interval '30 days'
+        FROM clock WHERE "id" = ${feedback.id}::uuid
+      `);
+      const stored = await tx.feedback.findUniqueOrThrow({ where: { id: feedback.id }, select: { status: true } });
+      expect(stored.status).toBe("REVIEWED");
+      await tx.feedback.delete({ where: { id: feedback.id } });
+    })).rejects.toThrow(/hard delete is forbidden/i);
+  });
+
   it("forbids a restore that races across the exact database-clock deadline", async () => {
     await expect(client.$transaction(async (tx) => {
       const { topic } = await createContentFixture(tx);

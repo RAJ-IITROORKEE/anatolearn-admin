@@ -7,6 +7,7 @@ import type { FlashcardListInput } from "@/features/flashcards/schemas";
 export type AdminFlashcard = {
   id: string;
   topicId: string;
+  topicTitle: string | null;
   frontText: string;
   backText: string;
   frontImageUrl: string | null;

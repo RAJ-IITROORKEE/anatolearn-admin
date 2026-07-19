@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   transaction: vi.fn(),
+  adminTopicFindFirst: vi.fn(),
+  topicListFindMany: vi.fn(),
+  topicListCount: vi.fn(),
   tx: {
     $queryRaw: vi.fn(),
     organSystem: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
@@ -10,9 +13,9 @@ const mocks = vi.hoisted(() => ({
     auditLog: { create: vi.fn() },
   },
 }));
-vi.mock("@/lib/db/prisma", () => ({ prisma: { $transaction: mocks.transaction } }));
+vi.mock("@/lib/db/prisma", () => ({ prisma: { $transaction: mocks.transaction, topic: { findFirst: mocks.adminTopicFindFirst, findMany: mocks.topicListFindMany, count: mocks.topicListCount } } }));
 
-import { createContent, reorderContent, updateContent } from "./service";
+import { createContent, getAdminTopicBySlugs, listAdmin, reorderContent, updateContent } from "./service";
 
 const context = { actorId: crypto.randomUUID(), requestId: crypto.randomUUID() };
 const parentId = crypto.randomUUID();
@@ -72,6 +75,66 @@ describe("content mutation locking", () => {
     const mediaQuery = mocks.tx.$queryRaw.mock.calls[1][0];
     expect(mediaQuery.strings.join(" ")).toContain("::uuid");
     expect(mediaQuery.values).toContain(mediaId);
+  });
+});
+
+describe("canonical admin topic lookup", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("scopes the topic slug to the requested organ-system slug", async () => {
+    const row = {
+      id: first,
+      organSystemId: parentId,
+      title: "Heart anatomy",
+      slug: "heart-anatomy",
+      summary: null,
+      coverImageUrl: null,
+      coverMediaId: null,
+      displayOrder: 0,
+      status: "DRAFT" as const,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    mocks.adminTopicFindFirst.mockResolvedValue(row);
+
+    await expect(getAdminTopicBySlugs("circulatory", "heart-anatomy")).resolves.toMatchObject({
+      id: first,
+      slug: "heart-anatomy",
+    });
+
+    expect(mocks.adminTopicFindFirst).toHaveBeenCalledWith({
+      where: {
+        slug: "heart-anatomy",
+        trashedAt: null,
+        organSystem: { slug: "circulatory", trashedAt: null },
+      },
+    });
+  });
+
+  it("returns the parent name and slug with admin topic-list rows", async () => {
+    const row = {
+      id: first,
+      organSystemId: parentId,
+      title: "Heart anatomy",
+      slug: "heart-anatomy",
+      summary: null,
+      coverImageUrl: null,
+      coverMediaId: null,
+      displayOrder: 0,
+      status: "DRAFT" as const,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      organSystem: { name: "Circulatory system", slug: "circulatory" },
+    };
+    mocks.transaction.mockResolvedValue([[row], 1]);
+
+    await expect(listAdmin("topic", { page: 1, pageSize: 20, sortBy: "displayOrder", sortOrder: "asc" })).resolves.toMatchObject({
+      items: [{ id: first, organSystemName: "Circulatory system", organSystemSlug: "circulatory" }],
+    });
+
+    expect(mocks.topicListFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      include: { organSystem: { select: { name: true, slug: true } } },
+    }));
   });
 });
 

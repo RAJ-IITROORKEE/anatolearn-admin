@@ -6,13 +6,14 @@ import { prisma } from "@/lib/db/prisma";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { TrashType } from "./domain";
 
-const PURGE_ORDER: TrashType[] = ["content-lesson", "flashcard", "question", "topic", "organ-system", "media-asset"];
+const PURGE_ORDER: TrashType[] = ["feedback", "content-lesson", "flashcard", "question", "topic", "organ-system", "media-asset"];
 const tableByType = {
   "organ-system": "OrganSystem",
   topic: "Topic",
   "content-lesson": "ContentLesson",
   flashcard: "Flashcard",
   question: "Question",
+  feedback: "Feedback",
   "media-asset": "MediaAsset",
 } as const;
 
@@ -30,6 +31,7 @@ async function blockers(tx: Prisma.TransactionClient, type: TrashType, id: strin
     "content-lesson": Prisma.sql`SELECT count(*)::int AS count FROM "ContentLessonProgress" WHERE "contentLessonId" = ${id}::uuid`,
     flashcard: Prisma.sql`SELECT ((SELECT count(*) FROM "FlashcardProgress" WHERE "flashcardId" = ${id}::uuid) + (SELECT count(*) FROM "FlashcardViewEvent" WHERE "flashcardId" = ${id}::uuid))::int AS count`,
     question: Prisma.sql`SELECT count(*)::int AS count FROM "AttemptQuestion" WHERE "sourceQuestionId" = ${id}::uuid`,
+    feedback: Prisma.sql`SELECT 0::int AS count`,
     "media-asset": Prisma.sql`SELECT (
       (SELECT count(*) FROM "Profile" WHERE "avatarMediaId" = ${id}::uuid) +
       (SELECT count(*) FROM "OrganSystem" WHERE "coverMediaId" = ${id}::uuid OR "iconMediaId" = ${id}::uuid) +
@@ -38,7 +40,7 @@ async function blockers(tx: Prisma.TransactionClient, type: TrashType, id: strin
       (SELECT count(*) FROM "Question" WHERE "mediaId" = ${id}::uuid) +
       (SELECT count(*) FROM "QuestionOption" WHERE "mediaId" = ${id}::uuid) +
       (SELECT count(*) FROM "Feedback" WHERE "attachmentMediaId" = ${id}::uuid) +
-      (SELECT count(*) FROM "ContentLesson" lesson WHERE EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(lesson."contentBlocks") = 'array' THEN lesson."contentBlocks" ELSE '[]'::jsonb END) block WHERE block->>'mediaId' = ${id})) +
+      (SELECT count(*) FROM "ContentLesson" lesson WHERE EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(lesson."contentBlocks") = 'array' THEN lesson."contentBlocks" WHEN jsonb_typeof(lesson."contentBlocks") = 'object' AND lesson."contentBlocks"->>'version' = '2' AND jsonb_typeof(lesson."contentBlocks"->'fallbackBlocks') = 'array' THEN lesson."contentBlocks"->'fallbackBlocks' ELSE '[]'::jsonb END) block WHERE block->>'mediaId' = ${id})) +
       (SELECT count(*) FROM "AttemptQuestion" question WHERE question."mediaIdSnapshot" = ${id}::uuid OR EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(question."optionsSnapshot") = 'array' THEN question."optionsSnapshot" ELSE '[]'::jsonb END) option WHERE option->>'mediaId' = ${id}))
     )::int AS count`,
   };
@@ -49,6 +51,7 @@ async function blockers(tx: Prisma.TransactionClient, type: TrashType, id: strin
     "content-lesson": "Referenced by learner progress",
     flashcard: "Referenced by learner progress or events",
     question: "Referenced by assessment attempts",
+    feedback: "No retained resource depends on feedback",
     "media-asset": "Referenced by content, profiles, feedback, or attempt snapshots",
   };
   return { count: row?.count ?? 0, reason: reasons[type] };

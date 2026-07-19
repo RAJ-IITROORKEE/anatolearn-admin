@@ -4,6 +4,7 @@ import { hasRole, resolveRequestIdentity } from "@/lib/auth/request";
 import { hasSafeOrigin } from "@/lib/security/origin";
 import { contentLessonCreateSchema, contentLessonUpdateSchema, listQuerySchema, organSystemCreateSchema, organSystemUpdateSchema, reorderSchema, statusUpdateSchema, topicCreateSchema, topicUpdateSchema } from "./schemas";
 import { createContent, getAdmin, listAdmin, reorderContent, setStatus, updateContent } from "./service";
+import { resolveLessonContentFromForm } from "./lesson-multipart";
 import { moveToTrash } from "@/features/trash/service";
 import { cleanupDirectUploads, directUploadContext, formBoolean, formNullable, formNumber, formValue, resolveMediaField } from "@/features/media/direct-upload";
 
@@ -39,22 +40,10 @@ async function multipartInput(request: Request, resource: Resource, actorId: str
       coverMediaId: await resolveMediaField(data, { fileKey: "coverFile", altText: formValue(data, "coverAltText"), existingId: formNullable(data, "coverMediaId"), clear: formBoolean(data, "clearCover") }, uploads), displayOrder: formNumber(data, "displayOrder"),
     } : {
       topicId: formValue(data, "topicId"), title: formValue(data, "title"), slug: formValue(data, "slug"), summary: formNullable(data, "summary"), estimatedReadingMinutes: formNumber(data, "estimatedReadingMinutes"), displayOrder: formNumber(data, "displayOrder"),
-      contentBlocks: await lessonBlocks(data, uploads),
+      contentBlocks: await resolveLessonContentFromForm(data, uploads),
     };
     return { input, uploads };
   } catch (error) { await cleanupDirectUploads(uploads); throw error; }
-}
-
-async function lessonBlocks(data: FormData, uploads: ReturnType<typeof directUploadContext>) {
-  let blocks: unknown;
-  try { blocks = JSON.parse(formValue(data, "contentBlocks")); } catch { throw new Error("Lesson blocks must be valid JSON."); }
-  if (!Array.isArray(blocks)) return blocks;
-  return Promise.all(blocks.map(async (block) => {
-    if (!block || typeof block !== "object" || (block as { type?: unknown }).type !== "image") return block;
-    const image = block as { id?: unknown; mediaId?: unknown; altText?: unknown };
-    const id = String(image.id ?? "");
-    return { ...image, mediaId: await resolveMediaField(data, { fileKey: `lessonFile.${id}`, altText: formValue(data, `lessonAltText.${id}`) || String(image.altText ?? ""), existingId: typeof image.mediaId === "string" ? image.mediaId : null, clear: formBoolean(data, `lessonClear.${id}`) }, uploads) };
-  }));
 }
 
 export function adminCollectionHandlers(resource: Resource) {

@@ -13,7 +13,7 @@ const { tx, prisma } = vi.hoisted(() => {
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db/prisma", () => ({ prisma }));
 
-import { getLearnerDeviceCounts, getLearnerPickerOptions, listLearners, searchActiveLearnerOptions, setLearnerActivity } from "./service";
+import { getLearner, getLearnerDeviceCounts, getLearnerPickerOptions, listLearners, searchActiveLearnerOptions, setLearnerActivity } from "./service";
 
 const profile = { id: crypto.randomUUID(), fullName: "Learner", email: "a@b.com", role: "USER", avatarUrl: null, isActive: true, lastLoginAt: null, createdAt: new Date(), updatedAt: new Date() };
 
@@ -69,6 +69,17 @@ describe("learner list query", () => {
     }));
     expect(result.summary).toEqual({ total: 5, active: 3, inactive: 2, joined30Days: 1 });
   });
+});
+
+it("excludes trashed feedback from learner detail counts", async () => {
+  prisma.profile.findFirst.mockResolvedValue(profile);
+  prisma.assessmentAttempt.count.mockResolvedValue(0);
+  prisma.feedback.count.mockResolvedValue(2);
+  prisma.assessmentAttempt.aggregate.mockResolvedValue({ _max: { startedAt: null } });
+
+  await getLearner(profile.id);
+
+  expect(prisma.feedback.count).toHaveBeenCalledWith({ where: { userId: profile.id, trashedAt: null } });
 });
 
 describe("notification learner picker queries", () => {

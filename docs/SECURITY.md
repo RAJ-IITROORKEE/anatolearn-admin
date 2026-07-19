@@ -196,19 +196,40 @@ routes are invoked by the same approximately ten-minute GitHub Actions schedule.
 
 ## Registration consistency and enumeration resistance
 
-- Registration applies both client and account limits. Supabase's empty-identities
-  existing-email response is treated as an obfuscated successful request rather than
-  exposing account existence.
-- Profile provisioning follows Auth signup. If provisioning fails for a newly created
-  identity, the server attempts Auth-user deletion as compensation and returns a safe
-  retry response. Compensation failure emits only a redacted structured event; it does
-  not expose identity or provider details.
+- Registration and resend share client/account limits and return the same `202` shape for
+  valid account-dependent outcomes. Responses expose no user ID, account existence,
+  provider message, or session. Account-dependent provider 4xx responses are deliberately
+  absorbed into that shape; transport exceptions, missing/zero status, `429`, and `5xx`
+  are operational failures and return `503 AUTH_UNAVAILABLE`.
+- The application profile is provisioned only after provider-verified signup OTP success.
+  Verification requires exactly six digits, is separately rate limited, and discards the
+  provider session. After `verifyOtp`, the server-only admin client records
+  `app_metadata.signup_otp_verified: true` before provisioning. Invalid/expired provider
+  4xx outcomes return `400 INVALID_OR_EXPIRED_OTP`; transport/`429`/`5xx` outcomes return
+  `503 AUTH_UNAVAILABLE` so transient failures are not presented as bad tokens.
+- Password login can idempotently repair a missing profile only when the server-owned
+  marker is exactly `true`. Confirmed but unmarked identities receive
+  `ACCOUNT_SETUP_RETRY`; an existing profile follows the normal login path. Profile
+  creation validates trimmed Auth `full_name` metadata at 2-100 characters and falls back
+  to `Learner`, preventing unbounded or malformed provider metadata from entering Profile.
+- Email confirmation and the OTP-only `{{ .Token }}` template are deployment security
+  invariants. Registration fails closed if Supabase unexpectedly returns an immediate
+  session, attempts deletion compensation for a newly created identity, and returns
+  `AUTH_CONFIGURATION_ERROR`, preventing a confirmations-disabled deployment from
+  bypassing the OTP gate. Compensation failure is logged without identity/provider detail.
+- Native Supabase configuration is public, so a modified client can bypass the Next.js
+  registration limiter and call hosted signup directly. This leaves residual Auth-identity
+  creation and email-abuse exposure governed by Supabase/SMTP controls. It does not grant
+  application access: a client cannot write `app_metadata`, direct signup does not create
+  a Prisma `Profile`, and protected APIs require that Profile. Hosted confirmation,
+  six-digit OTP-template, expiry, rate-limit, and production-SMTP delivery checks remain
+  mandatory acceptance gates.
 
 ## Structured content controls
 
 - Lessons store only a discriminated JSON block union; unrestricted HTML is rejected.
 - Every block has bounded text/list sizes and rejects undeclared properties.
-- Image blocks require a managed media UUID and non-empty alt text.
+- Image blocks require a managed media UUID; alt text is accepted but optional.
 - Create/update verifies referenced media exists and is not archived.
 - Stored lesson JSON is revalidated before it enters an API/UI DTO. Invalid stored
   content fails closed with a safe server error.
@@ -234,7 +255,7 @@ routes are invoked by the same approximately ten-minute GitHub Actions schedule.
   ownership; another user's, unreferenced, and absent assets fail as `404`.
 - Protected admin attempt pages batch-sign snapshot media, including archived history,
   for 900 seconds. Both paths omit Storage bucket and object path.
-- Required alt text is enforced by request validation and a database check.
+- Optional alt text is trimmed and length-limited by request validation.
 - Physical deletion through the legacy media DELETE endpoint remains disabled. The media
   archive action moves the asset to Trash and returns `409 REFERENCED` while eligible
   published content references the asset.
@@ -249,10 +270,10 @@ Current limitations:
 
 ## Lifecycle and deletion controls
 
-- Six resource types use recoverable Trash metadata: systems, topics, lessons, flashcards,
-  questions, and media. DELETE/archive aliases set `trashedAt`, `purgeAfter` (30 days by
+- Seven resource types use recoverable Trash metadata: systems, topics, lessons, flashcards,
+  questions, feedback, and media. DELETE/archive aliases set `trashedAt`, `purgeAfter` (30 days by
   database clock), and hide the resource. Restore clears metadata and returns content to
-  DRAFT; it never republishes.
+  DRAFT; it never republishes. Feedback restore preserves its workflow status.
 - Topic/lesson publication checks parent publication; system active status also gates
   child visibility.
 - Parent archive/deactivation does not mutate descendants but removes them from
@@ -263,6 +284,9 @@ Current limitations:
   leaf-first/dependency-aware. Attempts, progress, audits, and notification evidence are
   preserved. Media storage jobs retry after failures and are deleted only after provider
   confirmation; legacy `ARCHIVED` rows without Trash metadata are not auto-purged.
+- Feedback restore share-locks its optional attachment and fails while that media remains
+  trashed. The dependency check projects only attachment Trash state, not feedback or media
+  content metadata.
 
 ## Audit controls
 
@@ -286,6 +310,8 @@ Current limitations:
   Feedback and campaign services use feature-specific allowlisted audit snapshots; no
   learner messages/notes, campaign title/message, selected learner IDs, device tokens,
   provider receipt data, or credentials enter the audit row.
+- Feedback Trash, restore, and purge audits contain only lifecycle state and resource IDs;
+  subject, message, internal notes, and submitter/reviewer PII are excluded.
 - Worker delivery/read state is operational history rather than admin audit activity.
   The database guards recipient and delivery history directly.
 

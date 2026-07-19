@@ -1,5 +1,5 @@
 import type { ContentLesson, OrganSystem, Topic } from "@prisma/client";
-import { contentBlocksSchema } from "./schemas";
+import { readLessonContent } from "./schemas";
 import { ContentError } from "./domain";
 
 type OrganSystemDtoSource = Omit<OrganSystem, "trashedAt" | "purgeAfter" | "nextPurgeAttemptAt">;
@@ -15,7 +15,15 @@ export function topicDto(value: TopicDtoSource, admin = false) {
 }
 
 export function lessonDto(value: ContentLessonDtoSource, admin = false) {
-  const blocks = contentBlocksSchema.safeParse(value.contentBlocks);
-  if (!blocks.success) throw new ContentError("INVALID_STORED_CONTENT", "Lesson content is invalid.", 500);
-  return { id: value.id, topicId: value.topicId, title: value.title, slug: value.slug, summary: value.summary, contentBlocks: blocks.data, estimatedReadingMinutes: value.estimatedReadingMinutes, displayOrder: value.displayOrder, ...(admin ? { status: value.status, createdAt: value.createdAt, updatedAt: value.updatedAt } : {}) };
+  let content;
+  try {
+    content = readLessonContent(value.contentBlocks);
+  } catch {
+    throw new ContentError("INVALID_STORED_CONTENT", "Lesson content is invalid.", 500);
+  }
+  return {
+    id: value.id, topicId: value.topicId, title: value.title, slug: value.slug, summary: value.summary,
+    contentBlocks: content.contentBlocks, estimatedReadingMinutes: value.estimatedReadingMinutes, displayOrder: value.displayOrder,
+    ...(admin ? { status: value.status, createdAt: value.createdAt, updatedAt: value.updatedAt, ...(content.richContent ? { richContent: content.richContent } : {}) } : {}),
+  };
 }

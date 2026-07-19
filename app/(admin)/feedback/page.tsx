@@ -8,6 +8,7 @@ import { parseFeedbackFilters, type Phase6SearchParams } from "@/components/phas
 import { EmptyState } from "@/components/shared/empty-state";
 import { Pagination } from "@/components/shared/pagination";
 import { listAdminFeedback } from "@/features/feedback/service";
+import { bulkTrashFeedbackAction, trashFeedbackAction } from "../phase6-actions";
 
 export const metadata: Metadata = { title: "Feedback" };
 
@@ -25,6 +26,6 @@ export default async function FeedbackPage({ searchParams }: { searchParams: Pro
     <PageHeader description="Triage learner reports, preserve internal context, and move each item through review." eyebrow="Community" title="Feedback" />
     <FeedbackTabs counts={counts} values={filters.values} />
     <FeedbackFilterForm hasFilters={filters.hasFilters} values={filters.values} />
-    {result.items.length ? <><FeedbackList items={result.items} /><div className="mt-5"><Pagination page={result.pagination.page} pageCount={Math.max(1, result.pagination.totalPages)} pathname="/feedback" /></div></> : <EmptyState action={filters.hasFilters ? { href: filters.values.tab === "all" ? "/feedback" : `/feedback?tab=${filters.values.tab}`, label: "Clear filters" } : undefined} description={filters.hasFilters ? "No feedback matches the current filters." : filters.values.tab === "all" ? "Learner feedback will appear here after submission." : `There is no ${filters.values.tab} feedback.`} title={filters.hasFilters ? "No matching feedback" : "No feedback here"} />}
+    {result.items.length ? <><FeedbackList bulkTrashAction={bulkTrashFeedbackAction} items={result.items} trashAction={trashFeedbackAction} /><div className="mt-5"><Pagination page={result.pagination.page} pageCount={Math.max(1, result.pagination.totalPages)} pathname="/feedback" /></div></> : <EmptyState action={filters.hasFilters ? { href: filters.values.tab === "all" ? "/feedback" : `/feedback?tab=${filters.values.tab}`, label: "Clear filters" } : undefined} description={filters.hasFilters ? "No feedback matches the current filters." : filters.values.tab === "all" ? "Learner feedback will appear here after submission." : `There is no ${filters.values.tab} feedback.`} title={filters.hasFilters ? "No matching feedback" : "No feedback here"} />}
   </>;
 }

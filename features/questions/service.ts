@@ -18,7 +18,7 @@ import type {
 import { moveToTrash } from "@/features/trash/service";
 
 type MutationContext = { actorId: string; requestId: string; userAgent?: string | null };
-const includeOptions = { options: { orderBy: { displayOrder: "asc" as const } } };
+const includeOptions = { topic: { select: { title: true } }, options: { orderBy: { displayOrder: "asc" as const } } };
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 
 async function audit(

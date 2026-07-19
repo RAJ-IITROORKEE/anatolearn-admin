@@ -28,10 +28,11 @@ describe("published media eligibility", () => {
     },
   );
 
-  it("accepts an image block in an eligible published lesson", () => {
-    expect(hasPublishedMediaReference(emptyReferences, [
-      { contentBlocks: [{ type: "paragraph", text: "Other" }, { type: "image", mediaId: "media-id", altText: "Anatomy" }] },
-    ], "media-id")).toBe(true);
+  it.each([
+    ["legacy blocks", [{ type: "paragraph", text: "Other" }, { type: "image", mediaId: "media-id", altText: "Anatomy" }]],
+    ["v2 fallback blocks", { version: 2, richContent: { type: "doc", content: [] }, fallbackBlocks: [{ type: "image", mediaId: "media-id", altText: "Anatomy" }] }],
+  ])("accepts an image in eligible published lesson %s", (_label, contentBlocks) => {
+    expect(hasPublishedMediaReference(emptyReferences, [{ contentBlocks }], "media-id")).toBe(true);
   });
 
   it("rejects assets without an eligible published reference", () => {

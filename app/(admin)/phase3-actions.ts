@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { requireAdminPage } from "@/lib/auth/session";
 import { createContent, setStatus, updateContent } from "@/features/content/service";
-import { contentBlocksSchema, contentLessonCreateSchema, contentLessonUpdateSchema, organSystemCreateSchema, organSystemUpdateSchema, statusUpdateSchema, topicCreateSchema, topicUpdateSchema } from "@/features/content/schemas";
+import { contentLessonCreateSchema, contentLessonUpdateSchema, organSystemCreateSchema, organSystemUpdateSchema, statusUpdateSchema, topicCreateSchema, topicUpdateSchema } from "@/features/content/schemas";
+import { resolveLessonContentFromForm } from "@/features/content/lesson-multipart";
 import { archiveMedia, updateMedia, uploadMedia } from "@/features/media/service";
 import { mediaUpdateSchema, mediaUploadSchema } from "@/features/media/schemas";
 import { cleanupDirectUploads, directUploadContext, formBoolean, formNullable, formValue, resolveMediaField } from "@/features/media/direct-upload";
@@ -17,19 +18,8 @@ const context = async () => { const { profile } = await requireAdminPage(); retu
 async function contentInput(resource: Resource, data: FormData, ctx: ReturnType<typeof directUploadContext>) {
   if (resource === "organSystem") return { name: formValue(data, "name"), slug: formValue(data, "slug") || undefined, shortDescription: formValue(data, "shortDescription"), longDescription: formNullable(data, "longDescription"), coverMediaId: await resolveMediaField(data, { fileKey: "coverFile", altText: formValue(data, "coverAltText"), existingId: formNullable(data, "coverMediaId"), clear: formBoolean(data, "clearCover") }, ctx), iconMediaId: await resolveMediaField(data, { fileKey: "iconFile", altText: formValue(data, "iconAltText"), existingId: formNullable(data, "iconMediaId"), clear: formBoolean(data, "clearIcon") }, ctx), displayOrder: Number(formValue(data, "displayOrder")), isActive: formBoolean(data, "isActive") };
   if (resource === "topic") return { organSystemId: formValue(data, "organSystemId"), title: formValue(data, "title"), slug: formValue(data, "slug"), summary: formNullable(data, "summary"), coverMediaId: await resolveMediaField(data, { fileKey: "coverFile", altText: formValue(data, "coverAltText"), existingId: formNullable(data, "coverMediaId"), clear: formBoolean(data, "clearCover") }, ctx), displayOrder: Number(formValue(data, "displayOrder")) };
-  let blocks: unknown;
-  try { blocks = JSON.parse(formValue(data, "contentBlocks")); } catch { throw new Error("Lesson blocks must be valid JSON."); }
-  if (Array.isArray(blocks)) {
-    blocks = await Promise.all(blocks.map(async (block) => {
-      if (!block || typeof block !== "object" || (block as { type?: unknown }).type !== "image") return block;
-      const image = block as { id?: unknown; mediaId?: unknown; altText?: unknown };
-      const blockId = String(image.id ?? "");
-      return { ...image, mediaId: await resolveMediaField(data, { fileKey: `lessonFile.${blockId}`, altText: formValue(data, `lessonAltText.${blockId}`) || String(image.altText ?? ""), existingId: typeof image.mediaId === "string" ? image.mediaId : null, clear: formBoolean(data, `lessonClear.${blockId}`) }, ctx) };
-    }));
-  }
-  const checkedBlocks = contentBlocksSchema.safeParse(blocks);
-  if (!checkedBlocks.success) throw new Error(checkedBlocks.error.issues[0]?.message ?? "Lesson blocks are invalid.");
-  return { topicId: formValue(data, "topicId"), title: formValue(data, "title"), slug: formValue(data, "slug"), summary: formNullable(data, "summary"), contentBlocks: checkedBlocks.data, estimatedReadingMinutes: Number(formValue(data, "estimatedReadingMinutes")), displayOrder: Number(formValue(data, "displayOrder")) };
+  const contentBlocks = await resolveLessonContentFromForm(data, ctx);
+  return { topicId: formValue(data, "topicId"), title: formValue(data, "title"), slug: formValue(data, "slug"), summary: formNullable(data, "summary"), contentBlocks, estimatedReadingMinutes: Number(formValue(data, "estimatedReadingMinutes")), displayOrder: Number(formValue(data, "displayOrder")) };
 }
 
 export async function createResource(resource: Resource, _state: ActionState, data: FormData): Promise<ActionState> {
@@ -41,7 +31,13 @@ export async function createResource(resource: Resource, _state: ActionState, da
     if (!parsed.success) { await cleanupDirectUploads(uploadContext); return { error: parsed.error.issues[0]?.message ?? "Check the form fields." }; }
     const created = await createContent(resource, parsed.data, ctx);
     revalidatePath(resource === "organSystem" ? "/organ-systems" : resource === "topic" ? "/topics" : "/content");
-    return { success: `${resource === "organSystem" ? "Organ system" : resource === "topic" ? "Topic" : "Lesson"} created.`, redirectTo: resource === "organSystem" ? `/organ-systems/${created.slug}` : resource === "topic" ? `/topics/${created.id}` : `/content/${created.id}` };
+    const topic = created as { organSystemSlug: string; slug: string };
+    const redirectTo = resource === "organSystem"
+      ? `/organ-systems/${created.slug}`
+      : resource === "topic"
+        ? `/organ-systems/${topic.organSystemSlug}/topics/${topic.slug}`
+        : `/content/${created.id}`;
+    return { success: `${resource === "organSystem" ? "Organ system" : resource === "topic" ? "Topic" : "Lesson"} created.`, redirectTo };
   } catch (error) { if (uploadContext) await cleanupDirectUploads(uploadContext); return phase3ActionError(error, { requestId: uploadContext?.requestId, route: `/admin/${resource}/create` }); }
 }
 
@@ -53,8 +49,11 @@ export async function updateResource(resource: Resource, id: string, _state: Act
     const parsed = schema.safeParse(raw);
     if (!parsed.success) { await cleanupDirectUploads(uploadContext); return { error: parsed.error.issues[0]?.message ?? "Check the form fields." }; }
     const updated = await updateContent(resource, id, parsed.data, ctx);
-    revalidatePath(resource === "organSystem" ? `/organ-systems/${updated.slug}` : resource === "topic" ? `/topics/${id}` : `/content/${id}`);
-    return { success: "Changes saved.", ...(resource === "organSystem" ? { redirectTo: `/organ-systems/${updated.slug}` } : {}) };
+    const topic = updated as { organSystemSlug: string; slug: string };
+    const canonicalPath = resource === "topic" ? `/organ-systems/${topic.organSystemSlug}/topics/${topic.slug}` : null;
+    revalidatePath(resource === "organSystem" ? `/organ-systems/${updated.slug}` : canonicalPath ?? `/content/${id}`);
+    if (resource === "topic") revalidatePath("/topics");
+    return { success: "Changes saved.", ...(resource === "organSystem" ? { redirectTo: `/organ-systems/${updated.slug}` } : canonicalPath ? { redirectTo: canonicalPath } : {}) };
   } catch (error) { if (uploadContext) await cleanupDirectUploads(uploadContext); return phase3ActionError(error, { requestId: uploadContext?.requestId, route: `/admin/${resource}/update` }); }
 }
 
@@ -85,10 +84,32 @@ export async function trashMediaAction(id: string, _state: ActionState): Promise
 
 export async function trashResourceAction(type: "organ-system" | "topic" | "content-lesson" | "media-asset", id: string, _state: ActionState): Promise<ActionState> {
   void _state;
-  try { const ctx = await context(); await moveToTrash(type, id, ctx); revalidatePath("/"); return { success: "Moved to Trash." }; } catch (error) { return phase3ActionError(error); }
+  try {
+    const ctx = await context();
+    await moveToTrash(type, id, ctx);
+    revalidatePath("/settings/trash");
+    if (type === "organ-system" || type === "topic") {
+      const redirectTo = type === "organ-system" ? "/organ-systems" : "/topics";
+      revalidatePath(redirectTo);
+      return { success: "Moved to Trash.", redirectTo };
+    }
+    revalidatePath("/");
+    return { success: "Moved to Trash." };
+  } catch (error) { return phase3ActionError(error); }
 }
 
-export async function restoreTrashAction(type: "organ-system" | "topic" | "content-lesson" | "flashcard" | "question" | "media-asset", id: string, _state: ActionState): Promise<ActionState> {
+export async function trashListResourceAction(type: "organ-system" | "topic", id: string, _state: ActionState): Promise<ActionState> {
+  void _state;
+  try {
+    const ctx = await context();
+    await moveToTrash(type, id, ctx);
+    revalidatePath(type === "organ-system" ? "/organ-systems" : "/topics");
+    revalidatePath("/settings/trash");
+    return { success: "Moved to Trash." };
+  } catch (error) { return phase3ActionError(error); }
+}
+
+export async function restoreTrashAction(type: "organ-system" | "topic" | "content-lesson" | "flashcard" | "question" | "feedback" | "media-asset", id: string, _state: ActionState): Promise<ActionState> {
   void _state;
   try { const ctx = await context(); await restoreFromTrash(type, id, ctx); revalidatePath("/"); revalidatePath("/settings/trash"); return { success: "Restored successfully." }; } catch (error) { return phase3ActionError(error); }
 }

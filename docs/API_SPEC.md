@@ -47,8 +47,10 @@ Missing/invalid/inactive identity returns `401`. An authenticated non-admin rece
 | --- | --- | --- |
 | `GET /api/health` | Public | Liveness only; no dependency or secret details |
 | `GET /api/v1/meta` | Public | API version and safe capability flags |
-| `POST /api/v1/auth/register` | Public, rate limited | Create Supabase identity and reconcile a USER profile; `201` on success |
-| `POST /api/v1/auth/login` | Public, rate limited | Email/password API login and safe session DTO; admin UI uses SSR server actions |
+| `POST /api/v1/auth/register` | Public, rate limited | Start non-enumerating password signup and send a six-digit email OTP; `202`, no profile/session/user ID |
+| `POST /api/v1/auth/verify-signup-otp` | Public, rate limited | Verify signup OTP and idempotently provision the USER profile; no session tokens returned |
+| `POST /api/v1/auth/resend-signup-otp` | Public, rate limited | Non-enumerating resend for a pending signup OTP; `202` |
+| `POST /api/v1/auth/login` | Public, rate limited | Email/password API login and safe session DTO; returns `EMAIL_CONFIRMATION_REQUIRED` when Supabase verifies the credentials but the email is unconfirmed; admin UI uses SSR server actions |
 | `POST /api/v1/auth/forgot-password` | Public, rate limited | Non-enumerating reset request with configured redirect |
 | `POST /api/v1/auth/reset-password` | Recovery token | Requires provider-verified recovery AMR |
 | `POST /api/v1/auth/logout` | Public/idempotent | Returns success without a session; otherwise cookie sign-out or bearer-session revocation |
@@ -65,27 +67,52 @@ deliveries for a previous owner are cancelled first. Token text is never returne
 Registration and deactivation share a 20-request-per-minute profile limit. Exhaustion
 returns `429 RATE_LIMITED` with `Retry-After: 60`.
 
-Public registration, login, and forgot-password apply separate client and account limits
-over a 60-second window. Client identity is accepted from `x-vercel-forwarded-for` only
-in Vercel runtime; account keys use normalized email and both key types are SHA-256-
-derived. Register and forgot-password allow 5 client/15 account attempts; login allows
-10 client/30 account attempts. Limiter failures fail closed.
+Public authentication applies SHA-256-derived client and normalized-account limits.
+Register and resend share a 15-minute signup-email namespace capped at 10/client and
+3/account; OTP verification allows 10/client and 5/account per 10 minutes. Login retains
+its one-minute 10/client and 30/account limits. Limiter failures fail closed.
 
-Registration does not reveal whether an email is already registered. Supabase's empty-
-identities response follows the same `201` shape. If a newly created Auth identity cannot
-be reconciled to a profile, the server attempts to delete it and returns `503
-REGISTRATION_RETRY`; a failed compensation is logged only as a redacted structured event.
+Registration never reveals whether an email exists and never provisions a Prisma profile.
+The same `202` response is returned for valid account-dependent registration/resend
+outcomes, including provider 4xx responses that could otherwise disclose account state.
+Provider transport exceptions, missing/non-numeric or zero status, `429`, and `5xx`
+instead return `503 AUTH_UNAVAILABLE`; they are operational failures, not obfuscated
+account outcomes.
+
+Successful verification calls Supabase `verifyOtp`, requires a confirmed email, and then
+sets server-controlled `app_metadata.signup_otp_verified: true` before provisioning the
+profile idempotently. Any provider session is deliberately omitted from the response; the
+learner signs in with the password afterward. Provider transport/`429`/`5xx` verification
+failures return `503 AUTH_UNAVAILABLE`, while an account-dependent invalid or expired OTP
+returns `400 INVALID_OR_EXPIRED_OTP`. Marker or profile persistence failure after provider
+verification returns `503 ACCOUNT_SETUP_RETRY`.
+
+Login can repair a profile only when it is missing and the Auth identity carries the
+server-owned marker exactly equal to `true`; an unmarked identity receives `503
+ACCOUNT_SETUP_RETRY`. Provisioning accepts a trimmed 2-100 character `full_name` from Auth
+metadata and otherwise stores `Learner`. Existing profiles are not recreated by this path.
+If signup unexpectedly returns an immediate session, registration attempts to delete a
+newly created Auth identity and returns `503 AUTH_CONFIGURATION_ERROR` rather than
+bypassing OTP. Hosted Supabase must require email confirmation and use an OTP-only template
+containing `{{ .Token }}` rather than a confirmation URL.
 The current meta payload reports `capabilities.notifications: true` because the Phase 6
 API surface exists; it does not claim that the optional Expo provider is enabled or ready.
 
 Auth/profile JSON bodies are strict: register accepts `email`, 8-128 character `password`,
-and 2-100 character `fullName`; login accepts only `email` and `password`; forgot-password
+and 2-100 character `fullName`; signup verification accepts `email` and exactly six numeric
+OTP digits; resend accepts only `email`; login accepts only `email` and `password`; forgot-password
 accepts only `email`; reset-password accepts a provider recovery `accessToken` and a
 12-128 character `password`; profile update accepts a non-empty subset of `fullName` and
 nullable absolute `avatarUrl`; change-password requires `currentPassword` and a distinct
 12-128 character `newPassword`. Unknown fields return `400`.
 Auth/session/profile response DTOs do not expose the database role, normalized email, or
 provider-internal identity fields. Authorization continues to resolve role server-side.
+
+The Supabase project URL and publishable key are public native-client configuration, so a
+modified client can still call Supabase signup directly and may create Auth identities or
+trigger provider email traffic. The application marker cannot be client-authored through
+user metadata, and direct signup does not create a Prisma `Profile`; therefore this
+residual identity/email-abuse surface does not grant application API authorization.
 
 ## Published learning-content routes
 
@@ -107,15 +134,17 @@ The shared query parser also recognizes `status`, parent IDs, and additional `so
 values, but published handlers ignore options that are not listed as effective above.
 Unknown query keys fail strict validation with `400`.
 
-Public content DTOs omit editorial status and timestamps. System/topic DTOs expose
-legacy image URL fields and lesson image blocks contain managed `mediaId` values.
-Clients resolve those IDs separately through `GET /api/v1/media/{id}`. Eligibility
+Public content DTOs omit editorial status and timestamps. Organ-system DTOs expose
+nullable managed `coverMediaId` and `iconMediaId` fields alongside legacy image URLs;
+lesson image blocks also contain managed `mediaId` values. Clients prefer managed IDs
+and resolve them separately through `GET /api/v1/media/{id}`. Eligibility
 means an eligible published system/topic/lesson reference, either side of an eligible
 published flashcard, an active published question/option beneath eligible parents, or a
 question/option snapshot in an attempt owned by the requesting user. Snapshot ownership
 can authorize archived historical media; another user's snapshot does not.
 The media response contains only `id`, `mimeType`, `width`,
 `height`, `altText`, `signedUrl`, and `signedUrlExpiresIn: 300`.
+`altText` may be an empty string when an optional description was not supplied.
 
 ## Admin content APIs
 
@@ -214,26 +243,41 @@ schemas:
 - `{ "type":"bulletList"|"numberedList", "items":["..."] }` with 1-50 items
 - `{ "type":"divider" }`
 
+JSON requests may alternatively send stored version 2 content containing strict
+`richContent` and its exact deterministic `fallbackBlocks`. The rich document accepts
+only the allowlisted document nodes, marks, links, colors, sizes, and alignments in the
+OpenAPI schemas; arbitrary nodes, attributes, and raw HTML are rejected. The server
+verifies that the supplied fallback exactly matches the rich document.
+
 Update accepts any non-empty subset of the corresponding create schema. Status is not
 accepted in a normal update. The resulting state is revalidated: updates cannot make a
 published system inactive or leave a published topic/lesson with an ineligible parent,
 and a published lesson must remain non-empty with valid unarchived media references.
 
+### Direct image upload form
+
+Content create/update endpoints also accept `multipart/form-data`. Text fields use the
+same names as the JSON properties. Legacy image replacements use `coverFile`/`iconFile`
+or `lessonFile.{blockId}` with matching `coverAltText`, `iconAltText`, or
+`lessonAltText.{blockId}`. Existing IDs are sent as `coverMediaId`, `iconMediaId`, or
+the image block's `mediaId`; send `clearCover`, `clearIcon`, or `lessonClear.{blockId}`
+as `on` to remove an existing image.
+
+Lesson `contentBlocks` is either a JSON-encoded legacy block array or a version 2 draft
+containing `{ "version": 2, "richContent": ... }`. A pending rich image has a UUID
+`uploadId` and its file uses the stable multipart name `lessonFile.{uploadId}`. Existing
+rich images retain `mediaId`; a replacement may carry both `mediaId` and `uploadId`.
+The server strictly validates the draft and generated legacy fallback before uploading,
+resolves pending images to private managed-media UUIDs, removes `uploadId`, regenerates
+`fallbackBlocks` rather than trusting client fallback data, and validates the final
+stored version 2 value. Rich images are resolved sequentially so all completed uploads
+are tracked. Newly created assets are archived if a later upload, final validation, or
+the parent create/update fails. Legacy multipart names and behavior are unchanged.
+
 ### Lifecycle item `PATCH`
 
 Send exactly `{ "status": "DRAFT"|"PUBLISHED"|"ARCHIVED" }`. A body that does not
 match this exact schema is parsed as a normal update.
-
-### Direct image upload form
-
-Content create/update endpoints also accept `multipart/form-data`. Text fields use the
-same names as the JSON properties. Image replacements use `coverFile`/`iconFile` or
-`lessonFile.{blockId}` with matching `coverAltText`, `iconAltText`, or
-`lessonAltText.{blockId}`. Existing IDs are sent as `coverMediaId`, `iconMediaId`, or
-the image block's `mediaId`; send `clearCover`, `clearIcon`, or `lessonClear.{blockId}`
-as `on` to remove an existing image. Lesson `contentBlocks` is a JSON-encoded array.
-Files are validated server-side, uploaded to private Storage, and newly created assets
-are archived if the parent mutation fails.
 
 - Draft and published states can move in either direction.
 - Archived state is terminal; restore attempts return `409 INVALID_STATUS_TRANSITION`.
@@ -297,7 +341,8 @@ mutations also require a safe same-origin request.
 Create requires `topicId`, `frontText`/`backText` (1-5000 characters), and non-negative
 `displayOrder`; optional fields are nullable front/back media UUIDs, `EASY|MEDIUM|HARD`
 difficulty, and notes up to 5000 characters. Admin DTOs include notes, lifecycle, and
-timestamps. Learner DTOs omit those fields and add progress (`viewedCount`,
+timestamps, plus nullable `topicTitle` for list/detail presentation. Learner DTOs omit
+those admin-only fields and add progress (`viewedCount`,
 `isDifficult`, `isMastered`, `lastViewedAt`) or `null`.
 
 List search covers front, back, and notes. Sort values are `displayOrder`, `frontText`,
@@ -306,15 +351,15 @@ topic-scoped and rejects archived cards. Publish requires an eligible parent hie
 and unarchived media. Trash retention is 30 days by database clock; individual and bulk no-op status changes do
 not create another audit event.
 
+Flashcard create/update endpoints also accept `multipart/form-data`. Use `frontFile` or
+`backFile` with `frontAltText` or `backAltText`; preserve an existing image with
+`frontMediaId`/`backMediaId`, or clear it with `clearFront`/`clearBack=on`.
+
 Progress body is strict:
 
 ```json
 { "eventId": "550e8400-e29b-41d4-a716-446655440000", "isDifficult": true, "isMastered": false }
 ```
-Flashcard create/update endpoints also accept `multipart/form-data`. Use `frontFile` or
-`backFile` with `frontAltText` or `backAltText`; preserve an existing image with
-`frontMediaId`/`backMediaId`, or clear it with `clearFront`/`clearBack=on`.
-
 
 The flags are optional. A new `(user,eventId)` increments the card's view count once.
 Replay for the same card returns current progress; reuse for another card returns
@@ -351,17 +396,20 @@ must always have 2-6 options and exactly one correct option. Replacement accepts
 option IDs belonging to that question, preserves their IDs/keys, creates new IDs/keys
 for new options, and relabels/reorders all options contiguously from `A`/1.
 
-Publishing requires a published topic and active published organ system, valid strict
-options, and unarchived question/option media. Archived questions cannot be edited,
-reactivated, or restored. Deactivation is independent of publication but removes a
-question from internal selection. Duplicate copies content/media/options to a new
-active draft and records the source ID only in the create audit snapshot.
+Admin question list/detail/create/update responses include nullable `topicTitle` alongside
+`topicId`. This is presentation metadata only and does not replace the UUID relationship.
+
 Question create/update endpoints also accept `multipart/form-data`. The main image uses
 `questionFile`, `questionAltText`, `mediaId`, and `clearQuestionImage=on`. Option fields
 are indexed by position: `optionText.{index}`, `optionFile.{index}`,
 `optionAltText.{index}`, `optionMediaId.{index}`, `clearOption.{index}`, and
 `optionId.{index}`. `optionCount` and `correctOption` describe the submitted aggregate.
 
+Publishing requires a published topic and active published organ system, valid strict
+options, and unarchived question/option media. Archived questions cannot be edited,
+reactivated, or restored. Deactivation is independent of publication but removes a
+question from internal selection. Duplicate copies content/media/options to a new
+active draft and records the source ID only in the create audit snapshot.
 
 Common Phase 4 errors include `400 VALIDATION_ERROR`, `401 UNAUTHORIZED`, `403
 FORBIDDEN`/`INVALID_ORIGIN`, `404 NOT_FOUND`, `409 INVALID_STATUS_TRANSITION`,
@@ -695,13 +743,16 @@ duplicate-send window.
 
 ## Trash and protected purge job
 
-`GET /api/v1/admin/trash` lists heterogeneous Trash for the six supported types:
-`organ-system`, `topic`, `content-lesson`, `flashcard`, `question`, and `media-asset`.
+`GET /api/v1/admin/trash` lists heterogeneous Trash for the seven supported types:
+`organ-system`, `topic`, `content-lesson`, `flashcard`, `question`, `feedback`, and
+`media-asset`.
 It is admin-only, paginated, and supports `q`, `type`, `expiry`, `eligibility`, and
 `sort`. `POST /api/v1/admin/trash/{type}/{id}/restore` is admin-only and succeeds only
 before the 30-day deadline measured by the database clock. Restored content is `DRAFT`
-and is not republished; media is unarchived. A trashed child cannot be restored while a
-parent remains unavailable.
+and is not republished; media is unarchived. Feedback retains its existing `NEW`,
+`REVIEWED`, or `RESOLVED` workflow status, including review/resolution attribution and
+timestamps. Feedback with an attachment cannot be restored while that media remains in
+Trash. A trashed child cannot be restored while a parent remains unavailable.
 
 `GET` and `POST /api/internal/trash/purge` require the exact `Authorization: Bearer
 <CRON_SECRET>` header. Vercel invokes GET daily at `0 3 * * *`; POST is an authenticated
@@ -767,9 +818,9 @@ eligible or appears in an attempt they own; unauthorized history returns `404`.
 | Method and path | Input/behavior |
 | --- | --- |
 | `GET /api/v1/admin/media` | Paginated list; filters `search`, `mimeType`, `archived`, `uploadedById`; newest first |
-| `POST /api/v1/admin/media` | Multipart `file` and required `altText`; returns `201` |
+| `POST /api/v1/admin/media` | Multipart `file` and optional `altText`; returns `201` |
 | `GET /api/v1/admin/media/{id}` | Asset metadata and fresh signed URL, including archived assets |
-| `PATCH /api/v1/admin/media/{id}` | JSON `{ "altText": "..." }`, 1-500 trimmed characters |
+| `PATCH /api/v1/admin/media/{id}` | JSON `{ "altText": "..." }`, 0-500 trimmed characters |
 | `POST /api/v1/admin/media/{id}/archive` | Idempotent archive; already archived returns current asset; eligible published references return `409` |
 | `DELETE /api/v1/admin/media/{id}` | Legacy physical deletion remains disabled; use archive to move the asset to Trash |
 
@@ -786,7 +837,7 @@ and do not use the client filename.
 
 | Status/code | Meaning |
 | --- | --- |
-| `400 VALIDATION_ERROR` | Missing multipart image/alt text or invalid filters/update |
+| `400 VALIDATION_ERROR` | Missing multipart image or invalid filters/update |
 | `400 INVALID_FILE` | Empty/oversized/malformed/disallowed image or MIME mismatch |
 | `404 NOT_FOUND` | Media metadata absent |
 | `409 REFERENCED` | Archive blocked because eligible published content references the asset |
@@ -816,8 +867,9 @@ hash and user agent. Database triggers reject audit-row updates and deletes.
 ## Admin UI routes implemented through Phase 7
 
 - `/organ-systems`, `/organ-systems/new`, `/organ-systems/[slug]`
-- `/organ-systems/[slug]/topics`
-- `/topics`, `/topics/[id]`
+- `/organ-systems/[slug]/topics`, `/organ-systems/[slug]/topics/[topicSlug]`
+- `/topics`, `/topics/new`, `/topics/[id]` (compatibility redirect to the canonical
+  organ-system/topic slug route)
 - `/content`, `/content/new`, `/content/[id]`
 - `/media`
 - `/audit-logs`
@@ -856,7 +908,7 @@ table labels, breadcrumbs, responsive overflow, noindex metadata, and robots beh
 
 ## Externally unverified delivery gates
 
-The 108-operation contract and Phase 7 repository implementation are complete. Real
+The 110-operation contract and Phase 7 repository implementation are complete. Real
 Expo/EAS device delivery, production Upstash, authenticated admin Playwright flows, real
 Supabase Auth email/redirect/private Storage, the deployed Vercel/GitHub cron schedules, backup/
 restore, and production deployment remain unverified. There is no public question-bank

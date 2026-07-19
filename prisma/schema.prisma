@@ -433,24 +433,27 @@ model TopicProgress {
 }
 
 model Feedback {
-  id                String         @id @default(uuid()) @db.Uuid
-  userId            String?        @db.Uuid
-  user              Profile?       @relation("FeedbackSubmitter", fields: [userId], references: [id], onDelete: Restrict)
-  type              FeedbackType
-  subject           String
-  message           String
-  attachmentMediaId String?        @db.Uuid
-  attachmentMedia   MediaAsset?    @relation("FeedbackAttachment", fields: [attachmentMediaId], references: [id], onDelete: Restrict)
-  status            FeedbackStatus @default(NEW)
-  reviewedById      String?        @db.Uuid
-  reviewedBy        Profile?       @relation("FeedbackReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
-  reviewedAt        DateTime?      @db.Timestamptz(3)
-  resolvedById      String?        @db.Uuid
-  resolvedBy        Profile?       @relation("FeedbackResolver", fields: [resolvedById], references: [id], onDelete: Restrict)
-  resolvedAt        DateTime?      @db.Timestamptz(3)
-  adminNotes        String?
-  createdAt         DateTime       @default(now()) @db.Timestamptz(3)
-  updatedAt         DateTime       @updatedAt @db.Timestamptz(3)
+  id                 String         @id @default(uuid()) @db.Uuid
+  userId             String?        @db.Uuid
+  user               Profile?       @relation("FeedbackSubmitter", fields: [userId], references: [id], onDelete: Restrict)
+  type               FeedbackType
+  subject            String
+  message            String
+  attachmentMediaId  String?        @db.Uuid
+  attachmentMedia    MediaAsset?    @relation("FeedbackAttachment", fields: [attachmentMediaId], references: [id], onDelete: Restrict)
+  status             FeedbackStatus @default(NEW)
+  reviewedById       String?        @db.Uuid
+  reviewedBy         Profile?       @relation("FeedbackReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
+  reviewedAt         DateTime?      @db.Timestamptz(3)
+  resolvedById       String?        @db.Uuid
+  resolvedBy         Profile?       @relation("FeedbackResolver", fields: [resolvedById], references: [id], onDelete: Restrict)
+  resolvedAt         DateTime?      @db.Timestamptz(3)
+  adminNotes         String?
+  createdAt          DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime       @updatedAt @db.Timestamptz(3)
+  trashedAt          DateTime?      @db.Timestamptz(3)
+  purgeAfter         DateTime?      @db.Timestamptz(3)
+  nextPurgeAttemptAt DateTime?      @db.Timestamptz(3)
 
   @@index([status, createdAt, id])
   @@index([userId, createdAt, id])

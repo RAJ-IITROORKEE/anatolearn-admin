@@ -194,7 +194,14 @@ async function getPublishedMediaInTransaction(tx: Prisma.TransactionClient, id: 
       AND EXISTS (
         SELECT 1
         FROM jsonb_array_elements(
-          CASE WHEN jsonb_typeof(lesson."contentBlocks") = 'array' THEN lesson."contentBlocks" ELSE '[]'::jsonb END
+          CASE
+            WHEN jsonb_typeof(lesson."contentBlocks") = 'array' THEN lesson."contentBlocks"
+            WHEN jsonb_typeof(lesson."contentBlocks") = 'object'
+              AND lesson."contentBlocks"->>'version' = '2'
+              AND jsonb_typeof(lesson."contentBlocks"->'fallbackBlocks') = 'array'
+              THEN lesson."contentBlocks"->'fallbackBlocks'
+            ELSE '[]'::jsonb
+          END
         ) block
         WHERE block->>'mediaId' = ${id}
       )

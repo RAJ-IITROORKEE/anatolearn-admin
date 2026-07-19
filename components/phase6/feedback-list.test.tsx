@@ -1,5 +1,8 @@
-import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 import { FeedbackList } from "./feedback-list";
 import { FeedbackTabs } from "./feedback-tabs";
@@ -11,9 +14,33 @@ const item = {
 
 describe("feedback admin list", () => {
   it("renders a semantic desktop table and mobile card content", () => {
-    render(<FeedbackList items={[item]} />);
+    render(<FeedbackList bulkTrashAction={vi.fn()} items={[item]} trashAction={vi.fn()} />);
     expect(screen.getByRole("table", { name: "Submitted feedback" })).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Login issue" })).toHaveLength(2);
+  });
+
+  it("synchronizes responsive row selection and confirms row and bulk Delete", async () => {
+    const user = userEvent.setup();
+    const bulkTrashAction = vi.fn().mockResolvedValue({ success: "Moved" });
+    const trashAction = vi.fn().mockResolvedValue({ success: "Moved" });
+    render(<FeedbackList bulkTrashAction={bulkTrashAction} items={[item]} trashAction={trashAction} />);
+
+    const selections = screen.getAllByRole("checkbox", { name: "Select Login issue" });
+    await user.click(selections[0]);
+    expect(selections[1]).toBeChecked();
+    expect(screen.getByRole("toolbar", { name: "Bulk actions" })).toHaveTextContent("1 feedback item selected");
+
+    await user.click(screen.getByRole("button", { name: "Clear selection" }));
+    expect(selections[0]).not.toBeChecked();
+    await user.click(screen.getAllByRole("button", { name: "Delete Login issue" })[0]);
+    expect(screen.getByRole("alertdialog", { name: "Move feedback to Trash?" })).toHaveTextContent("restored from Settings > Trash for 30 days");
+    await user.click(screen.getByRole("button", { name: "Move to Trash" }));
+    await waitFor(() => expect(trashAction).toHaveBeenCalled());
+
+    await user.click(selections[0]);
+    await user.click(screen.getByRole("button", { name: "Delete selected" }));
+    await user.click(screen.getByRole("button", { name: "Move 1 feedback item to Trash" }));
+    await waitFor(() => expect(bulkTrashAction).toHaveBeenCalled());
   });
 
   it("renders counted status tabs and preserves active filters", () => {

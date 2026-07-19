@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { adminFeedbackUpdateSchema, createFeedbackSchema, mineFeedbackListSchema } from "./schemas";
+import { adminFeedbackUpdateSchema, createFeedbackSchema, feedbackBulkTrashSchema, mineFeedbackListSchema } from "./schemas";
 
 describe("feedback schemas", () => {
   it("accepts bounded strict submission input without attachment IDs", () => {
@@ -13,5 +13,13 @@ describe("feedback schemas", () => {
     expect(() => adminFeedbackUpdateSchema.parse({})).toThrow();
     expect(adminFeedbackUpdateSchema.parse({ adminNotes: null })).toEqual({ adminNotes: null });
     expect(() => mineFeedbackListSchema.parse({ userId: crypto.randomUUID() })).toThrow();
+  });
+
+  it("requires a bounded unique UUID set for bulk Trash", () => {
+    const id = crypto.randomUUID();
+    expect(feedbackBulkTrashSchema.parse({ ids: [id] })).toEqual({ ids: [id] });
+    expect(() => feedbackBulkTrashSchema.parse({ ids: [] })).toThrow();
+    expect(() => feedbackBulkTrashSchema.parse({ ids: [id, id] })).toThrow();
+    expect(() => feedbackBulkTrashSchema.parse({ ids: ["not-a-uuid"] })).toThrow();
   });
 });

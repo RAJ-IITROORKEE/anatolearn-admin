@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import type { FormAction } from "@/components/phase3/action-form";
 import { ActionForm } from "@/components/phase3/action-form";
-import { fieldClass, labelClass, panelClass } from "@/components/phase3/admin-ui";
+import { fieldClass, labelClass, panelClass, StatusBadge } from "@/components/phase3/admin-ui";
 import { DirectImageInput } from "@/components/media/direct-image-input";
 
 type Flashcard = {
@@ -18,7 +18,7 @@ type Flashcard = {
   displayOrder: number;
 };
 
-export function FlashcardForm({ action, item, topics }: { action: FormAction; item?: Flashcard; topics: Array<{ id: string; label: string }> }) {
+export function FlashcardForm({ action, item, publicationActions, publicationStatus, topics }: { action: FormAction; item?: Flashcard; publicationActions?: ReactNode; publicationStatus?: string; topics: Array<{ id: string; label: string }> }) {
   const [front, setFront] = useState(item?.frontText ?? "");
   const [back, setBack] = useState(item?.backText ?? "");
 
@@ -38,6 +38,7 @@ export function FlashcardForm({ action, item, topics }: { action: FormAction; it
           </div>
           <label className={labelClass}>Editorial notes <span className="font-normal text-muted">Optional, not shown to learners</span><textarea className={`${fieldClass} min-h-28 py-3`} defaultValue={item?.notes ?? ""} name="notes" /></label>
         </ActionForm>
+        <section aria-label="Publication" className="mt-5 rounded-xl border border-border bg-subtle p-4" role="region"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-bold text-foreground">Publication</h2><p className="mt-1 text-sm text-muted">{item ? "Lifecycle actions apply to the last saved version. Save your edits before publishing." : "New flashcards are created as drafts. Save before publishing."}</p></div>{publicationStatus ? <StatusBadge status={publicationStatus} /> : null}</div>{publicationActions ? <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-4">{publicationActions}</div> : null}</section>
       </div>
       <aside aria-label="Flashcard preview" className={`${panelClass} h-fit border-success/20 xl:sticky xl:top-24`}>
         <p className="text-sm font-bold text-success">Live flashcard preview</p>

@@ -58,4 +58,28 @@ describe("lessonDto", () => {
 
     expect(lessonDto(lesson).contentBlocks).toEqual(lesson.contentBlocks);
   });
+
+  it("downconverts rich storage for learners and exposes the validated AST only to admins", () => {
+    const mediaId = crypto.randomUUID();
+    const richContent = {
+      type: "doc",
+      content: [
+        { type: "paragraph", attrs: { textAlign: "center" }, content: [{ type: "text", text: "Formatted heart", marks: [{ type: "bold" }] }] },
+        { type: "image", attrs: { mediaId, alt: "Heart", caption: null, legacyId: "heart-image" } },
+      ],
+    };
+    const fallbackBlocks = [
+      { type: "paragraph", text: "Formatted heart" },
+      { id: "heart-image", type: "image", mediaId, altText: "Heart", caption: null },
+    ];
+    const lesson = {
+      id: crypto.randomUUID(), topicId: crypto.randomUUID(), title: "Rich lesson", slug: "rich-lesson", summary: null,
+      contentBlocks: { version: 2, richContent, fallbackBlocks }, estimatedReadingMinutes: 3, displayOrder: 0,
+      status: "DRAFT", createdAt: new Date(), updatedAt: new Date(), trashedAt: null, purgeAfter: null, nextPurgeAttemptAt: null,
+    } as unknown as ContentLesson;
+
+    expect(lessonDto(lesson)).toMatchObject({ contentBlocks: fallbackBlocks });
+    expect(lessonDto(lesson)).not.toHaveProperty("richContent");
+    expect(lessonDto(lesson, true)).toMatchObject({ contentBlocks: fallbackBlocks, richContent });
+  });
 });

@@ -105,14 +105,14 @@ export async function listAdminFlashcards(input: FlashcardListInput) {
     { id: input.sortOrder },
   ];
   const [rows, total] = await prisma.$transaction([
-    prisma.flashcard.findMany({ where, skip: (input.page - 1) * input.pageSize, take: input.pageSize, orderBy }),
+    prisma.flashcard.findMany({ where, skip: (input.page - 1) * input.pageSize, take: input.pageSize, orderBy, include: { topic: { select: { title: true } } } }),
     prisma.flashcard.count({ where }),
   ]);
   return { items: rows.map((row) => flashcardDto(row, true)), pagination: pagination(total, input) };
 }
 
 export async function getAdminFlashcard(id: string) {
-  const row = await prisma.flashcard.findFirst({ where: { id, trashedAt: null, topic: { trashedAt: null, organSystem: { trashedAt: null } } } });
+  const row = await prisma.flashcard.findFirst({ where: { id, trashedAt: null, topic: { trashedAt: null, organSystem: { trashedAt: null } } }, include: { topic: { select: { title: true } } } });
   if (!row) throw new FlashcardError("NOT_FOUND", "Flashcard was not found.", 404);
   return flashcardDto(row, true);
 }

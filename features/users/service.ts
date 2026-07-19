@@ -79,7 +79,7 @@ export async function getLearner(id: string) {
   const [attempts, submittedAttempts, feedback, latest] = await prisma.$transaction([
     prisma.assessmentAttempt.count({ where: { userId: id } }),
     prisma.assessmentAttempt.count({ where: { userId: id, status: { in: ["COMPLETED", "AUTO_SUBMITTED"] } } }),
-    prisma.feedback.count({ where: { userId: id } }),
+    prisma.feedback.count({ where: { userId: id, trashedAt: null } }),
     prisma.assessmentAttempt.aggregate({ where: { userId: id }, _max: { startedAt: true } }),
   ]);
   return adminUserDetailDto(profile, { attempts, submittedAttempts, feedback, lastAttemptAt: latest._max.startedAt });

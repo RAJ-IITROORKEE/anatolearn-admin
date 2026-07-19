@@ -38,6 +38,9 @@ export const adminFeedbackUpdateSchema = z.object({
 }).strict().refine((value) => value.adminNotes !== undefined || value.status !== undefined, "At least one update is required.");
 
 export const feedbackIdSchema = z.string().uuid();
+export const feedbackBulkTrashSchema = z.object({
+  ids: z.array(feedbackIdSchema).min(1).max(500),
+}).strict().refine((value) => new Set(value.ids).size === value.ids.length, { path: ["ids"], message: "Feedback selections must be unique." });
 export type CreateFeedbackInput = z.infer<typeof createFeedbackSchema>;
 export type MineFeedbackListInput = z.infer<typeof mineFeedbackListSchema>;
 export type AdminFeedbackListInput = z.infer<typeof adminFeedbackListSchema>;

@@ -22,6 +22,7 @@ const tableByType = {
   "content-lesson": "ContentLesson",
   flashcard: "Flashcard",
   question: "Question",
+  feedback: "Feedback",
   "media-asset": "MediaAsset",
 } as const;
 
@@ -31,6 +32,7 @@ const labelByType = {
   "content-lesson": Prisma.raw('"title"'),
   flashcard: Prisma.raw('left("frontText", 160)'),
   question: Prisma.raw('left("questionText", 160)'),
+  feedback: Prisma.raw('left("subject", 160)'),
   "media-asset": Prisma.raw('"originalFilename"'),
 } as const;
 
@@ -80,7 +82,7 @@ export async function moveToTrash(type: TrashType, id: string, context: Mutation
 
     const status = type === "media-asset"
       ? Prisma.sql`, "archivedAt" = trash_clock."now"`
-      : Prisma.sql`, "status" = 'ARCHIVED'::"PublishStatus"`;
+      : type === "feedback" ? Prisma.empty : Prisma.sql`, "status" = 'ARCHIVED'::"PublishStatus"`;
     const [after] = await tx.$queryRaw<LockedTrashRow[]>(Prisma.sql`
       WITH trash_clock AS (SELECT clock_timestamp() AS "now")
       UPDATE ${table(type)} SET
@@ -101,8 +103,65 @@ export async function moveToTrash(type: TrashType, id: string, context: Mutation
   });
 }
 
+export async function bulkMoveToTrash(type: "flashcard" | "question" | "feedback", ids: string[], context: MutationContext) {
+  const uniqueIds = [...new Set(ids)];
+  if (!ids.length || ids.length > 500 || uniqueIds.length !== ids.length) {
+    throw new TrashError("NOT_FOUND", "One or more resources were not found.", 404);
+  }
+  uniqueIds.forEach((id) => trashResourceIdSchema.parse(id));
+  const sortedIds = [...uniqueIds].sort();
+
+  return prisma.$transaction(async (tx) => {
+    const locked = await tx.$queryRaw<LockedTrashRow[]>(Prisma.sql`
+      SELECT "id", ${labelByType[type]} AS "label", "trashedAt", "purgeAfter", "nextPurgeAttemptAt"
+      FROM ${table(type)}
+      WHERE "id" IN (${Prisma.join(sortedIds.map((id) => Prisma.sql`${id}::uuid`))}) AND "trashedAt" IS NULL
+      ORDER BY "id" FOR UPDATE
+    `);
+    if (locked.length !== uniqueIds.length) throw new TrashError("NOT_FOUND", "One or more resources were not found.", 404);
+
+    const lifecycle = type === "feedback" ? Prisma.empty : Prisma.sql`, "status" = 'ARCHIVED'::"PublishStatus"`;
+    const updated = await tx.$queryRaw<LockedTrashRow[]>(Prisma.sql`
+      WITH trash_clock AS (SELECT clock_timestamp() AS "now")
+      UPDATE ${table(type)} SET
+        "trashedAt" = trash_clock."now",
+        "purgeAfter" = trash_clock."now" + interval '30 days',
+        "nextPurgeAttemptAt" = trash_clock."now" + interval '30 days'
+        ${lifecycle}
+      FROM trash_clock
+      WHERE "id" IN (${Prisma.join(sortedIds.map((id) => Prisma.sql`${id}::uuid`))}) AND "trashedAt" IS NULL
+      RETURNING "id", ${labelByType[type]} AS "label", "trashedAt", "purgeAfter", "nextPurgeAttemptAt"
+    `);
+    if (updated.length !== uniqueIds.length) throw new TrashError("NOT_FOUND", "One or more resources were not found.", 404);
+
+    const byId = new Map(updated.map((row) => [row.id, row]));
+    for (const before of locked) {
+      const after = byId.get(before.id);
+      if (!after) throw new TrashError("NOT_FOUND", "One or more resources were not found.", 404);
+      await audit(tx, context, "TRASH", type, before.id, { trashedAt: null }, {
+        trashedAt: after.trashedAt?.toISOString(),
+        purgeAfter: after.purgeAfter?.toISOString(),
+      });
+    }
+    return { count: uniqueIds.length, ids };
+  });
+}
+
 async function assertRestorableParent(tx: Prisma.TransactionClient, type: TrashType, id: string) {
   if (type === "organ-system" || type === "media-asset") return;
+  if (type === "feedback") {
+    const attachments = await tx.$queryRaw<Array<{ trashedAt: Date | null }>>(Prisma.sql`
+      SELECT media."trashedAt"
+      FROM "Feedback" feedback
+      JOIN "MediaAsset" media ON media."id" = feedback."attachmentMediaId"
+      WHERE feedback."id" = ${id}::uuid
+      FOR SHARE OF media
+    `);
+    if (attachments[0]?.trashedAt) {
+      throw new TrashError("PARENT_UNAVAILABLE", "The feedback attachment is unavailable or in trash.", 409);
+    }
+    return;
+  }
   const rows = type === "topic"
     ? await tx.$queryRaw<Array<{ topicTrashedAt: Date | null; systemTrashedAt: Date | null }>>(Prisma.sql`
         SELECT NULL::timestamptz AS "topicTrashedAt", system."trashedAt" AS "systemTrashedAt"
@@ -131,13 +190,15 @@ export async function restoreFromTrash(type: TrashType, id: string, context: Mut
 
     const lifecycle = type === "media-asset"
       ? Prisma.sql`, "archivedAt" = NULL`
-      : Prisma.sql`, "status" = 'DRAFT'::"PublishStatus"`;
+      : type === "feedback" ? Prisma.empty : Prisma.sql`, "status" = 'DRAFT'::"PublishStatus"`;
     await tx.$executeRaw(Prisma.sql`
       UPDATE ${table(type)} SET "trashedAt" = NULL, "purgeAfter" = NULL, "nextPurgeAttemptAt" = NULL ${lifecycle}
       WHERE "id" = ${id}::uuid
     `);
     await audit(tx, context, "RESTORE", type, id, { trashedAt: before.trashedAt.toISOString(), purgeAfter: before.purgeAfter.toISOString() }, { trashedAt: null });
-    return { id, type, restored: true, status: type === "media-asset" ? undefined : "DRAFT" };
+    return type === "media-asset" || type === "feedback"
+      ? { id, type, restored: true }
+      : { id, type, restored: true, status: "DRAFT" as const };
   });
 }
 
@@ -169,8 +230,10 @@ export async function listTrash(input: TrashListInput) {
         ((SELECT count(*) FROM "FlashcardProgress" x WHERE x."flashcardId" = f."id") + (SELECT count(*) FROM "FlashcardViewEvent" x WHERE x."flashcardId" = f."id"))::int, 'Referenced by learner progress or events' FROM "Flashcard" f WHERE f."trashedAt" IS NOT NULL
       UNION ALL SELECT q."id", 'question', left(q."questionText", 160), q."trashedAt", q."purgeAfter", q."nextPurgeAttemptAt",
         (SELECT count(*)::int FROM "AttemptQuestion" x WHERE x."sourceQuestionId" = q."id"), 'Referenced by assessment attempts' FROM "Question" q WHERE q."trashedAt" IS NOT NULL
+      UNION ALL SELECT f."id", 'feedback', left(f."subject", 160), f."trashedAt", f."purgeAfter", f."nextPurgeAttemptAt",
+        0::int, NULL::text FROM "Feedback" f WHERE f."trashedAt" IS NOT NULL
       UNION ALL SELECT m."id", 'media-asset', m."originalFilename", m."trashedAt", m."purgeAfter", m."nextPurgeAttemptAt",
-        ((SELECT count(*) FROM "Profile" x WHERE x."avatarMediaId" = m."id") + (SELECT count(*) FROM "OrganSystem" x WHERE x."coverMediaId" = m."id" OR x."iconMediaId" = m."id") + (SELECT count(*) FROM "Topic" x WHERE x."coverMediaId" = m."id") + (SELECT count(*) FROM "Flashcard" x WHERE x."frontMediaId" = m."id" OR x."backMediaId" = m."id") + (SELECT count(*) FROM "Question" x WHERE x."mediaId" = m."id") + (SELECT count(*) FROM "QuestionOption" x WHERE x."mediaId" = m."id") + (SELECT count(*) FROM "Feedback" x WHERE x."attachmentMediaId" = m."id") + (SELECT count(*) FROM "ContentLesson" x WHERE EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(x."contentBlocks") = 'array' THEN x."contentBlocks" ELSE '[]'::jsonb END) b WHERE b->>'mediaId' = m."id"::text)) + (SELECT count(*) FROM "AttemptQuestion" x WHERE x."mediaIdSnapshot" = m."id" OR EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(x."optionsSnapshot") = 'array' THEN x."optionsSnapshot" ELSE '[]'::jsonb END) o WHERE o->>'mediaId' = m."id"::text)))::int,
+        ((SELECT count(*) FROM "Profile" x WHERE x."avatarMediaId" = m."id") + (SELECT count(*) FROM "OrganSystem" x WHERE x."coverMediaId" = m."id" OR x."iconMediaId" = m."id") + (SELECT count(*) FROM "Topic" x WHERE x."coverMediaId" = m."id") + (SELECT count(*) FROM "Flashcard" x WHERE x."frontMediaId" = m."id" OR x."backMediaId" = m."id") + (SELECT count(*) FROM "Question" x WHERE x."mediaId" = m."id") + (SELECT count(*) FROM "QuestionOption" x WHERE x."mediaId" = m."id") + (SELECT count(*) FROM "Feedback" x WHERE x."attachmentMediaId" = m."id") + (SELECT count(*) FROM "ContentLesson" x WHERE EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(x."contentBlocks") = 'array' THEN x."contentBlocks" WHEN jsonb_typeof(x."contentBlocks") = 'object' AND x."contentBlocks"->>'version' = '2' AND jsonb_typeof(x."contentBlocks"->'fallbackBlocks') = 'array' THEN x."contentBlocks"->'fallbackBlocks' ELSE '[]'::jsonb END) b WHERE b->>'mediaId' = m."id"::text)) + (SELECT count(*) FROM "AttemptQuestion" x WHERE x."mediaIdSnapshot" = m."id" OR EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(x."optionsSnapshot") = 'array' THEN x."optionsSnapshot" ELSE '[]'::jsonb END) o WHERE o->>'mediaId' = m."id"::text)))::int,
         'Referenced by content, profiles, feedback, or attempt snapshots' FROM "MediaAsset" m WHERE m."trashedAt" IS NOT NULL
     ), filtered AS (
       SELECT trash.*, clock."now" FROM trash CROSS JOIN clock WHERE true ${typeFilter} ${queryFilter} ${expiryFilter} ${eligibilityFilter}

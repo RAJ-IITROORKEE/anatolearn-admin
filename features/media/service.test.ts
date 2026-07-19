@@ -142,6 +142,24 @@ describe("historical attempt media authorization", () => {
     expect(query.values).toEqual(expect.arrayContaining(["owner", asset.id, asset.id]));
   });
 
+  it.each([
+    ["legacy blocks", [{ type: "image", mediaId: asset.id, altText: "Heart" }]],
+    ["v2 fallback blocks", { version: 2, richContent: { type: "doc", content: [] }, fallbackBlocks: [{ type: "image", mediaId: asset.id, altText: "Heart" }] }],
+  ])("authorizes published lesson media referenced by %s", async (_label, contentBlocks) => {
+    mocks.tx.mediaAsset.findFirst.mockResolvedValue({
+      ...asset,
+      archivedAt: null,
+      organSystemCovers: [], organSystemIcons: [], topicCovers: [], flashcardFronts: [], flashcardBacks: [],
+      questionMedia: [], questionOptionMedia: [],
+    });
+    mocks.tx.$queryRaw.mockResolvedValue([{ contentBlocks }]);
+
+    await expect(getPublishedMedia(asset.id, "learner")).resolves.toMatchObject({ id: asset.id });
+    const query = mocks.tx.$queryRaw.mock.calls[0][0].strings.join(" ");
+    expect(query).toContain("jsonb_typeof(lesson.\"contentBlocks\") = 'array'");
+    expect(query).toContain("fallbackBlocks");
+  });
+
   it("does not grant another user's or absent snapshot", async () => {
     mocks.tx.$queryRaw.mockResolvedValue([]);
     await expect(getPublishedMedia(asset.id, "other-user")).rejects.toMatchObject({ code: "NOT_FOUND" });

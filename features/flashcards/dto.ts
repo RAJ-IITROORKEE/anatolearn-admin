@@ -1,6 +1,6 @@
 import type { Flashcard, FlashcardProgress } from "@prisma/client";
 
-type FlashcardDtoSource = Omit<Flashcard, "trashedAt" | "purgeAfter" | "nextPurgeAttemptAt">;
+type FlashcardDtoSource = Omit<Flashcard, "trashedAt" | "purgeAfter" | "nextPurgeAttemptAt"> & { topic?: { title: string } };
 
 export function flashcardProgressDto(value: FlashcardProgress) {
   return {
@@ -25,7 +25,7 @@ export function flashcardDto(value: FlashcardDtoSource, admin = false, progress?
     difficulty: value.difficulty,
     displayOrder: value.displayOrder,
     ...(admin
-      ? { notes: value.notes, status: value.status, createdAt: value.createdAt, updatedAt: value.updatedAt }
+      ? { notes: value.notes, status: value.status, topicTitle: value.topic?.title ?? null, createdAt: value.createdAt, updatedAt: value.updatedAt }
       : { progress: progress ? flashcardProgressDto(progress) : null }),
   };
 }

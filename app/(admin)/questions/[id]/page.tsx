@@ -1,18 +1,34 @@
 import { notFound } from "next/navigation";
+import { z } from "zod";
 
 import { PageHeader } from "@/components/app-shell/page-header";
 import { InlineAction } from "@/components/phase3/action-form";
 import { StatusBadge } from "@/components/phase3/admin-ui";
 import { listAdmin } from "@/components/phase3/data";
 import { QuestionForm } from "@/components/questions/question-form";
+import { getAdminMediaMap } from "@/features/media/service";
+import { QuestionError } from "@/features/questions/domain";
 import { getQuestion } from "@/features/questions/service";
 import { changeQuestionActivityAction, changeQuestionStatusAction, duplicateQuestionAction, trashQuestionAction, updateQuestionAction } from "../../phase4-actions";
 
 export default async function QuestionDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  if (!z.string().uuid().safeParse(id).success) notFound();
+
   let item;
-  try { item = await getQuestion(id); } catch { notFound(); }
-  const topics = await listAdmin("topic", { page: 1, pageSize: 100, sortBy: "title", sortOrder: "asc" });
+  try {
+    item = await getQuestion(id);
+  } catch (error) {
+    if (error instanceof QuestionError && error.code === "NOT_FOUND" && error.status === 404) notFound();
+    throw error;
+  }
+  const mediaIds = [item.mediaId, ...item.options.map((option) => option.mediaId)].filter((mediaId): mediaId is string => Boolean(mediaId));
+  const [topics, media] = await Promise.all([
+    listAdmin("topic", { page: 1, pageSize: 100, sortBy: "title", sortOrder: "asc" }),
+    getAdminMediaMap(mediaIds),
+  ]);
   const quiz = item.assessmentType === "QUIZ";
-  return <><PageHeader action={<div className="flex flex-wrap gap-2"><span className={quiz ? "rounded-full bg-quiz-soft px-2.5 py-1 text-xs font-bold text-quiz" : "rounded-full bg-test-soft px-2.5 py-1 text-xs font-bold text-test"}>{quiz ? "Quiz" : "Test"}</span><StatusBadge status={item.status} /><StatusBadge status={item.isActive ? "ACTIVE" : "INACTIVE"} />{item.status === "DRAFT" && <InlineAction action={changeQuestionStatusAction.bind(null, id, "PUBLISHED")}>Publish</InlineAction>}{item.status === "PUBLISHED" && <InlineAction action={changeQuestionStatusAction.bind(null, id, "DRAFT")}>Move to draft</InlineAction>}{item.status !== "ARCHIVED" && <InlineAction action={changeQuestionActivityAction.bind(null, id, !item.isActive)}>{item.isActive ? "Deactivate" : "Activate"}</InlineAction>}<InlineAction action={duplicateQuestionAction.bind(null, id)}>Duplicate</InlineAction>{item.status !== "ARCHIVED" && <InlineAction action={trashQuestionAction.bind(null, id)} confirmMessage="This hides the question from normal views. It can be restored from Settings > Trash for 30 days. Continue?">Delete</InlineAction>}</div>} description="Edit atomic answer options, preview the learner view, and manage lifecycle and activity." eyebrow={quiz ? "Quiz assessment" : "Test assessment"} title={item.questionText} /><QuestionForm action={updateQuestionAction.bind(null, id)} assessmentType={item.assessmentType} item={item} topics={topics.items.map((topic) => ({ id: topic.id, label: topic.title }))} /></>;
+  const base = `/questions/${item.assessmentType.toLowerCase()}`;
+  const publicationActions = <>{item.status === "DRAFT" && <InlineAction action={changeQuestionStatusAction.bind(null, id, "PUBLISHED")}>Publish saved version</InlineAction>}{item.status === "PUBLISHED" && <InlineAction action={changeQuestionStatusAction.bind(null, id, "DRAFT")}>Move to draft</InlineAction>}{item.status !== "ARCHIVED" && <InlineAction action={changeQuestionActivityAction.bind(null, id, !item.isActive)}>{item.isActive ? "Deactivate" : "Activate"}</InlineAction>}<InlineAction action={duplicateQuestionAction.bind(null, id)}>Duplicate</InlineAction>{item.status !== "ARCHIVED" && <InlineAction action={trashQuestionAction.bind(null, base, id)} confirmLabel="Move to Trash" confirmMessage="This question will be hidden and can be restored from Settings > Trash for 30 days." confirmTitle="Move question to Trash?" destructive>Delete</InlineAction>}</>;
+  return <><PageHeader action={<div className="flex flex-wrap gap-2"><span className={quiz ? "rounded-full bg-quiz-soft px-2.5 py-1 text-xs font-bold text-quiz" : "rounded-full bg-test-soft px-2.5 py-1 text-xs font-bold text-test"}>{quiz ? "Quiz" : "Test"}</span><StatusBadge status={item.status} /><StatusBadge status={item.isActive ? "ACTIVE" : "INACTIVE"} /></div>} description="Edit atomic answer options, preview the learner view, and manage lifecycle and activity." eyebrow={quiz ? "Quiz assessment" : "Test assessment"} title={item.questionText} /><QuestionForm action={updateQuestionAction.bind(null, id)} activityStatus={item.isActive ? "ACTIVE" : "INACTIVE"} assessmentType={item.assessmentType} existingMedia={Object.fromEntries(media.entries())} item={item} publicationActions={publicationActions} publicationStatus={item.status} topics={topics.items.map((topic) => ({ id: topic.id, label: topic.title }))} /></>;
 }

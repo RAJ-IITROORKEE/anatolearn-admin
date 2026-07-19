@@ -4,9 +4,9 @@
 
 **Phase 7: Hardening and delivery — repository implementation complete; external gates open**
 
-Date: 2026-07-15
+Date: 2026-07-16
 
-Phases 0-7 are implemented and all ten migrations are current in the configured
+Phases 0-7 are implemented and all twelve migrations are current in the configured
 development database. The product is not claimed as fully deployed or production-ready.
 `npm run env:check` passes locally. The production Vercel project now has a free Upstash
 resource; the adapter accepts its standard `KV_REST_API_*` credentials as well as the
@@ -34,8 +34,16 @@ cron, and production deployment acceptance remain external gates.
   reaches the form without an exchanged recovery session.
 - Enabled RLS and revoked Supabase client-role access on Prisma's migration metadata table
   after the production security advisor identified it as publicly readable.
-- Obfuscated existing-account registration responses and added newly-created Auth-user
-  compensation when profile provisioning fails.
+- Replaced link-based immediate profile creation with non-enumerating signup OTP initiation,
+  six-digit verification, resend, deferred idempotent profile provisioning, and confirmed-
+  login repair. Login remains password-only.
+- Added a server-controlled `app_metadata.signup_otp_verified` marker after `verifyOtp`;
+  password login repairs only a missing, marked profile. Immediate signup sessions trigger
+  best-effort new-identity deletion, and malformed Auth names fall back to `Learner`.
+- Classified Auth transport/`429`/`5xx` failures as `AUTH_UNAVAILABLE`, kept account-
+  dependent registration/resend 4xx outcomes enumeration-safe, and distinguished transient
+  verification failures from invalid/expired OTPs.
+- Kept `email_not_confirmed` classification so pending users receive no tokens.
 - Classified permanent Expo HTTP/shape failures so claimed deliveries fail immediately;
   transient network/429/5xx failures retain bounded retry behavior.
 - Updated Prisma client/CLI to 6.19.3, removing the previous high audit finding. Current
@@ -51,25 +59,109 @@ cron, and production deployment acceptance remain external gates.
 - Replaced resource-form managed-media selection with direct image uploads for system,
   topic, lesson, flashcard, question, and option forms; the Media Library remains the
   searchable/paginated asset-management surface.
+- Made image files and alt text optional in resource forms, added signed cover/icon/image
+  previews to parent lists, and added accessible inline plus Sonner success/error feedback
+  for create, update, upload, lifecycle, and bulk actions.
+- Exposed published organ-system cover/icon media IDs so authenticated Android/iOS clients
+  can resolve replaced private assets rather than relying on stale legacy URLs.
 - Completed accessibility/responsive fixes across password toggles, pagination, dialogs,
   breadcrumbs, tables, labels, overflow, metadata, and robots; established axe-enabled
   public and credential-gated authenticated Playwright coverage.
-- Reconciled OpenAPI to all 108 implemented route operations with unique IDs, strict
+- Reconciled OpenAPI to all 110 implemented route operations with unique IDs, strict
   empty-body, rate-limit, privacy, response-header, and route-parity tests.
 - Made canonical seeding create-if-missing/non-destructive and added tested bootstrap
-  find/create/compensation/redaction behavior. Seeded anatomy content remains draft/demo
-  material requiring academic review before publication.
-- Added recoverable Trash for six resource types, database-clock 30-day restore windows,
-  DRAFT-only restore, Settings > Trash, leaf-first dependency-aware purge, protected
+  find/create/compensation/redaction behavior. Seeded anatomy content remains draft by
+  default. Added an explicit, idempotent `db:publish-demo` transaction that publishes only
+  validated canonical IDs for demo/MVP environments and leaves unrelated drafts untouched.
+- Added recoverable Trash for seven resource types, database-clock 30-day restore windows,
+  DRAFT restore for publishable content, status-preserving feedback restore, Settings >
+  Trash, leaf-first dependency-aware purge, protected
   daily cron, and retrying `MediaPurgeJob` storage cleanup. Attempts, progress, audits,
   and notification evidence are preserved; legacy ARCHIVED rows without Trash metadata
   are not auto-purged. Normal editor block deletion remains separate and confirmed.
 - Updated final README, setup, architecture, API, security, testing, plan, status, and
   machine-readable contract documentation from inspected code and diffs.
 
-Only documentation files were changed by this documentation task. Application code,
-packages, migrations, `.env.example`, local secret values, and provider configuration
-were not modified.
+### Admin UX follow-up (2026-07-20)
+
+- Made `/organ-systems/{systemSlug}/topics/{topicSlug}` the canonical browser editor
+  route. The compatibility `/topics/{id}` UUID page resolves the topic and redirects to
+  that readable route; `/topics/new` provides global topic creation with organ-system
+  selection. REST topic routes remain UUID-based.
+- Unified lesson editing into one structured canvas with image insertion/drop points
+  between blocks, local and existing-image previews, and an accessible learner-preview
+  dialog. Topic, lesson, flashcard, question, and option forms use compact media previews
+  where appropriate while retaining the existing direct-upload validation and storage flow.
+- Replaced the flashcard and quiz/test card grids with responsive semantic desktop tables
+  and equivalent mobile rows. Lists now show topic title, stable page-relative numbering,
+  status/activity, difficulty, update time, and explicit edit/confirmed Trash actions.
+- Added select-all/clear controls and confirmed bulk Publish, Draft, and Delete actions.
+  Bulk Delete now moves all selected flashcards or questions to recoverable Trash in one
+  transaction: rows are locked deterministically, the complete selection is validated
+  before mutation, and each item receives a Trash audit. Any unavailable item rolls back
+  the whole operation.
+- Added route/page/action, lesson canvas and image-drop, compact direct-image input,
+  responsive flashcard/question list, bulk-action, DTO, content-service, and atomic bulk
+  Trash regression tests. This follow-up added no migration or dependency.
+
+### Feedback Trash follow-up (2026-07-20)
+
+- Added and deployed `20260720120000_add_feedback_trash`, which gives `Feedback` the
+  existing database-clock retention fields, consistency constraint, partial due index,
+  hard-delete guard, and exact restore-deadline guard.
+- Normal learner/admin feedback lists, detail, and updates exclude trashed rows. Restore
+  preserves `NEW`, `REVIEWED`, or `RESOLVED`; it does not rewrite workflow history.
+- Added confirmed row and atomic bulk Delete server actions. Bulk Trash validates the full
+  unique UUID set, locks in ID order, writes all rows in one transaction, and appends one
+  redacted lifecycle audit per item.
+- Added synchronized desktop/mobile row selection, select-all/clear controls, confirmed
+  row/bulk Delete, Feedback filtering/restoration in Settings > Trash, and Feedback-first
+  purge so attachment references release before media is considered.
+- No feedback DELETE API was added; the shared Trash list/filter/restore API and OpenAPI
+  contract now include feedback as the seventh type and document status-preserving restore.
+- Review follow-up excludes trashed feedback from dashboard NEW/recent projections and
+  learner detail counts, blocks restore while an optional attachment remains trashed using
+  a metadata-minimal share lock, and clears invisible bulk selections after page/filter ID
+  changes while preserving responsive checkbox synchronization.
+- Review follow-up verification: the dashboard/user/bulk/feedback-list set passed 19/19
+  and Feedback-focused Trash service tests passed 5/5. The final integrated lint,
+  typecheck, full test suite, OpenAPI validation, and production build all pass.
+- Files changed are limited to the Prisma schema/new migration, Feedback service/actions/
+  list/tests, shared bulk-action configuration, Trash domain/service/worker/settings/tests,
+  and focused architecture/security/testing/status documentation.
+- Verification: Prisma generation and schema validation passed; migration deploy/status
+  passed with all 12 migrations current; focused Feedback/Trash tests passed 61 with 5
+  conditional PostgreSQL tests skipped because `TEST_DATABASE_URL` is absent. Final lint,
+  typecheck, full tests, OpenAPI validation, and production build passed.
+
+### Rich lesson multipart REST review follow-up (2026-07-20)
+
+- Extracted the v2 lesson draft parser/image resolver from the admin server action into
+  `features/content/lesson-multipart.ts`, a server-only module now shared by server actions
+  and REST POST/PATCH handlers. Legacy block arrays and multipart field names are retained.
+- Pending rich image `uploadId` values now resolve through `lessonFile.<uploadId>` to
+  managed media UUIDs in REST mutations. The resolver validates strict rich input and
+  generated fallback limits before upload, resolves images sequentially, removes pending
+  IDs, regenerates fallback blocks instead of trusting submitted fallback data, and
+  validates the final stored v2 value. Raw HTML remains unsupported.
+- REST parsing, later-upload failures, final validation failures, and parent mutation
+  failures all use the existing tracked-upload compensation. Black-box route tests cover
+  create, update, parent-write compensation, later-upload compensation, and validation
+  before upload. Existing server-action regressions pass against the shared implementation.
+- Changed implementation/test files: `features/content/lesson-multipart.ts`,
+  `features/content/route-handlers.ts`, `app/(admin)/phase3-actions.ts`, and
+  `app/api/v1/admin/content-lessons/routes.test.ts`. API, architecture, testing, and phase
+  status documentation were synchronized. OpenAPI already advertised this multipart v2
+  contract and required no shape change. No migration or dependency was added.
+- TDD red step: all four initial REST regressions failed because v2 drafts reached stored-
+  content validation unresolved and no upload compensation occurred. Final affected run
+  passed 7 files/47 tests. `npm run typecheck`, full `npm run lint`, and
+  `git diff --check` passed; `npm run openapi:validate` passed with 110 unique operations.
+  A full Vitest run and production build were not run for this focused review fix.
+
+Production MVP verification confirmed the canonical demo set is learner-visible through
+bearer-authenticated APIs: 11 systems, 2 circulatory topics, 1 lesson, 4 flashcards across
+the topics, and 20 eligible assessment questions. No user account or test data was retained.
 
 ## Final verification record
 
@@ -77,20 +169,31 @@ were not modified.
 | --- | --- |
 | `npm run lint` | Passed |
 | `npm run typecheck` | Passed |
-| `npm run test` | Passed: 139 files, 3 skipped; 445 tests, 13 skipped |
+| Focused OTP tests | Passed: 13/13; related focused set passed 29/29 |
+| Final full `npm run test` | Passed: 160 files/600 tests; 3 files/14 tests skipped |
 | Isolated `TEST_DATABASE_URL` | Passed: 2 files/9 tests (4 assessment lifecycle + 5 direct DB access) |
-| `npm run build` | Passed: 42 static-generation units under nonce dynamic CSP output; all routes |
+| `npm run build` | Passed: 44 static-generation units under nonce dynamic CSP output; all routes |
 | `npm run test:e2e` | 17 passed, 14 skipped |
-| `npm run openapi:validate` | Passed: 108 operations, 108 unique operation IDs, exact route parity |
-| `npm run prisma:deploy` / status | Passed; 10 migrations current, including `20260714141000_add_safe_trash` and `20260715151000_secure_prisma_migration_metadata` |
+| `npm run openapi:validate` | Passed: 110 operations, 110 unique operation IDs, exact route parity |
+| Prisma generation, validation, deploy/status | Passed; all 12 migrations current, including Feedback Trash and Prisma metadata protection |
 | `npm audit` | 0 high/critical; 2 moderate PostCSS-through-Next findings remain |
 | `npm run env:check` | Passed locally; production deployment values remain an external gate |
 | `git diff --check` | Passed; line-ending notices only |
+
+Admin UX follow-up verification: focused tests pass; Prisma generation/validation, lint,
+typecheck, the full 160-file/600-test suite, OpenAPI validation, and the 44-unit production
+build pass. Final blocker-focused review found no remaining issues.
 
 The isolated PostgreSQL Trash suite passed 4/4. The default conditional database run
 skips it when `TEST_DATABASE_URL` is not configured. Production gates remain external:
 valid deployment `CRON_SECRET`, daily cron verification, production RLS verification,
 real Supabase Storage purge, and authenticated E2E.
+
+The OTP repository checks do not accept hosted provider configuration. Production
+acceptance still requires Supabase email confirmation, the six-digit `{{ .Token }}`-only
+template, configured expiry/rate controls, and verified SMTP delivery. Public native
+Supabase signup remains a residual identity/email-abuse surface, but an unmarked identity
+cannot obtain the application `Profile` required for authorization.
 
 The 17 Playwright passes cover desktop/mobile public, security, and accessibility checks.
 Authenticated admin tests were skipped because `E2E_ADMIN_EMAIL` and

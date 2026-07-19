@@ -1,16 +1,38 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { attemptDetailDto } from "@/features/assessments/dto";
 import { organSystemDto } from "@/features/content/dto";
+import { richTextDocumentSchema } from "@/features/content/schemas";
 import { learnerFeedbackDto } from "@/features/feedback/dto";
 import { flashcardDto } from "@/features/flashcards/dto";
 import { deliveryDto, deviceTokenDto, learnerNotificationDto } from "@/features/notifications/dto";
+import { TRASH_TYPES } from "@/features/trash/domain";
 import { apiError } from "@/lib/api/response";
 import { GET as getHealth } from "@/app/api/health/route";
 import { GET as getMeta } from "@/app/api/v1/meta/route";
 import { getOpenApiOperationContract, validateOpenApiContract } from "@/scripts/validate-openapi";
 
 const now = new Date("2026-07-14T00:00:00.000Z");
+const openApiSource = readFileSync(resolve(process.cwd(), "docs/openapi.yaml"), "utf8");
+
+function schemaBlock(name: string) {
+  const match = openApiSource.match(new RegExp(`^    ${name}:\\r?\\n[\\s\\S]*?(?=^    [A-Za-z0-9_-]+:\\s*$)`, "m"));
+  if (!match) throw new Error(`OpenAPI schema ${name} was not found.`);
+  return match[0];
+}
+
+function inlineEnum(name: string) {
+  const match = schemaBlock(name).match(/^\s+enum:\s*\[([^\]]+)\]/m);
+  if (!match) throw new Error(`OpenAPI schema ${name} does not have an inline enum.`);
+  return match[1].split(",").map((value) => value.trim().replace(/^['"]|['"]$/g, ""));
+}
+
+function jsonExamples(name: string) {
+  return [...schemaBlock(name).matchAll(/^\s+- (\{.*\})\s*$/gm)].map((match) => JSON.parse(match[1]) as unknown);
+}
 
 function objectKeys(value: unknown, path = "data"): string[] {
   if (Array.isArray(value)) return value.flatMap((item, index) => objectKeys(item, `${path}[${index}]`));
@@ -20,7 +42,24 @@ function objectKeys(value: unknown, path = "data"): string[] {
 
 describe("OpenAPI/runtime contract", () => {
   it("has exact route parity, resolvable refs, unique IDs, and complete JSON response headers", () => {
-    expect(validateOpenApiContract()).toEqual({ operations: 108, operationIds: 108 });
+    expect(validateOpenApiContract()).toEqual({ operations: 110, operationIds: 110 });
+  });
+
+  it("keeps the OpenAPI TrashType enum aligned with the domain contract", () => {
+    expect(inlineEnum("TrashType")).toEqual([...TRASH_TYPES]);
+  });
+
+  it("documents unambiguous semantic examples for both rich-list node types", () => {
+    const richTextNode = schemaBlock("RichTextNode");
+    const listRefs = [...richTextNode.matchAll(/#\/components\/schemas\/(Rich(?:Bullet|Ordered)?List)/g)].map((match) => match[1]);
+    expect(listRefs).toEqual(["RichList"]);
+
+    expect(schemaBlock("RichList")).toContain("type: { type: string, enum: [bulletList, orderedList] }");
+    const examples = jsonExamples("RichList");
+    expect(examples.map((example) => (example as { type?: unknown }).type)).toEqual(["bulletList", "orderedList"]);
+    for (const example of examples) {
+      expect(richTextDocumentSchema.safeParse({ type: "doc", content: [example] }).success).toBe(true);
+    }
   });
 
   it("matches representative runtime statuses and schemas to response components", async () => {
@@ -33,7 +72,13 @@ describe("OpenAPI/runtime contract", () => {
       responses: { "200": "MetaSuccess" },
     });
     expect(getOpenApiOperationContract("POST /auth/register")?.responses).toMatchObject({
-      "201": "RegisterSuccess", "400": "BadRequest", "409": "Conflict", "429": "RateLimited",
+      "202": "RegisterSuccess", "400": "BadRequest", "429": "RateLimited", "503": "InternalError",
+    });
+    expect(getOpenApiOperationContract("POST /auth/verify-signup-otp")?.responses).toMatchObject({
+      "200": "SignupOtpVerifiedSuccess", "400": "BadRequest", "429": "RateLimited", "503": "InternalError",
+    });
+    expect(getOpenApiOperationContract("POST /auth/resend-signup-otp")?.responses).toMatchObject({
+      "202": "RegisterSuccess", "400": "BadRequest", "429": "RateLimited", "503": "InternalError",
     });
     expect(getOpenApiOperationContract("POST /me/device-tokens")?.responses).toMatchObject({
       "201": "DeviceTokenSuccess", "429": "RateLimited",

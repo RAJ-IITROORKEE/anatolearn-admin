@@ -87,4 +87,15 @@ describe("admin dashboard service", () => {
     expect(mocks.auditLogFindMany.mock.calls[0][0].select).not.toHaveProperty("beforeSnapshot");
     expect(mocks.auditLogFindMany.mock.calls[0][0].select).not.toHaveProperty("afterSnapshot");
   });
+
+  it("excludes trashed feedback from the NEW aggregate and recent activity", async () => {
+    await getAdminDashboard({ days: 30 });
+
+    const summarySql = mocks.queryRaw.mock.calls[0][0].strings.join(" ");
+    expect(summarySql).toMatch(/FROM "Feedback" WHERE "status" = 'NEW'::"FeedbackStatus" AND "trashedAt" IS NULL/);
+    expect(mocks.feedbackFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { trashedAt: null },
+      take: 5,
+    }));
+  });
 });

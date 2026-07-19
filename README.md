@@ -6,7 +6,7 @@ Prisma, and PostgreSQL.
 
 ## Current status
 
-Phases 0-7 are implemented in the repository. All nine migrations are current in the
+Phases 0-7 are implemented in the repository. All twelve migrations are current in the
 configured development database, including the two Phase 7 direct-database-access
 hardening migrations. Production deployment readiness is still externally gated; this
 is not a claim that the product is deployed. The current application includes:
@@ -53,10 +53,11 @@ is not a claim that the product is deployed. The current application includes:
   fallback only in development/test; authentication uses separate client and account keys
 - A seven-block visual lesson editor with validated preview, keyboard/button reordering,
   deletion confirmation, and dirty-navigation protection
-- Recoverable Trash for organ systems, topics, lessons, flashcards, questions, and media:
+- Recoverable Trash for organ systems, topics, lessons, flashcards, questions, feedback,
+  and media:
   DELETE/archive aliases hide items immediately, use a 30-day database-clock retention
-  window, and restore content as unpublished DRAFT. Settings > Trash provides filtered,
-  paginated restore controls.
+  window, and restore publishable content as unpublished DRAFT. Feedback keeps its prior
+  workflow status. Settings > Trash provides filtered, paginated restore controls.
 - Direct image uploads in system, topic, lesson, flashcard, question, and option forms;
   the searchable/paginated Media Library remains the asset-management surface
 - Accessibility, metadata/robots, password visibility, pagination, dialog, table, and
@@ -204,14 +205,15 @@ npm run openapi:validate
 ```
 
 Install Chromium once with `npx playwright install chromium`. The final Phase 7 record is:
-lint, typecheck, and build passed; the default Vitest run passed 129 files (2 skipped),
-412 tests (9 skipped); the isolated `TEST_DATABASE_URL` run passed 2 files/9 tests (four
+Prisma generation, lint, typecheck, the production build, and OpenAPI validation passed.
+The final full Vitest run passed 160 files/600 tests, with 3 files/14 tests skipped. The
+isolated `TEST_DATABASE_URL` run passed 2 files/9 tests (four
 assessment lifecycle and five direct-access cases); Playwright passed 17 and skipped 14.
 Authenticated admin tests did **not** run because `E2E_ADMIN_EMAIL` and
 `E2E_ADMIN_PASSWORD` were absent: the 14 skips comprise auth setup, 12 authenticated
-tests, and one existing intentional skip. OpenAPI has 108 implemented, unique, parity-
-checked operations. The build completed 40 static-generation units under dynamic nonce
-CSP output and included all routes. All nine migrations are current in development,
+tests, and one existing intentional skip. OpenAPI has 110 implemented, unique, parity-
+checked operations. The build completed 44 static-generation units under dynamic nonce
+CSP output and included all routes. All twelve migrations are current in development,
 including `20260714140000_add_trash_audit_actions` and `20260714141000_add_safe_trash`.
 
 `npm audit` reports zero high/critical findings. Two moderate PostCSS findings remain
