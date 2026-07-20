@@ -12,7 +12,7 @@ type MediaPreview = { signedUrl: string; altText: string };
 type ExistingLessonMedia = Record<string, MediaPreview>;
 
 function FormSection({ children, description, title }: { children: React.ReactNode; description?: string; title: string }) {
-  return <section className="grid gap-5 border-b border-border pb-6 last:border-b-0 last:pb-0"><div><h2 className="text-lg font-bold text-foreground">{title}</h2>{description ? <p className="mt-1 text-sm text-muted">{description}</p> : null}</div>{children}</section>;
+  return <section className="grid min-w-0 max-w-full gap-5 border-b border-border pb-6 last:border-b-0 last:pb-0"><div className="min-w-0"><h2 className="text-lg font-bold text-foreground">{title}</h2>{description ? <p className="mt-1 text-sm text-muted">{description}</p> : null}</div>{children}</section>;
 }
 
 export function OrganSystemForm({ action, item, coverMedia, iconMedia }: { action: FormAction; item?: System; coverMedia?: MediaPreview; iconMedia?: MediaPreview }) {

@@ -3,8 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   transaction: vi.fn(),
   adminTopicFindFirst: vi.fn(),
+  adminLessonFindFirst: vi.fn(),
   topicListFindMany: vi.fn(),
   topicListCount: vi.fn(),
+  lessonListFindMany: vi.fn(),
+  lessonListCount: vi.fn(),
   tx: {
     $queryRaw: vi.fn(),
     organSystem: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
@@ -13,9 +16,13 @@ const mocks = vi.hoisted(() => ({
     auditLog: { create: vi.fn() },
   },
 }));
-vi.mock("@/lib/db/prisma", () => ({ prisma: { $transaction: mocks.transaction, topic: { findFirst: mocks.adminTopicFindFirst, findMany: mocks.topicListFindMany, count: mocks.topicListCount } } }));
+vi.mock("@/lib/db/prisma", () => ({ prisma: {
+  $transaction: mocks.transaction,
+  topic: { findFirst: mocks.adminTopicFindFirst, findMany: mocks.topicListFindMany, count: mocks.topicListCount },
+  contentLesson: { findFirst: mocks.adminLessonFindFirst, findMany: mocks.lessonListFindMany, count: mocks.lessonListCount },
+} }));
 
-import { createContent, getAdminTopicBySlugs, listAdmin, reorderContent, updateContent } from "./service";
+import { createContent, getAdminLessonBySlugs, getAdminLessonRouteById, getAdminTopicBySlugs, listAdmin, reorderContent, updateContent } from "./service";
 
 const context = { actorId: crypto.randomUUID(), requestId: crypto.randomUUID() };
 const parentId = crypto.randomUUID();
@@ -135,6 +142,75 @@ describe("canonical admin topic lookup", () => {
     expect(mocks.topicListFindMany).toHaveBeenCalledWith(expect.objectContaining({
       include: { organSystem: { select: { name: true, slug: true } } },
     }));
+  });
+});
+
+describe("canonical admin lesson lookup", () => {
+  const lesson = {
+    id: first,
+    topicId: parentId,
+    title: "Overview",
+    slug: "overview",
+    summary: null,
+    contentBlocks: [],
+    estimatedReadingMinutes: 2,
+    displayOrder: 0,
+    status: "DRAFT" as const,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    topic: { slug: "heart-anatomy", organSystem: { slug: "circulatory" } },
+  };
+
+  beforeEach(() => vi.clearAllMocks());
+
+  it("scopes a lesson slug through both parent slugs and returns canonical route data in one lookup", async () => {
+    mocks.adminLessonFindFirst.mockResolvedValue(lesson);
+
+    await expect(getAdminLessonBySlugs("circulatory", "heart-anatomy", "overview")).resolves.toMatchObject({
+      id: first,
+      organSystemSlug: "circulatory",
+      topicSlug: "heart-anatomy",
+      slug: "overview",
+    });
+    expect(mocks.adminLessonFindFirst).toHaveBeenCalledWith({
+      where: {
+        slug: "overview",
+        trashedAt: null,
+        topic: {
+          slug: "heart-anatomy",
+          trashedAt: null,
+          organSystem: { slug: "circulatory", trashedAt: null },
+        },
+      },
+      include: { topic: { select: { slug: true, organSystem: { select: { slug: true } } } } },
+    });
+  });
+
+  it("resolves a UUID compatibility target with parent route data in one lookup", async () => {
+    mocks.adminLessonFindFirst.mockResolvedValue(lesson);
+
+    await expect(getAdminLessonRouteById(first)).resolves.toMatchObject({
+      id: first,
+      organSystemSlug: "circulatory",
+      topicSlug: "heart-anatomy",
+      slug: "overview",
+    });
+    expect(mocks.adminLessonFindFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: first, trashedAt: null, topic: { trashedAt: null, organSystem: { trashedAt: null } } },
+      include: { topic: { select: { slug: true, organSystem: { select: { slug: true } } } } },
+    }));
+  });
+
+  it("returns parent slugs with lesson-list rows without per-row lookups", async () => {
+    mocks.transaction.mockResolvedValue([[lesson], 1]);
+
+    await expect(listAdmin("contentLesson", { page: 1, pageSize: 20, sortBy: "displayOrder", sortOrder: "asc" })).resolves.toMatchObject({
+      items: [{ id: first, organSystemSlug: "circulatory", topicSlug: "heart-anatomy" }],
+    });
+    expect(mocks.lessonListFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      include: { topic: { select: { slug: true, organSystem: { select: { slug: true } } } } },
+    }));
+    expect(mocks.adminTopicFindFirst).not.toHaveBeenCalled();
   });
 });
 

@@ -1,10 +1,12 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { expect, test, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ push: vi.fn(), success: vi.fn(), error: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }), usePathname: () => "/content/new" }));
+import { beforeEach, expect, test, vi } from "vitest";
+const mocks = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), success: vi.fn(), error: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push, replace: mocks.replace }), usePathname: () => "/content/new" }));
 vi.mock("sonner", () => ({ toast: { success: mocks.success, error: mocks.error } }));
 import { ActionForm, InlineAction } from "./action-form";
+
+beforeEach(() => vi.clearAllMocks());
 
 test("confirmation supports focus, cancel, and confirm without window.confirm", async () => {
   const user = userEvent.setup();
@@ -57,4 +59,20 @@ test("shows success before navigating after a create", async () => {
 
   await waitFor(() => expect(mocks.success).toHaveBeenCalledWith("Organ system created."));
   expect(mocks.push).toHaveBeenCalledWith("/organ-systems/circulatory");
+  expect(mocks.replace).not.toHaveBeenCalled();
+});
+
+test("replaces history for a canonical update redirect", async () => {
+  const user = userEvent.setup();
+  const action = vi.fn().mockResolvedValue({
+    success: "Changes saved.",
+    redirectTo: "/organ-systems/circulatory/topics/cardiac-anatomy",
+    navigationMode: "replace",
+  });
+  render(<ActionForm action={action}><input name="title" /></ActionForm>);
+
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+  await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/organ-systems/circulatory/topics/cardiac-anatomy"));
+  expect(mocks.push).not.toHaveBeenCalled();
 });

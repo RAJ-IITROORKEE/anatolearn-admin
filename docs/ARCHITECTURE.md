@@ -124,7 +124,7 @@ Admin Server Components and REST handlers call the same feature services. Route
 handlers remain responsible for authentication, origin checks, parsing, and
 envelope/status mapping.
 
-### Canonical admin topic navigation
+### Canonical admin topic and lesson navigation
 
 Admin topic editing uses the browser-only canonical route
 `/organ-systems/{systemSlug}/topics/{topicSlug}`. Topic lookup scopes the topic slug to
@@ -133,6 +133,15 @@ create/update server actions redirect to the resulting canonical route. The lega
 `/topics/{id}` admin page remains a compatibility entry point and redirects after UUID
 lookup; `/topics/new` remains outside a specific system so the form can select its
 parent. This does not change the UUID-based `/api/v1/topics/{id}` or admin REST routes.
+
+Lesson slugs are unique only within a topic, so admin lesson editing uses the complete
+browser-only hierarchy
+`/organ-systems/{systemSlug}/topics/{topicSlug}/content/{lessonSlug}`. Admin lesson list
+queries project both parent slugs without N+1 reads, and the canonical lookup scopes all
+three slugs. `/content/{id}` remains a UUID compatibility entry point that redirects to
+the current canonical path. Topic and lesson update navigation replaces the old history
+entry when an editable slug or parent changes; UUID-based REST and learner contracts are
+unchanged.
 
 ## Phase 4 learning-item flows
 
@@ -306,8 +315,14 @@ topics as each metric denominator. A complete topic requires a published active 
 published topic, at least one eligible published lesson and flashcard, and at least one
 eligible active published quiz and test question with a valid option aggregate and
 unarchived media. The DTO states these criteria explicitly. Recent data is bounded to
-five learner registrations, five feedback submissions, and ten audit events; the audit
+five learner registrations, five feedback submissions, and five audit events; the audit
 projection excludes snapshots, email, user agent, and IP hash.
+
+The admin dashboard renders only these database-backed values: an inspectable quiz/test
+attempt trend with an exact-value table, all-time active-learner and submission ratios,
+weighted accuracy, content inventory, and grouped system-readiness bars. Range controls
+affect only the trend. CSS/SVG motion is brief and disabled by the global reduced-motion
+policy; no chart library or synthetic analytics data is used.
 
 ### Learner account management and feedback
 

@@ -83,7 +83,7 @@ describe("admin dashboard service", () => {
     await getAdminDashboard({ days: 30 });
     expect(mocks.profileFindMany).toHaveBeenCalledWith(expect.objectContaining({ take: 5, select: expect.any(Object) }));
     expect(mocks.feedbackFindMany).toHaveBeenCalledWith(expect.objectContaining({ take: 5, select: expect.any(Object) }));
-    expect(mocks.auditLogFindMany).toHaveBeenCalledWith(expect.objectContaining({ take: 10, select: expect.any(Object) }));
+    expect(mocks.auditLogFindMany).toHaveBeenCalledWith(expect.objectContaining({ take: 5, select: expect.any(Object) }));
     expect(mocks.auditLogFindMany.mock.calls[0][0].select).not.toHaveProperty("beforeSnapshot");
     expect(mocks.auditLogFindMany.mock.calls[0][0].select).not.toHaveProperty("afterSnapshot");
   });

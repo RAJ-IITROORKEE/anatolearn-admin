@@ -603,7 +603,7 @@ non-paginated dashboard DTO containing:
 - one gap-filled UTC trend row per selected day with quiz/test submitted-attempt counts;
 - per-system readiness metrics using non-archived topics as denominator and an explicit
   `contentReadinessCriteria` contract;
-- five recent learner registrations, five recent feedback rows, and ten safe recent audit
+- five recent learner registrations, five recent feedback rows, and five safe recent audit
   rows. Recent audit rows contain no snapshots, email, IP hash, or user agent.
 
 The range changes the trend only; counts and accuracy are all-time. `401`, `403`, and
@@ -868,9 +868,11 @@ hash and user agent. Database triggers reject audit-row updates and deletes.
 
 - `/organ-systems`, `/organ-systems/new`, `/organ-systems/[slug]`
 - `/organ-systems/[slug]/topics`, `/organ-systems/[slug]/topics/[topicSlug]`
+- `/organ-systems/[slug]/topics/[topicSlug]/content/[lessonSlug]` (canonical lesson editor)
 - `/topics`, `/topics/new`, `/topics/[id]` (compatibility redirect to the canonical
   organ-system/topic slug route)
-- `/content`, `/content/new`, `/content/[id]`
+- `/content`, `/content/new`, `/content/[id]` (UUID compatibility redirect to the
+  canonical organ-system/topic/lesson slug route)
 - `/media`
 - `/audit-logs`
 - `/flashcards`, `/flashcards/new`, `/flashcards/[id]`
@@ -887,9 +889,12 @@ These are server-protected pages. Lists provide responsive cards, filters, empty
 states, filter-preserving pagination, status badges, pending/success/error feedback,
 safe generic handling for unexpected server-action failures, and confirmation
 before archive actions. Media provides upload, signed preview, alt-text edit, and
-archive controls. The lesson form provides visual controls for all seven validated block
-types, side-by-side learner preview, copy/up/down/Alt+Arrow reorder, content-aware delete
-confirmation, and unsaved-navigation protection. UI error handling is supplied by the protected segment error boundary and
+archive controls. The lesson form provides one strict TipTap document surface, a
+viewport-sticky horizontally scrollable formatting toolbar, allowlisted named text and
+highlight color swatches, managed image upload/drop, an emphasized learner-preview
+dialog, and unsaved-navigation protection. Create actions for systems, topics, lessons,
+flashcards, and quiz/test questions return to their parent lists for rapid entry; topic
+and lesson updates replace history when their canonical path changes. UI error handling is supplied by the protected segment error boundary and
 loading boundaries. Phase 4 adds flashcard grid/list views, filters, bulk lifecycle,
 front/back preview, separate text-and-color quiz/test lists, dynamic 2-6 answer option
 editing, correct-answer selection, question preview, activity, duplicate, and lifecycle
@@ -903,7 +908,9 @@ loading/empty/error/success/pending states; confirmation for account, feedback, 
 campaign transitions; provider-disabled messaging; notification preview/evidence; and a
 dirty-navigation/before-unload guard on notification editors. The user page combines
 safe management/device counts with existing submitted-attempt and progress reporting.
-Phase 7 also hardens password visibility controls, focus/dialog semantics, pagination,
+The dashboard uses real counts and ratios, an inspectable quiz/test trend with an exact
+table fallback, grouped readiness bars, and five-row recent learner/feedback/audit panels;
+the audit footer routes to `/audit-logs`. Phase 7 also hardens password visibility controls, focus/dialog semantics, pagination,
 table labels, breadcrumbs, responsive overflow, noindex metadata, and robots behavior.
 
 ## Externally unverified delivery gates

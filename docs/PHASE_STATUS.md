@@ -157,7 +157,30 @@ cron, and production deployment acceptance remain external gates.
   content validation unresolved and no upload compensation occurred. Final affected run
   passed 7 files/47 tests. `npm run typecheck`, full `npm run lint`, and
   `git diff --check` passed; `npm run openapi:validate` passed with 110 unique operations.
-  A full Vitest run and production build were not run for this focused review fix.
+
+### Canonical lesson and dashboard UX follow-up (2026-07-20)
+
+- Added the collision-safe canonical lesson editor route
+  `/organ-systems/{systemSlug}/topics/{topicSlug}/content/{lessonSlug}`. Lesson list reads
+  include parent slugs without N+1 queries, `/content/{id}` now redirects by UUID for
+  compatibility, and topic/lesson slug-changing updates replace the stale history entry.
+- Organ-system, global/scoped topic, lesson, flashcard, quiz-question, and test-question
+  creates now return to their parent lists for rapid entry. Scoped topic creation resolves
+  and enforces its parent system server-side and compensates any completed upload when that
+  parent is unavailable.
+- Replaced raw hex color selectors with accessible named swatch menus for strict allowlisted
+  text and highlight colors. Only the horizontally scrollable tools row is sticky beneath
+  the admin header; Preview now uses the primary action treatment.
+- Reorganized the dashboard around real all-time ratios, weighted accuracy, content
+  inventory, inspectable quiz/test attempt trends, and grouped system-readiness bars. The
+  exact-value table remains available, pointer and keyboard inspection are supported, and
+  reduced-motion preferences disable the short chart/bar animation.
+- Recent learners, feedback, and admin activity are each bounded to five polished rows.
+  Feedback opens its detail route; audit items pass entity type and ID filters, and `Show
+  all recent activities` opens `/audit-logs`.
+- Final verification passed: lint, typecheck, 164 Vitest files/636 tests (3 files/14 tests
+  conditionally skipped), OpenAPI validation with 110 unique operations, Prisma generation,
+  the 44-unit production build including the canonical lesson route, and `git diff --check`.
 
 Production MVP verification confirmed the canonical demo set is learner-visible through
 bearer-authenticated APIs: 11 systems, 2 circulatory topics, 1 lesson, 4 flashcards across

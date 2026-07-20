@@ -4,12 +4,18 @@ const text = (max: number) => z.string().trim().min(1).max(max);
 const optionalText = (max: number) => z.string().trim().max(max).nullable().optional();
 const slug = z.string().trim().min(1).max(100).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
 const uuid = z.string().uuid();
+export const slugParamSchema = slug;
+export const adminLessonSlugParamsSchema = z.object({
+  slug,
+  topicSlug: slug,
+  lessonSlug: slug,
+}).strict();
 const blockId = text(100).optional();
 export const publishStatusSchema = z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]);
 
 export const richTextFontSizes = ["12px", "14px", "16px", "18px", "20px", "24px"] as const;
-export const richTextColors = ["#0F172A", "#334155", "#2563EB", "#7C3AED", "#DC2626", "#16A34A"] as const;
-export const richTextHighlights = ["#DBEAFE", "#EDE9FE", "#FEF3C7", "#DCFCE7", "#FEE2E2"] as const;
+export const richTextColors = ["#0F172A", "#334155", "#2563EB", "#7C3AED", "#DC2626", "#C2410C", "#A16207", "#16A34A", "#0F766E", "#BE185D"] as const;
+export const richTextHighlights = ["#F1F5F9", "#DBEAFE", "#EDE9FE", "#FEE2E2", "#FFEDD5", "#FEF3C7", "#DCFCE7", "#CCFBF1", "#FCE7F3"] as const;
 
 export const contentBlockSchema = z.discriminatedUnion("type", [
   z.object({ id: blockId, type: z.literal("heading"), level: z.union([z.literal(2), z.literal(3), z.literal(4)]), text: text(200) }).strict(),

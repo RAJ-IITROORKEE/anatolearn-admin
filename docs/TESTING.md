@@ -51,12 +51,19 @@ Install Chromium once with `npx playwright install chromium`.
 - raw HTML and malformed image blocks are rejected
 - rich lesson documents enforce allowlisted nodes/marks/attributes, bounded depth/node/
   text limits, exact generated legacy fallbacks, and managed-media extraction
+- rich text color and highlight enums stay synchronized with OpenAPI, and arbitrary color
+  values remain rejected
 - black-box admin lesson POST/PATCH coverage resolves stable rich `uploadId` multipart
   files, strips pending IDs, regenerates untrusted fallback data, and dispatches only
   validated managed-media UUIDs
 - page-size cap and unique reorder IDs
 - draft/published transitions and recoverable Trash behavior
 - published-state invariant validation for systems, topics, and lessons
+- collision-safe canonical lesson lookup across system/topic/lesson slugs, canonical list
+  links, UUID compatibility redirects, and operational-error propagation
+- parent-list create redirects for systems, global/scoped topics, lessons, flashcards, and
+  quiz/test questions; scoped topic creation overrides submitted parents and compensates
+  uploads when the server-resolved parent is unavailable
 
 ### Media and audit
 
@@ -81,6 +88,8 @@ Install Chromium once with `npx playwright install chromium`.
 - seven-block lesson editing, validated preview, copy/reorder/confirmation/dirty guard
 - continuous lesson-canvas rendering, accessible dialog preview, image insertion/drop
   between blocks, pending local-image preview, and independent object-URL cleanup
+- accessible named text/highlight swatch menus, strict persisted marks, a single-row sticky
+  formatting toolbar, emphasized Preview, and replace-versus-push navigation semantics
 - direct image inputs, local previews, existing-media retention/clear controls, and
   indexed lesson/question upload fields, including compact preview mode
 - password visibility without field replacement/value loss; dialog focus, table labels,
@@ -155,6 +164,8 @@ Install Chromium once with `npx playwright install chromium`.
 
 - strict 7/30/90 dashboard query parsing, weighted metrics, gap-filled UTC trends,
   content-readiness calculations, recent-item bounds, and admin route authorization
+- pointer and keyboard trend inspection, exact-value table fallback, zero-data behavior,
+  five-row activity bounds, safe feedback detail links, and audit entity filtering
 - learner-only user filters/DTOs, safe detail activity, row-locked activate/deactivate,
   no-op behavior, history preservation, device-token shutdown, pending-delivery
   cancellation, redacted audits, responsive list/detail controls, and confirmations

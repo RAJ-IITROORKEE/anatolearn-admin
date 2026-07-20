@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { attemptDetailDto } from "@/features/assessments/dto";
 import { organSystemDto } from "@/features/content/dto";
-import { richTextDocumentSchema } from "@/features/content/schemas";
+import { richTextColors, richTextDocumentSchema, richTextHighlights } from "@/features/content/schemas";
 import { learnerFeedbackDto } from "@/features/feedback/dto";
 import { flashcardDto } from "@/features/flashcards/dto";
 import { deliveryDto, deviceTokenDto, learnerNotificationDto } from "@/features/notifications/dto";
@@ -30,6 +30,16 @@ function inlineEnum(name: string) {
   return match[1].split(",").map((value) => value.trim().replace(/^['"]|['"]$/g, ""));
 }
 
+function richMarkColorEnum(markType: "highlight" | "textStyle") {
+  const source = schemaBlock("RichTextMark");
+  const marker = `const: ${markType}`;
+  const start = source.indexOf(marker);
+  if (start < 0) throw new Error(`OpenAPI rich-text mark ${markType} was not found.`);
+  const match = source.slice(start).match(/color:\s*\{\s*type:\s*string,\s*enum:\s*\[([^\]]+)\]/);
+  if (!match) throw new Error(`OpenAPI rich-text mark ${markType} does not have a color enum.`);
+  return match[1].split(",").map((value) => value.trim().replace(/^['"]|['"]$/g, ""));
+}
+
 function jsonExamples(name: string) {
   return [...schemaBlock(name).matchAll(/^\s+- (\{.*\})\s*$/gm)].map((match) => JSON.parse(match[1]) as unknown);
 }
@@ -47,6 +57,15 @@ describe("OpenAPI/runtime contract", () => {
 
   it("keeps the OpenAPI TrashType enum aligned with the domain contract", () => {
     expect(inlineEnum("TrashType")).toEqual([...TRASH_TYPES]);
+  });
+
+  it("keeps rich-text color and highlight enums aligned with runtime validation", () => {
+    const colors = richMarkColorEnum("textStyle");
+    const highlights = richMarkColorEnum("highlight");
+    expect(colors).toHaveLength(richTextColors.length);
+    expect(highlights).toHaveLength(richTextHighlights.length);
+    expect(new Set(colors)).toEqual(new Set(richTextColors));
+    expect(new Set(highlights)).toEqual(new Set(richTextHighlights));
   });
 
   it("documents unambiguous semantic examples for both rich-list node types", () => {

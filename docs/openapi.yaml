@@ -2154,7 +2154,7 @@ components:
               testQuestions: { $ref: '#/components/schemas/ProgressMetric' }
         recentRegistrations: { type: array, maxItems: 5, items: { $ref: '#/components/schemas/RecentRegistration' } }
         recentFeedback: { type: array, maxItems: 5, items: { $ref: '#/components/schemas/RecentFeedback' } }
-        recentAudit: { type: array, maxItems: 10, items: { $ref: '#/components/schemas/RecentAudit' }, description: "Redacted projection without snapshots, email, IP hash, or user agent." }
+        recentAudit: { type: array, maxItems: 5, items: { $ref: '#/components/schemas/RecentAudit' }, description: "Redacted projection without snapshots, email, IP hash, or user agent." }
     RecentRegistration:
       type: object
       additionalProperties: false
@@ -2790,7 +2790,7 @@ components:
               type: object
               additionalProperties: false
               required: [color]
-              properties: { color: { type: string, enum: ['#DBEAFE', '#EDE9FE', '#FEF3C7', '#DCFCE7', '#FEE2E2'] } }
+              properties: { color: { type: string, enum: ['#F1F5F9', '#DBEAFE', '#EDE9FE', '#FEE2E2', '#FFEDD5', '#FEF3C7', '#DCFCE7', '#CCFBF1', '#FCE7F3'] } }
         - type: object
           additionalProperties: false
           required: [type, attrs]
@@ -2802,7 +2802,7 @@ components:
               minProperties: 1
               properties:
                 fontSize: { type: string, enum: [12px, 14px, 16px, 18px, 20px, 24px] }
-                color: { type: string, enum: ['#0F172A', '#334155', '#2563EB', '#7C3AED', '#DC2626', '#16A34A'] }
+                color: { type: string, enum: ['#0F172A', '#334155', '#2563EB', '#7C3AED', '#DC2626', '#C2410C', '#A16207', '#16A34A', '#0F766E', '#BE185D'] }
     RichBlockAttrs:
       type: object
       additionalProperties: false

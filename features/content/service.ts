@@ -10,6 +10,18 @@ type Resource = "organSystem" | "topic" | "contentLesson";
 type ListInput = { page: number; pageSize: number; q?: string; status?: PublishStatus; organSystemId?: string; topicId?: string; sortBy: string; sortOrder: "asc" | "desc" };
 type MutationContext = { actorId: string; requestId: string; userAgent?: string | null };
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+const lessonRouteInclude = {
+  topic: { select: { slug: true, organSystem: { select: { slug: true } } } },
+} satisfies Prisma.ContentLessonInclude;
+type LessonWithRoute = Prisma.ContentLessonGetPayload<{ include: typeof lessonRouteInclude }>;
+
+function lessonWithRouteDto(row: LessonWithRoute) {
+  return {
+    ...lessonDto(row, true),
+    topicSlug: row.topic.slug,
+    organSystemSlug: row.topic.organSystem.slug,
+  };
+}
 
 function lessonImageIds(value: unknown) {
   return lessonMediaIds(value);
@@ -89,8 +101,8 @@ export async function listAdmin(resource: Resource, input: ListInput) {
   const sortBy = input.sortBy === "name" ? "title" : input.sortBy === "title" || input.sortBy === "createdAt" || input.sortBy === "updatedAt" ? input.sortBy : "displayOrder";
   const orderBy: Prisma.ContentLessonOrderByWithRelationInput[] = [{ [sortBy]: input.sortOrder }, { id: input.sortOrder }];
   const where: Prisma.ContentLessonWhereInput = { trashedAt: null, topic: { trashedAt: null, organSystem: { trashedAt: null } }, status: input.status, topicId: input.topicId, ...(input.q ? { OR: [{ title: { contains: input.q, mode: "insensitive" } }, { summary: { contains: input.q, mode: "insensitive" } }] } : {}) };
-  const [rows, total] = await prisma.$transaction([prisma.contentLesson.findMany({ where, skip, take: input.pageSize, orderBy }), prisma.contentLesson.count({ where })]);
-  return { items: rows.map((row) => lessonDto(row, true)), pagination: pagination(total, input) };
+  const [rows, total] = await prisma.$transaction([prisma.contentLesson.findMany({ where, skip, take: input.pageSize, orderBy, include: lessonRouteInclude }), prisma.contentLesson.count({ where })]);
+  return { items: rows.map(lessonWithRouteDto), pagination: pagination(total, input) };
 }
 
 export async function getAdmin(resource: Resource, id: string) {
@@ -117,10 +129,37 @@ export async function getAdminTopicBySlugs(systemSlug: string, topicSlug: string
   return topicDto(row, true);
 }
 
+export async function getAdminLessonBySlugs(systemSlug: string, topicSlug: string, lessonSlug: string) {
+  const row = await prisma.contentLesson.findFirst({
+    where: {
+      slug: lessonSlug,
+      trashedAt: null,
+      topic: {
+        slug: topicSlug,
+        trashedAt: null,
+        organSystem: { slug: systemSlug, trashedAt: null },
+      },
+    },
+    include: lessonRouteInclude,
+  });
+  if (!row) throw new ContentError("NOT_FOUND", "Lesson was not found.", 404);
+  return lessonWithRouteDto(row);
+}
+
+export async function getAdminLessonRouteById(id: string) {
+  const row = await prisma.contentLesson.findFirst({
+    where: { id, trashedAt: null, topic: { trashedAt: null, organSystem: { trashedAt: null } } },
+    include: lessonRouteInclude,
+  });
+  if (!row) throw new ContentError("NOT_FOUND", "Lesson was not found.", 404);
+  return lessonWithRouteDto(row);
+}
+
 export async function createContent(resource: Resource, input: Record<string, unknown>, context: MutationContext) {
   return prisma.$transaction(async (tx) => {
     let row: unknown;
     let organSystemSlug: string | undefined;
+    let topicSlug: string | undefined;
     if (resource === "organSystem") {
       await validateMedia(tx, [input.coverMediaId as string, input.iconMediaId as string]);
       const data = { ...input, slug: await uniqueOrganSystemSlug(tx, input.name as string, input.slug as string | undefined) };
@@ -133,12 +172,19 @@ export async function createContent(resource: Resource, input: Record<string, un
       row = await tx.topic.create({ data: input as Prisma.TopicUncheckedCreateInput });
     } else {
       await lockAvailableParent(tx, "topic", input.topicId as string);
+      const parent = await tx.topic.findFirst({
+        where: { id: input.topicId as string, trashedAt: null, organSystem: { trashedAt: null } },
+        select: { slug: true, organSystem: { select: { slug: true } } },
+      });
+      if (!parent) throw new ContentError("PARENT_NOT_FOUND", "Topic was not found.", 422);
+      topicSlug = parent.slug;
+      organSystemSlug = parent.organSystem.slug;
       await validateMedia(tx, lessonImageIds(input.contentBlocks));
       row = await tx.contentLesson.create({ data: { ...input, contentBlocks: json(input.contentBlocks) } as Prisma.ContentLessonUncheckedCreateInput });
     }
     const id = (row as { id: string }).id;
     await audit(tx, context, "CREATE", resource, id, null, row);
-    return resource === "organSystem" ? organSystemDto(row as never, true) : resource === "topic" ? { ...topicDto(row as never, true), organSystemSlug: organSystemSlug! } : lessonDto(row as never, true);
+    return resource === "organSystem" ? organSystemDto(row as never, true) : resource === "topic" ? { ...topicDto(row as never, true), organSystemSlug: organSystemSlug! } : { ...lessonDto(row as never, true), organSystemSlug: organSystemSlug!, topicSlug: topicSlug! };
   });
 }
 
@@ -149,6 +195,7 @@ export async function updateContent(resource: Resource, id: string, input: Recor
     if (!before) throw new ContentError("NOT_FOUND", "Content was not found.", 404);
     const data = { ...input };
     let organSystemSlug: string | undefined;
+    let topicSlug: string | undefined;
     if (resource === "organSystem") {
       const organSystem = before as Prisma.OrganSystemGetPayload<Record<string, never>>;
       const candidate = { ...organSystem, ...data };
@@ -169,8 +216,10 @@ export async function updateContent(resource: Resource, id: string, input: Recor
       const lesson = before as Prisma.ContentLessonGetPayload<Record<string, never>>;
       const candidate = { ...lesson, ...data };
       await lockAvailableParent(tx, "topic", candidate.topicId as string);
-      const parent = await tx.topic.findFirst({ where: { id: candidate.topicId as string, trashedAt: null, organSystem: { trashedAt: null } }, select: { status: true, organSystem: { select: { status: true, isActive: true } } } });
+      const parent = await tx.topic.findFirst({ where: { id: candidate.topicId as string, trashedAt: null, organSystem: { trashedAt: null } }, select: { slug: true, status: true, organSystem: { select: { slug: true, status: true, isActive: true } } } });
       if (!parent) throw new ContentError("PARENT_NOT_FOUND", "Topic was not found.", 422);
+      topicSlug = parent.slug;
+      organSystemSlug = parent.organSystem.slug;
       const blocks = readLessonContent(candidate.contentBlocks).contentBlocks;
       await validateMedia(tx, lessonImageIds(candidate.contentBlocks));
       assertPublishedContentValid({ resource, status: candidate.status, contentBlocks: blocks, topicStatus: parent.status, organSystemStatus: parent.organSystem.status, organSystemIsActive: parent.organSystem.isActive });
@@ -178,7 +227,7 @@ export async function updateContent(resource: Resource, id: string, input: Recor
     }
     const after = resource === "organSystem" ? await tx.organSystem.update({ where: { id }, data }) : resource === "topic" ? await tx.topic.update({ where: { id }, data }) : await tx.contentLesson.update({ where: { id }, data });
     await audit(tx, context, "UPDATE", resource, id, before, after);
-    return resource === "organSystem" ? organSystemDto(after as never, true) : resource === "topic" ? { ...topicDto(after as never, true), organSystemSlug: organSystemSlug! } : lessonDto(after as never, true);
+    return resource === "organSystem" ? organSystemDto(after as never, true) : resource === "topic" ? { ...topicDto(after as never, true), organSystemSlug: organSystemSlug! } : { ...lessonDto(after as never, true), organSystemSlug: organSystemSlug!, topicSlug: topicSlug! };
   });
 }
 

@@ -3,6 +3,7 @@
 /* eslint-disable @next/next/no-img-element -- Local blobs and short-lived private signed URLs are not optimizer sources. */
 
 import * as Dialog from "@radix-ui/react-dialog";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import Color from "@tiptap/extension-color";
 import Highlight from "@tiptap/extension-highlight";
 import Image from "@tiptap/extension-image";
@@ -13,7 +14,7 @@ import Underline from "@tiptap/extension-underline";
 import { EditorContent, Extension, type JSONContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import {
-  AlignCenter, AlignLeft, AlignRight, Bold, Eye, Highlighter, ImagePlus, Italic, Link2,
+  AlignCenter, AlignLeft, AlignRight, Bold, ChevronDown, Eye, Highlighter, ImagePlus, Italic, Link2,
   List, ListOrdered, Quote, Redo2, RemoveFormatting, Strikethrough, UnderlineIcon, Undo2, X,
 } from "lucide-react";
 import { type CSSProperties, type DragEvent, type ReactNode, useEffect, useRef, useState } from "react";
@@ -29,6 +30,7 @@ import {
   type RichTextDocument,
   type RichTextNode,
 } from "@/features/content/schemas";
+import { Button } from "@/components/ui/button";
 
 type ExistingMedia = Record<string, { signedUrl: string; altText: string }>;
 type PendingMedia = { file: File; name: string; url: string };
@@ -36,6 +38,29 @@ type PendingMediaMap = Map<string, PendingMedia>;
 type RichTextDraftDocument = ReturnType<typeof richTextDraftDocumentSchema.parse>;
 
 const acceptedImageTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
+const textColorOptions = [
+  { name: "Strong text", color: "#0F172A" },
+  { name: "Slate", color: "#334155" },
+  { name: "Blue", color: "#2563EB" },
+  { name: "Purple", color: "#7C3AED" },
+  { name: "Red", color: "#DC2626" },
+  { name: "Orange", color: "#C2410C" },
+  { name: "Amber", color: "#A16207" },
+  { name: "Green", color: "#16A34A" },
+  { name: "Teal", color: "#0F766E" },
+  { name: "Pink", color: "#BE185D" },
+] as const satisfies ReadonlyArray<{ name: string; color: (typeof richTextColors)[number] }>;
+const highlightColorOptions = [
+  { name: "Neutral", color: "#F1F5F9" },
+  { name: "Blue", color: "#DBEAFE" },
+  { name: "Purple", color: "#EDE9FE" },
+  { name: "Red", color: "#FEE2E2" },
+  { name: "Orange", color: "#FFEDD5" },
+  { name: "Amber", color: "#FEF3C7" },
+  { name: "Green", color: "#DCFCE7" },
+  { name: "Teal", color: "#CCFBF1" },
+  { name: "Pink", color: "#FCE7F3" },
+] as const satisfies ReadonlyArray<{ name: string; color: (typeof richTextHighlights)[number] }>;
 
 const LegacyMetadata = Extension.create({
   name: "legacyMetadata",
@@ -169,6 +194,35 @@ function ToolbarButton({ active = false, disabled = false, label, onClick, child
   return <button aria-label={label} aria-pressed={active} className={`inline-flex size-10 items-center justify-center rounded-lg border text-sm transition focus:outline-none focus:ring-2 focus:ring-primary ${active ? "border-primary bg-primary-soft text-primary" : "border-border bg-surface text-body hover:border-primary/40"}`} disabled={disabled} onClick={onClick} title={label} type="button">{children}</button>;
 }
 
+function ColorMenu({ activeColor, choices, clearLabel, icon, label, onSelect }: {
+  activeColor?: string;
+  choices: ReadonlyArray<{ name: string; color: string }>;
+  clearLabel: string;
+  icon: ReactNode;
+  label: string;
+  onSelect: (color: string | null) => void;
+}) {
+  const activeChoice = choices.find((choice) => choice.color === activeColor);
+  return <DropdownMenu.Root>
+    <DropdownMenu.Trigger aria-label={label} className="inline-flex h-10 items-center gap-2 rounded-lg border border-border bg-surface px-2.5 text-sm font-medium text-body hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" type="button">
+      {icon}<span>{activeChoice?.name ?? label}</span><ChevronDown aria-hidden className="size-3.5 text-muted" />
+    </DropdownMenu.Trigger>
+    <DropdownMenu.Portal>
+      <DropdownMenu.Content align="start" aria-label={`${label} choices`} className="z-50 max-h-[min(24rem,var(--radix-dropdown-menu-content-available-height))] min-w-48 overflow-y-auto rounded-xl border border-border bg-surface p-1.5 shadow-lg" sideOffset={6}>
+        <DropdownMenu.Label className="px-2 py-1.5 text-xs font-semibold text-muted">{label}</DropdownMenu.Label>
+        <DropdownMenu.Item aria-label={clearLabel} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-sm outline-none data-[highlighted]:bg-subtle" onSelect={() => onSelect(null)}>
+          <span aria-hidden className="grid size-5 place-items-center rounded-full border border-border bg-surface text-muted"><X className="size-3" /></span>{clearLabel}
+        </DropdownMenu.Item>
+        <DropdownMenu.Separator className="my-1 h-px bg-border" />
+        {choices.map((choice) => <DropdownMenu.Item aria-label={choice.name} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-sm outline-none data-[highlighted]:bg-subtle" key={choice.color} onSelect={() => onSelect(choice.color)}>
+          <span aria-hidden className="size-5 rounded-full border border-slate-300 shadow-sm" data-color-swatch style={{ backgroundColor: choice.color }} />
+          <span>{choice.name}</span>
+        </DropdownMenu.Item>)}
+      </DropdownMenu.Content>
+    </DropdownMenu.Portal>
+  </DropdownMenu.Root>;
+}
+
 function RichToolbar({ editor, onImage }: { editor: NonNullable<ReturnType<typeof useEditor>>; onImage: () => void }) {
   const chain = () => editor.chain().focus(undefined, { scrollIntoView: false });
   const setLink = () => {
@@ -178,7 +232,7 @@ function RichToolbar({ editor, onImage }: { editor: NonNullable<ReturnType<typeo
     if (!href.trim()) editor.chain().focus(undefined, { scrollIntoView: false }).unsetLink().run();
     else editor.chain().focus(undefined, { scrollIntoView: false }).setLink({ href: href.trim() }).run();
   };
-  return <div aria-label="Rich text formatting" className="flex flex-wrap gap-2 border-b border-border bg-subtle p-3" role="toolbar">
+  return <div aria-label="Rich text formatting" className="app-scrollbar sticky top-16 z-20 flex min-w-0 max-w-full flex-nowrap gap-2 overflow-x-auto rounded-t-2xl border-b border-border bg-subtle p-3 [&>*]:shrink-0" role="toolbar">
     <ToolbarButton active={editor.isActive("paragraph")} label="Paragraph" onClick={() => chain().setParagraph().run()}>P</ToolbarButton>
     {([2, 3, 4] as const).map((level) => <ToolbarButton active={editor.isActive("heading", { level })} key={level} label={`Heading ${level}`} onClick={() => chain().toggleHeading({ level }).run()}>H{level}</ToolbarButton>)}
     <span aria-hidden className="mx-1 w-px bg-border" />
@@ -189,8 +243,8 @@ function RichToolbar({ editor, onImage }: { editor: NonNullable<ReturnType<typeo
     <select aria-label="Font size" className="h-10 rounded-lg border border-border bg-surface px-2 text-sm" defaultValue="" onChange={(event) => { if (event.target.value) chain().setFontSize(event.target.value).run(); else chain().unsetFontSize().run(); }}>
       <option value="">Size</option>{richTextFontSizes.map((size) => <option key={size} value={size}>{size.replace("px", "")}</option>)}
     </select>
-    <label className="relative inline-flex h-10 items-center gap-1 rounded-lg border border-border bg-surface px-2 text-sm"><span className="sr-only">Text color</span><span aria-hidden>A</span><select aria-label="Text color" className="absolute inset-0 cursor-pointer opacity-0" defaultValue="" onChange={(event) => { if (event.target.value) chain().setColor(event.target.value).run(); else chain().unsetColor().run(); }}><option value="">Default</option>{richTextColors.map((color) => <option key={color} value={color}>{color}</option>)}</select></label>
-    <label className="relative inline-flex h-10 items-center gap-1 rounded-lg border border-border bg-surface px-2 text-sm"><Highlighter aria-hidden className="size-4" /><select aria-label="Highlight color" className="absolute inset-0 cursor-pointer opacity-0" defaultValue="" onChange={(event) => { if (event.target.value) chain().setHighlight({ color: event.target.value }).run(); else chain().unsetHighlight().run(); }}><option value="">None</option>{richTextHighlights.map((color) => <option key={color} value={color}>{color}</option>)}</select></label>
+    <ColorMenu activeColor={editor.getAttributes("textStyle").color as string | undefined} choices={textColorOptions} clearLabel="Default text" icon={<span aria-hidden className="font-bold">A</span>} label="Text color" onSelect={(color) => { if (color) chain().setColor(color).run(); else chain().unsetColor().run(); }} />
+    <ColorMenu activeColor={editor.getAttributes("highlight").color as string | undefined} choices={highlightColorOptions} clearLabel="No highlight" icon={<Highlighter aria-hidden className="size-4" />} label="Highlight color" onSelect={(color) => { if (color) chain().setHighlight({ color }).run(); else chain().unsetHighlight().run(); }} />
     <span aria-hidden className="mx-1 w-px bg-border" />
     <ToolbarButton active={editor.isActive({ textAlign: "left" })} label="Align left" onClick={() => chain().setTextAlign("left").run()}><AlignLeft className="size-4" /></ToolbarButton>
     <ToolbarButton active={editor.isActive({ textAlign: "center" })} label="Align center" onClick={() => chain().setTextAlign("center").run()}><AlignCenter className="size-4" /></ToolbarButton>
@@ -339,13 +393,13 @@ export function LessonEditor({ initialBlocks, initialRichContent, existingMedia 
     if (node.content) nodes.push(...node.content);
   }
 
-  return <div className="grid gap-4">
+  return <div className="grid min-w-0 max-w-full gap-4">
     <input data-form-dirty name="contentBlocks" ref={serializedRef} type="hidden" value={serialized} />
     {[...pendingMedia.entries()].filter(([uploadId]) => activeUploadIds.has(uploadId)).map(([uploadId, media]) => <input accept="image/png,image/jpeg,image/webp" className="sr-only" key={uploadId} name={`lessonFile.${uploadId}`} ref={(input) => assignPendingFile(input, media.file)} tabIndex={-1} type="file" />)}
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div><h3 className="text-lg font-bold text-foreground">Lesson content</h3><p className="mt-1 text-sm text-muted">Write and format one continuous learner page. Images remain private managed assets.</p></div>
+      <div className="min-w-0"><h3 className="text-lg font-bold text-foreground">Lesson content</h3><p className="mt-1 text-sm text-muted">Write and format one continuous learner page. Images remain private managed assets.</p></div>
       <Dialog.Root>
-        <Dialog.Trigger asChild><button className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-foreground hover:border-primary/40" type="button"><Eye aria-hidden className="size-4" />Preview</button></Dialog.Trigger>
+        <Dialog.Trigger asChild><Button className="min-h-11" type="button"><Eye aria-hidden className="size-4" />Preview</Button></Dialog.Trigger>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-[2px] data-[state=closed]:opacity-0" />
           <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-border bg-surface p-5 shadow-xl focus:outline-none sm:p-8">
@@ -358,10 +412,10 @@ export function LessonEditor({ initialBlocks, initialRichContent, existingMedia 
       </Dialog.Root>
     </div>
     {editorError ? <p className="rounded-xl border border-destructive/30 bg-destructive-soft p-4 text-sm font-semibold text-destructive" role="alert">{editorError} Shorten or simplify the lesson before saving.</p> : null}
-    <section aria-label="Lesson rich text editor" className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+    <section aria-label="Lesson rich text editor" className="min-w-0 max-w-full rounded-2xl border border-border bg-surface shadow-sm">
       {editor ? <RichToolbar editor={editor} onImage={() => pickerRef.current?.click()} /> : <div className="border-b border-border bg-subtle p-3 text-sm text-muted">Loading editor...</div>}
       <input accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) insertImage(file); event.target.value = ""; }} ref={pickerRef} tabIndex={-1} type="file" />
-      <div onDragOverCapture={(event) => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); }} onDropCapture={dropImage}><EditorContent editor={editor} /></div>
+      <div className="min-w-0 max-w-full overflow-x-auto" onDragOverCapture={(event) => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); }} onDropCapture={dropImage}><EditorContent editor={editor} /></div>
     </section>
     {selectedImage && editor ? <div className="grid gap-3 rounded-xl border border-border bg-subtle p-4 sm:grid-cols-2">
       <label className="grid gap-2 text-sm font-semibold">Image alt text <span className="font-normal text-muted">Optional</span><input className="min-h-11 rounded-xl border border-border bg-surface px-3" maxLength={300} onChange={(event) => editor.chain().focus(undefined, { scrollIntoView: false }).updateAttributes("image", { alt: event.target.value }).run()} value={String(selectedImage.alt ?? "")} /></label>

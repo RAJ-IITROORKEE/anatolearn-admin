@@ -55,9 +55,9 @@ export async function createFlashcardAction(_state: ActionState, data: FormData)
   try {
     const ctx = await context(); uploadContext = directUploadContext(ctx.actorId, ctx.requestId); const parsed = flashcardCreateSchema.safeParse(await flashcardInput(data, uploadContext));
     if (!parsed.success) { await cleanupDirectUploads(uploadContext); return { error: parsed.error.issues[0]?.message ?? "Check the flashcard fields." }; }
-    const created = await createFlashcard(parsed.data, ctx);
+    await createFlashcard(parsed.data, ctx);
     revalidatePath("/flashcards");
-    return { success: "Flashcard created.", redirectTo: `/flashcards/${created.id}` };
+    return { success: "Flashcard created.", redirectTo: "/flashcards" };
   } catch (error) {
     if (uploadContext) await cleanupDirectUploads(uploadContext); return phase4ActionError(error, { requestId: uploadContext?.requestId, route: "/admin/flashcards/create" });
   }
@@ -102,9 +102,9 @@ export async function createQuestionAction(_state: ActionState, data: FormData):
   try {
     const ctx = await context(); uploadContext = directUploadContext(ctx.actorId, ctx.requestId); const parsed = questionCreateSchema.safeParse(await questionInput(data, uploadContext));
     if (!parsed.success) { await cleanupDirectUploads(uploadContext); return { error: parsed.error.issues[0]?.message ?? "Check the question fields." }; }
-    const created = await createQuestion(parsed.data, ctx);
+    await createQuestion(parsed.data, ctx);
     revalidatePath(`/questions/${parsed.data.assessmentType.toLowerCase()}`);
-    return { success: "Question created.", redirectTo: `/questions/${created.id}` };
+    return { success: "Question created.", redirectTo: `/questions/${parsed.data.assessmentType.toLowerCase()}` };
   } catch (error) {
     if (uploadContext) await cleanupDirectUploads(uploadContext); return phase4ActionError(error, { requestId: uploadContext?.requestId, route: "/admin/questions/create" });
   }

@@ -103,6 +103,23 @@ a:focus-visible {
   background-clip: padding-box;
 }
 
+@keyframes dashboard-trend-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .dashboard-trend-series {
+    animation: dashboard-trend-reveal 420ms ease-out both;
+  }
+
+  .dashboard-bar-fill {
+    transition: width 180ms ease-out;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

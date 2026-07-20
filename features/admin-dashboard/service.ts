@@ -161,7 +161,7 @@ export async function getAdminDashboard(input: AdminDashboardQuery): Promise<Adm
           actor: { select: { id: true, fullName: true } },
         },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take: 10,
+        take: 5,
       }),
     ]);
     return { summary: summaryRows[0], completenessRows, trendRows, recentRegistrations, recentFeedback, recentAudit };

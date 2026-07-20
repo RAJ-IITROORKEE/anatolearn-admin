@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, test, vi } from "vitest";
 
@@ -74,6 +74,89 @@ test("persists toolbar formatting in the strict rich AST and compatible text fal
     expect(JSON.stringify(value.richContent)).toContain('"fontSize":"20px"');
     expect(JSON.stringify(value.richContent)).toContain('"textAlign":"center"');
   });
+});
+
+test("offers named text colors with visible swatches", async () => {
+  const user = userEvent.setup();
+  render(<LessonEditor initialBlocks={[{ type: "paragraph", text: "Cardiac anatomy" }]} />);
+
+  await user.click(screen.getByRole("button", { name: "Text color" }));
+  const menu = screen.getByRole("menu");
+  const choices = [
+    ["Strong text", "#0F172A"], ["Slate", "#334155"], ["Blue", "#2563EB"],
+    ["Purple", "#7C3AED"], ["Red", "#DC2626"], ["Orange", "#C2410C"],
+    ["Amber", "#A16207"], ["Green", "#16A34A"], ["Teal", "#0F766E"],
+    ["Pink", "#BE185D"],
+  ] as const;
+
+  expect(within(menu).getByRole("menuitem", { name: "Default text" })).toBeVisible();
+  for (const [name, color] of choices) {
+    const option = within(menu).getByRole("menuitem", { name });
+    expect(option).toBeVisible();
+    expect(option.querySelector("[data-color-swatch]")).toHaveStyle({ backgroundColor: color });
+  }
+});
+
+test("offers named highlight colors with visible swatches", async () => {
+  const user = userEvent.setup();
+  render(<LessonEditor initialBlocks={[{ type: "paragraph", text: "Cardiac anatomy" }]} />);
+
+  await user.click(screen.getByRole("button", { name: "Highlight color" }));
+  const menu = screen.getByRole("menu");
+  const choices = [
+    ["Neutral", "#F1F5F9"], ["Blue", "#DBEAFE"], ["Purple", "#EDE9FE"],
+    ["Red", "#FEE2E2"], ["Orange", "#FFEDD5"], ["Amber", "#FEF3C7"],
+    ["Green", "#DCFCE7"], ["Teal", "#CCFBF1"], ["Pink", "#FCE7F3"],
+  ] as const;
+
+  expect(within(menu).getByRole("menuitem", { name: "No highlight" })).toBeVisible();
+  for (const [name, color] of choices) {
+    const option = within(menu).getByRole("menuitem", { name });
+    expect(option).toBeVisible();
+    expect(option.querySelector("[data-color-swatch]")).toHaveStyle({ backgroundColor: color });
+  }
+});
+
+test("applies and clears allowlisted text and highlight colors", async () => {
+  const user = userEvent.setup();
+  const { container } = render(<LessonEditor initialBlocks={[{ type: "paragraph", text: "Cardiac anatomy" }]} />);
+  const editor = screen.getByRole("textbox", { name: "Lesson rich text editor" });
+
+  fireEvent.focus(editor);
+  fireEvent.keyDown(editor, { key: "a", code: "KeyA", ctrlKey: true });
+  await user.click(screen.getByRole("button", { name: "Text color" }));
+  await user.click(screen.getByRole("menuitem", { name: "Teal" }));
+  await waitFor(() => expect(JSON.stringify(serialized(container).richContent)).toContain('"color":"#0F766E"'));
+
+  await user.click(screen.getByRole("button", { name: "Text color" }));
+  await user.click(screen.getByRole("menuitem", { name: "Default text" }));
+  await waitFor(() => expect(JSON.stringify(serialized(container).richContent)).not.toContain('"color"'));
+
+  await user.click(screen.getByRole("button", { name: "Highlight color" }));
+  await user.click(screen.getByRole("menuitem", { name: "Amber" }));
+  await waitFor(() => expect(JSON.stringify(serialized(container).richContent)).toContain('"color":"#FEF3C7"'));
+
+  await user.click(screen.getByRole("button", { name: "Highlight color" }));
+  await user.click(screen.getByRole("menuitem", { name: "No highlight" }));
+  await waitFor(() => expect(JSON.stringify(serialized(container).richContent)).not.toContain('"highlight"'));
+});
+
+test("opens the color choices and applies a swatch from the keyboard", async () => {
+  const user = userEvent.setup();
+  const { container } = render(<LessonEditor initialBlocks={[{ type: "paragraph", text: "Cardiac anatomy" }]} />);
+  const editor = screen.getByRole("textbox", { name: "Lesson rich text editor" });
+  const trigger = screen.getByRole("button", { name: "Text color" });
+
+  fireEvent.focus(editor);
+  fireEvent.keyDown(editor, { key: "a", code: "KeyA", ctrlKey: true });
+  trigger.focus();
+  await user.keyboard("{Enter}");
+  expect(screen.getByRole("menu", { name: "Text color" })).toBeVisible();
+  await user.keyboard("{End}{Enter}");
+
+  await waitFor(() => expect(JSON.stringify(serialized(container).richContent)).toContain('"color":"#BE185D"'));
+  expect(editor).toHaveFocus();
+  expect(trigger).toHaveTextContent("Pink");
 });
 
 test("does not duplicate legacy IDs when Enter splits a legacy paragraph", async () => {
@@ -196,10 +279,28 @@ test("shows current text and pending managed images in the accessible top previe
     dataTransfer: { files: [new File(["image"], "heart.png", { type: "image/png" })], types: ["Files"] },
   });
 
-  await user.click(screen.getByRole("button", { name: "Preview" }));
+  const preview = screen.getByRole("button", { name: "Preview" });
+  expect(preview).toHaveClass("bg-primary", "text-white");
+  await user.click(preview);
   const dialog = screen.getByRole("dialog", { name: "Learner preview" });
   expect(dialog).toHaveTextContent("Learner preview copy");
   expect(dialog.querySelector("img")).toHaveAttribute("src", "blob:lesson-image");
+});
+
+test("keeps only the formatting toolbar sticky beneath the app header", () => {
+  render(<LessonEditor initialBlocks={[{ type: "paragraph", text: "Cardiac anatomy" }]} />);
+
+  const toolbar = screen.getByRole("toolbar", { name: "Rich text formatting" });
+  const editor = screen.getByRole("textbox", { name: "Lesson rich text editor" });
+  const heading = screen.getByRole("heading", { name: "Lesson content" });
+
+  expect(toolbar).toHaveClass("sticky", "top-16");
+  expect(toolbar).toHaveClass("flex-nowrap", "overflow-x-auto", "[&>*]:shrink-0", "min-w-0", "max-w-full");
+  expect(toolbar.closest("section")).not.toHaveClass("overflow-hidden");
+  expect(toolbar.closest("section")).toHaveClass("min-w-0", "max-w-full");
+  expect(toolbar.closest("section")?.parentElement).toHaveClass("min-w-0", "max-w-full");
+  expect(editor).not.toHaveClass("sticky");
+  expect(heading.parentElement).not.toHaveClass("sticky");
 });
 
 test("revokes pending image object URLs only when replaced or unmounted", async () => {

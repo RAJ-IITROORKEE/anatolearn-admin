@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdminPage } from "@/lib/auth/session";
-import { createContent, setStatus, updateContent } from "@/features/content/service";
-import { contentLessonCreateSchema, contentLessonUpdateSchema, organSystemCreateSchema, organSystemUpdateSchema, statusUpdateSchema, topicCreateSchema, topicUpdateSchema } from "@/features/content/schemas";
+import { createContent, getAdminBySlug, setStatus, updateContent } from "@/features/content/service";
+import { contentLessonCreateSchema, contentLessonUpdateSchema, organSystemCreateSchema, organSystemUpdateSchema, slugParamSchema, statusUpdateSchema, topicCreateSchema, topicUpdateSchema } from "@/features/content/schemas";
 import { resolveLessonContentFromForm } from "@/features/content/lesson-multipart";
 import { archiveMedia, updateMedia, uploadMedia } from "@/features/media/service";
 import { mediaUpdateSchema, mediaUploadSchema } from "@/features/media/schemas";
@@ -22,23 +22,36 @@ async function contentInput(resource: Resource, data: FormData, ctx: ReturnType<
   return { topicId: formValue(data, "topicId"), title: formValue(data, "title"), slug: formValue(data, "slug"), summary: formNullable(data, "summary"), contentBlocks, estimatedReadingMinutes: Number(formValue(data, "estimatedReadingMinutes")), displayOrder: Number(formValue(data, "displayOrder")) };
 }
 
-export async function createResource(resource: Resource, _state: ActionState, data: FormData): Promise<ActionState> {
+async function createResourceInternal(resource: Resource, data: FormData, scopedSystemSlug?: string): Promise<ActionState> {
   let uploadContext;
   try {
-    const ctx = await context(); uploadContext = directUploadContext(ctx.actorId, ctx.requestId); const raw = await contentInput(resource, data, uploadContext);
+    const ctx = await context(); uploadContext = directUploadContext(ctx.actorId, ctx.requestId); const raw: Record<string, unknown> = await contentInput(resource, data, uploadContext);
+    if (resource === "topic" && scopedSystemSlug) {
+      const system = await getAdminBySlug("organSystem", scopedSystemSlug);
+      raw.organSystemId = system.id;
+    }
     const schema = resource === "organSystem" ? organSystemCreateSchema : resource === "topic" ? topicCreateSchema : contentLessonCreateSchema;
     const parsed = schema.safeParse(raw);
     if (!parsed.success) { await cleanupDirectUploads(uploadContext); return { error: parsed.error.issues[0]?.message ?? "Check the form fields." }; }
     const created = await createContent(resource, parsed.data, ctx);
+    const topic = created as { organSystemSlug: string };
+    const redirectTo = resource === "organSystem" ? "/organ-systems" : resource === "contentLesson" ? "/content" : scopedSystemSlug ? `/organ-systems/${topic.organSystemSlug}/topics` : "/topics";
     revalidatePath(resource === "organSystem" ? "/organ-systems" : resource === "topic" ? "/topics" : "/content");
-    const topic = created as { organSystemSlug: string; slug: string };
-    const redirectTo = resource === "organSystem"
-      ? `/organ-systems/${created.slug}`
-      : resource === "topic"
-        ? `/organ-systems/${topic.organSystemSlug}/topics/${topic.slug}`
-        : `/content/${created.id}`;
+    if (scopedSystemSlug) revalidatePath(redirectTo);
     return { success: `${resource === "organSystem" ? "Organ system" : resource === "topic" ? "Topic" : "Lesson"} created.`, redirectTo };
   } catch (error) { if (uploadContext) await cleanupDirectUploads(uploadContext); return phase3ActionError(error, { requestId: uploadContext?.requestId, route: `/admin/${resource}/create` }); }
+}
+
+export async function createResource(resource: Resource, _state: ActionState, data: FormData): Promise<ActionState> {
+  void _state;
+  return createResourceInternal(resource, data);
+}
+
+export async function createScopedTopicResource(systemSlug: string, _state: ActionState, data: FormData): Promise<ActionState> {
+  void _state;
+  const parsed = slugParamSchema.safeParse(systemSlug);
+  if (!parsed.success) return { error: "The organ system route is invalid." };
+  return createResourceInternal("topic", data, parsed.data);
 }
 
 export async function updateResource(resource: Resource, id: string, _state: ActionState, data: FormData): Promise<ActionState> {
@@ -49,11 +62,15 @@ export async function updateResource(resource: Resource, id: string, _state: Act
     const parsed = schema.safeParse(raw);
     if (!parsed.success) { await cleanupDirectUploads(uploadContext); return { error: parsed.error.issues[0]?.message ?? "Check the form fields." }; }
     const updated = await updateContent(resource, id, parsed.data, ctx);
-    const topic = updated as { organSystemSlug: string; slug: string };
-    const canonicalPath = resource === "topic" ? `/organ-systems/${topic.organSystemSlug}/topics/${topic.slug}` : null;
+    const topic = updated as { organSystemSlug: string; topicSlug?: string; slug: string };
+    const canonicalPath = resource === "topic"
+      ? `/organ-systems/${topic.organSystemSlug}/topics/${topic.slug}`
+      : resource === "contentLesson"
+        ? `/organ-systems/${topic.organSystemSlug}/topics/${topic.topicSlug}/content/${topic.slug}`
+        : null;
     revalidatePath(resource === "organSystem" ? `/organ-systems/${updated.slug}` : canonicalPath ?? `/content/${id}`);
     if (resource === "topic") revalidatePath("/topics");
-    return { success: "Changes saved.", ...(resource === "organSystem" ? { redirectTo: `/organ-systems/${updated.slug}` } : canonicalPath ? { redirectTo: canonicalPath } : {}) };
+    return { success: "Changes saved.", ...(resource === "organSystem" ? { redirectTo: `/organ-systems/${updated.slug}`, navigationMode: "replace" as const } : canonicalPath ? { redirectTo: canonicalPath, navigationMode: "replace" as const } : {}) };
   } catch (error) { if (uploadContext) await cleanupDirectUploads(uploadContext); return phase3ActionError(error, { requestId: uploadContext?.requestId, route: `/admin/${resource}/update` }); }
 }
 

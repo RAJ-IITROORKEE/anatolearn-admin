@@ -156,6 +156,26 @@ describe("content administration schemas", () => {
     expect(richTextDocumentSchema.safeParse({ type: "doc", content: Array.from({ length: 2001 }, () => paragraph) }).success).toBe(false);
   });
 
+  it("accepts only the restrained semantic text and highlight color palettes", () => {
+    const textColors = ["#0F172A", "#334155", "#2563EB", "#7C3AED", "#DC2626", "#C2410C", "#A16207", "#16A34A", "#0F766E", "#BE185D"];
+    const highlights = ["#F1F5F9", "#DBEAFE", "#EDE9FE", "#FEE2E2", "#FFEDD5", "#FEF3C7", "#DCFCE7", "#CCFBF1", "#FCE7F3"];
+    const documentWithMark = (mark: object) => ({
+      type: "doc",
+      content: [{ type: "paragraph", content: [{ type: "text", text: "Safe", marks: [mark] }] }],
+    });
+
+    for (const color of textColors) {
+      expect(richTextDocumentSchema.safeParse(documentWithMark({ type: "textStyle", attrs: { color } })).success).toBe(true);
+    }
+    for (const color of highlights) {
+      expect(richTextDocumentSchema.safeParse(documentWithMark({ type: "highlight", attrs: { color } })).success).toBe(true);
+    }
+    for (const color of ["#000000", "red", "var(--primary)", "rgb(0, 0, 0)", "url(https://evil.test/color)"]) {
+      expect(richTextDocumentSchema.safeParse(documentWithMark({ type: "textStyle", attrs: { color } })).success).toBe(false);
+      expect(richTextDocumentSchema.safeParse(documentWithMark({ type: "highlight", attrs: { color } })).success).toBe(false);
+    }
+  });
+
   it("rejects nested images because managed images are top-level lesson blocks", () => {
     const mediaId = crypto.randomUUID();
     expect(richTextDocumentSchema.safeParse({

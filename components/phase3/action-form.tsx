@@ -8,7 +8,7 @@ import { ConfirmationDialog } from "@/components/shared/confirmation-dialog";
 import { UnsavedNavigationGuard } from "@/components/notifications/unsaved-navigation-guard";
 import { ActionNotice } from "./admin-ui";
 
-export type ActionState = { error?: string; success?: string; redirectTo?: string };
+export type ActionState = { error?: string; success?: string; redirectTo?: string; navigationMode?: "push" | "replace" };
 export type FormAction = (state: ActionState, formData: FormData) => Promise<ActionState>;
 
 export function ActionForm({ action, children, guardUnsavedChanges, label = "Save changes", pendingLabel = "Saving", stickyActions = false }: { action: FormAction; children: React.ReactNode; guardUnsavedChanges?: string; label?: string; pendingLabel?: string; stickyActions?: boolean }) {
@@ -20,7 +20,10 @@ export function ActionForm({ action, children, guardUnsavedChanges, label = "Sav
     if (next.success) {
       setDirty(false);
       toast.success(next.success);
-      if (next.redirectTo) router.push(next.redirectTo);
+      if (next.redirectTo) {
+        if (next.navigationMode === "replace") router.replace(next.redirectTo);
+        else router.push(next.redirectTo);
+      }
     }
     return next;
   }, {});
@@ -33,7 +36,10 @@ export function InlineAction({ action, ariaLabel, children, confirmLabel = "Conf
     const next = await action(previous, formData);
     if (next.error) toast.error(next.error);
     if (next.success) toast.success(next.success);
-    if (next.redirectTo) router.push(next.redirectTo);
+    if (next.redirectTo) {
+      if (next.navigationMode === "replace") router.replace(next.redirectTo);
+      else router.push(next.redirectTo);
+    }
     return next;
   }, {});
   const formRef = useRef<HTMLFormElement>(null);

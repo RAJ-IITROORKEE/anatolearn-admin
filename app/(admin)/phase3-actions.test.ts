@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ContentError } from "@/features/content/domain";
+
 const systemId = "10000000-0000-4000-8000-000000000001";
 const topicId = "20000000-0000-4000-8000-000000000002";
+const lessonId = "30000000-0000-4000-8000-000000000003";
 const mocks = vi.hoisted(() => ({
   requireAdminPage: vi.fn(),
   createContent: vi.fn(),
@@ -18,11 +21,11 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
 vi.mock("@/lib/auth/session", () => ({ requireAdminPage: mocks.requireAdminPage }));
-vi.mock("@/features/content/service", () => ({ createContent: mocks.createContent, getAdmin: mocks.getAdmin, setStatus: mocks.setStatus, updateContent: mocks.updateContent }));
+vi.mock("@/features/content/service", () => ({ createContent: mocks.createContent, getAdmin: mocks.getAdmin, getAdminBySlug: mocks.getAdmin, setStatus: mocks.setStatus, updateContent: mocks.updateContent }));
 vi.mock("@/features/media/service", () => ({ archiveMedia: mocks.archiveMedia, updateMedia: mocks.updateMedia, uploadMedia: mocks.uploadMedia }));
 vi.mock("@/features/trash/service", () => ({ moveToTrash: mocks.moveToTrash, restoreFromTrash: mocks.restoreFromTrash }));
 
-import { createResource, trashListResourceAction, trashResourceAction, updateResource } from "./phase3-actions";
+import { createResource, createScopedTopicResource, trashListResourceAction, trashResourceAction, updateResource } from "./phase3-actions";
 
 function topicFormData(slug = "heart-anatomy") {
   const data = new FormData();
@@ -41,13 +44,61 @@ describe("topic server-action navigation", () => {
     mocks.getAdmin.mockResolvedValue({ id: systemId, slug: "circulatory" });
   });
 
-  it("lands a created topic on its readable canonical route", async () => {
+  it("returns a globally created topic to the global topic list", async () => {
     mocks.createContent.mockResolvedValue({ id: topicId, organSystemId: systemId, organSystemSlug: "circulatory", slug: "heart-anatomy" });
 
     await expect(createResource("topic", {}, topicFormData())).resolves.toMatchObject({
       success: "Topic created.",
-      redirectTo: "/organ-systems/circulatory/topics/heart-anatomy",
+      redirectTo: "/topics",
     });
+  });
+
+  it("returns an inline-created topic only to its server-scoped parent list", async () => {
+    mocks.createContent.mockResolvedValue({ id: topicId, organSystemId: systemId, organSystemSlug: "circulatory", slug: "heart-anatomy" });
+
+    await expect(createScopedTopicResource("circulatory", {}, topicFormData())).resolves.toMatchObject({
+      success: "Topic created.",
+      redirectTo: "/organ-systems/circulatory/topics",
+    });
+
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/organ-systems/circulatory/topics");
+  });
+
+  it("cleans up a direct cover upload when a valid scoped parent no longer exists", async () => {
+    const coverMediaId = "40000000-0000-4000-8000-000000000004";
+    mocks.uploadMedia.mockResolvedValue({ id: coverMediaId });
+    mocks.getAdmin.mockRejectedValue(new ContentError("NOT_FOUND", "Content was not found.", 404));
+    const data = topicFormData();
+    data.set("coverAltText", "Heart anatomy cover");
+    data.set("coverFile", new File(["cover"], "heart.png", { type: "image/png" }));
+
+    await expect(createScopedTopicResource("circulatory", {}, data)).resolves.toEqual({ error: "Content was not found." });
+
+    expect(mocks.uploadMedia).toHaveBeenCalledWith(expect.any(File), "Heart anatomy cover", expect.any(String), expect.any(String));
+    expect(mocks.archiveMedia).toHaveBeenCalledWith(coverMediaId, expect.any(String), expect.any(String));
+    expect(mocks.createContent).not.toHaveBeenCalled();
+  });
+
+  it("overrides a tampered submitted parent ID with the server-resolved scoped system", async () => {
+    const tamperedSystemId = "90000000-0000-4000-8000-000000000009";
+    mocks.createContent.mockResolvedValue({ id: topicId, organSystemId: systemId, organSystemSlug: "circulatory", slug: "heart-anatomy" });
+    const data = topicFormData();
+    data.set("organSystemId", tamperedSystemId);
+
+    await expect(createScopedTopicResource("circulatory", {}, data)).resolves.toHaveProperty("success", "Topic created.");
+
+    expect(mocks.getAdmin).toHaveBeenCalledWith("organSystem", "circulatory");
+    expect(mocks.createContent).toHaveBeenCalledWith(
+      "topic",
+      expect.objectContaining({ organSystemId: systemId }),
+      expect.any(Object),
+    );
+    expect(mocks.createContent.mock.calls[0][1]).not.toMatchObject({ organSystemId: tamperedSystemId });
+  });
+
+  it("rejects a malformed scoped parent instead of accepting an arbitrary return path", async () => {
+    await expect(createScopedTopicResource("../dashboard", {}, topicFormData())).resolves.toHaveProperty("error");
+    expect(mocks.createContent).not.toHaveBeenCalled();
   });
 
   it("lands an updated topic on the route for its resulting slugs", async () => {
@@ -56,6 +107,7 @@ describe("topic server-action navigation", () => {
     await expect(updateResource("topic", topicId, {}, topicFormData("cardiac-anatomy"))).resolves.toMatchObject({
       success: "Changes saved.",
       redirectTo: "/organ-systems/circulatory/topics/cardiac-anatomy",
+      navigationMode: "replace",
     });
   });
 });
@@ -142,6 +194,53 @@ describe("rich lesson image resolution", () => {
 
     await expect(createResource("contentLesson", {}, data)).resolves.toHaveProperty("error");
     expect(mocks.archiveMedia).toHaveBeenCalledWith(firstMediaId, expect.any(String), expect.any(String));
+  });
+});
+
+describe("rapid-create list destinations", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.requireAdminPage.mockResolvedValue({ profile: { id: crypto.randomUUID() } });
+  });
+
+  it("returns a created organ system to the organ-system list", async () => {
+    mocks.createContent.mockResolvedValue({ id: systemId, slug: "circulatory" });
+    const data = new FormData();
+    data.set("name", "Circulatory");
+    data.set("shortDescription", "Heart and vessels.");
+    data.set("displayOrder", "0");
+    data.set("isActive", "true");
+
+    await expect(createResource("organSystem", {}, data)).resolves.toMatchObject({ redirectTo: "/organ-systems" });
+  });
+
+  it("returns a created lesson to the content list", async () => {
+    mocks.createContent.mockResolvedValue({ id: crypto.randomUUID(), slug: "overview", topicSlug: "heart-anatomy", organSystemSlug: "circulatory" });
+    const data = new FormData();
+    data.set("topicId", topicId);
+    data.set("title", "Overview");
+    data.set("slug", "overview");
+    data.set("contentBlocks", "[]");
+    data.set("estimatedReadingMinutes", "2");
+    data.set("displayOrder", "0");
+
+    await expect(createResource("contentLesson", {}, data)).resolves.toMatchObject({ redirectTo: "/content" });
+  });
+
+  it("redirects an updated lesson to the canonical route for its resulting parent and lesson slugs", async () => {
+    mocks.updateContent.mockResolvedValue({ id: crypto.randomUUID(), slug: "cardiac-overview", topicSlug: "cardiac-anatomy", organSystemSlug: "circulatory" });
+    const data = new FormData();
+    data.set("topicId", topicId);
+    data.set("title", "Cardiac overview");
+    data.set("slug", "cardiac-overview");
+    data.set("contentBlocks", "[]");
+    data.set("estimatedReadingMinutes", "2");
+    data.set("displayOrder", "0");
+
+    await expect(updateResource("contentLesson", lessonId, {}, data)).resolves.toMatchObject({
+      redirectTo: "/organ-systems/circulatory/topics/cardiac-anatomy/content/cardiac-overview",
+      navigationMode: "replace",
+    });
   });
 });
 
