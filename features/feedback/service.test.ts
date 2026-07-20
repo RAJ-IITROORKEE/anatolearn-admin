@@ -14,14 +14,14 @@ import { createFeedback, getAdminFeedback, listAdminFeedback, listMyFeedback, up
 
 const user = { id: crypto.randomUUID(), fullName: "Learner", email: "u@example.com", isActive: true };
 const reviewer = { id: crypto.randomUUID(), fullName: "Admin", email: "a@example.com", isActive: true };
-const stored = { id: crypto.randomUUID(), userId: user.id, type: "GENERAL", subject: "Subject", message: "Message", attachmentMediaId: null, status: "NEW", reviewedById: null, reviewedAt: null, resolvedById: null, resolvedAt: null, adminNotes: null, createdAt: new Date(), updatedAt: new Date(), user, reviewedBy: null, resolvedBy: null };
+const stored = { id: crypto.randomUUID(), userId: user.id, type: "GENERAL", subject: "Subject", message: "Message", attachmentMediaId: null, rating: { toString: () => "4.5" }, status: "NEW", reviewedById: null, reviewedAt: null, resolvedById: null, resolvedAt: null, adminNotes: null, createdAt: new Date(), updatedAt: new Date(), user, reviewedBy: null, resolvedBy: null };
 
 describe("feedback service", () => {
   beforeEach(() => { vi.clearAllMocks(); prisma.feedback.create.mockResolvedValue(stored); prisma.feedback.findMany.mockResolvedValue([]); prisma.feedback.count.mockResolvedValue(0); prisma.feedback.findFirst.mockResolvedValue(stored); tx.feedback.findFirst.mockResolvedValue(stored); tx.feedback.findUnique.mockResolvedValue(stored); tx.feedback.update.mockResolvedValue({ ...stored, status: "REVIEWED", reviewedById: reviewer.id, reviewedBy: reviewer }); });
 
   it("derives the submitter and cannot persist arbitrary attachments", async () => {
-    await createFeedback(user.id, { type: "GENERAL", subject: "Subject", message: "Message" });
-    expect(prisma.feedback.create).toHaveBeenCalledWith(expect.objectContaining({ data: { userId: user.id, type: "GENERAL", subject: "Subject", message: "Message" } }));
+    await createFeedback(user.id, { type: "GENERAL", subject: "Subject", message: "Message", rating: 4.5 });
+    expect(prisma.feedback.create).toHaveBeenCalledWith(expect.objectContaining({ data: { userId: user.id, type: "GENERAL", subject: "Subject", message: "Message", rating: 4.5 } }));
   });
 
   it("locks and audits redacted transition metadata in the same transaction", async () => {

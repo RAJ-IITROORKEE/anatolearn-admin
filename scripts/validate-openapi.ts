@@ -12,6 +12,8 @@ const RATE_LIMITED_OPERATIONS = new Set([
   "POST /auth/forgot-password",
   "POST /auth/reset-password",
   "POST /me/change-password",
+  "PUT /me/avatar",
+  "DELETE /me/avatar",
   "POST /me/device-tokens",
   "DELETE /me/device-tokens/{id}",
   "POST /feedback",

@@ -2,6 +2,7 @@ import "server-only";
 
 import { Prisma } from "@prisma/client";
 
+import { getMediaDependencyState } from "@/features/media/references";
 import { prisma } from "@/lib/db/prisma";
 import { trashItemDto, type TrashItemRecord } from "./dto";
 import { TrashError, type TrashType } from "./domain";
@@ -79,6 +80,9 @@ export async function moveToTrash(type: TrashType, id: string, context: Mutation
     if (!before) throw new TrashError("NOT_FOUND", "Resource was not found.", 404);
     const now = await databaseNow(tx);
     if (before.trashedAt) return trashItemDto(toRecord(type, before), now);
+    if (type === "media-asset" && (await getMediaDependencyState(tx, id))?.referenced) {
+      throw new TrashError("PURGE_BLOCKED", "Referenced media cannot be moved to Trash.", 409);
+    }
 
     const status = type === "media-asset"
       ? Prisma.sql`, "archivedAt" = trash_clock."now"`

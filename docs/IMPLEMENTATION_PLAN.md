@@ -264,6 +264,14 @@ development and isolated tested, not claimed in production.
 
 ## Current continuation point
 
+### Approved backend compatibility follow-up (2026-07-21)
+
+The explicit user scope authorizes an additive Phase 7 follow-up for feedback ratings,
+cross-system assessment availability/start/retake, evidence-based progress scores, managed
+avatars, and admin avatar presentation. It adds one non-deployed migration and preserves
+legacy learner DTOs and system-scoped assessment requests. This is an exception to the
+general continuation note below, not a new broad product phase.
+
 Do not add another repository feature phase before external deployment acceptance. Install
 a valid random 32+ character `CRON_SECRET` and verify the Vercel daily plus GitHub Actions
 jobs; provision and

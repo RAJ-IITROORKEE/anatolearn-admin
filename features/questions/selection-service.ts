@@ -26,7 +26,7 @@ export function isEligibleSelectionQuestion(candidate: EligibleCandidate) {
 // Internal assessment-engine boundary. No route exposes the question bank.
 export async function getEligibleQuestions(input: {
   assessmentType: AssessmentType;
-  organSystemId: string;
+  organSystemId?: string;
   topicIds?: string[];
   difficulty?: Difficulty;
 }, db: Prisma.TransactionClient | PrismaClient = prisma) {

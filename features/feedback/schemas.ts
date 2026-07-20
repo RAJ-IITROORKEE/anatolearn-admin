@@ -12,6 +12,7 @@ export const createFeedbackSchema = z.object({
   type: feedbackType,
   subject: z.string().trim().min(1).max(160),
   message: z.string().trim().min(1).max(5000),
+  rating: z.number().min(0.5).max(5).refine((value) => Number.isInteger(value * 2), "Rating must use 0.5 increments.").default(4.5),
 }).strict();
 
 export const mineFeedbackListSchema = z.object({

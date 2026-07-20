@@ -312,8 +312,8 @@ model AssessmentAttempt {
   userId                 String                   @db.Uuid
   user                   Profile                  @relation(fields: [userId], references: [id], onDelete: Restrict)
   assessmentType         AssessmentType
-  organSystemId          String                   @db.Uuid
-  organSystem            OrganSystem              @relation(fields: [organSystemId], references: [id], onDelete: Restrict)
+  organSystemId          String?                  @db.Uuid
+  organSystem            OrganSystem?             @relation(fields: [organSystemId], references: [id], onDelete: Restrict)
   requestedQuestionCount Int
   totalQuestionCount     Int
   correctCount           Int                      @default(0)
@@ -439,6 +439,7 @@ model Feedback {
   type               FeedbackType
   subject            String
   message            String
+  rating             Decimal?       @default(4.5) @db.Decimal(2, 1)
   attachmentMediaId  String?        @db.Uuid
   attachmentMedia    MediaAsset?    @relation("FeedbackAttachment", fields: [attachmentMediaId], references: [id], onDelete: Restrict)
   status             FeedbackStatus @default(NEW)

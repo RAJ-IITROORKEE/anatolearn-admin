@@ -121,6 +121,12 @@ untrusted. The Next.js server is the authorization boundary.
 - Admin attempt/user progress endpoints are read-only. The narrow user DTO excludes role
   and authentication data; pre-submission admin attempt details retain the same answer-
   secrecy boundary as learner details.
+- Cross-system starts accept only server-validated published topic IDs. Every selected
+  topic must contribute an eligible question; a deferred trigger enforces null singular
+  system storage only for mixed scopes without weakening immutable snapshots.
+- Current progress evidence deduplicates by source question and uses only its latest
+  terminal answer. Snapshot system/topic fields prevent mixed attempts from being
+  attributed through a caller-supplied singular system.
 
 ## Scheduled expiry authentication
 
@@ -259,6 +265,11 @@ routes are invoked by the same approximately ten-minute GitHub Actions schedule.
 - Physical deletion through the legacy media DELETE endpoint remains disabled. The media
   archive action moves the asset to Trash and returns `409 REFERENCED` while eligible
   published content references the asset.
+- Managed avatar PUT/DELETE derives the active actor from authentication, permits exactly
+  one byte-validated PNG/JPEG up to 1 MiB, creates private media, and never accepts a
+  bucket, path, media ID, or arbitrary non-null URL. Link replacement is row-locked;
+  failed new assets and safely replaced old assets move to Trash. Presentation signing
+  is batch-based and failures yield null rather than exposing storage metadata.
 
 Current limitations:
 

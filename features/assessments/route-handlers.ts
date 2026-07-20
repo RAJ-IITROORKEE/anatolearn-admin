@@ -4,8 +4,8 @@ import { apiError, apiSuccess, requestId } from "@/lib/api/response";
 import { resolveRequestIdentity } from "@/lib/auth/request";
 import { hasSafeOrigin } from "@/lib/security/origin";
 import { AssessmentError } from "./domain";
-import { answerInputSchema, attemptIdSchema, attemptListSchema, startAssessmentSchema } from "./schemas";
-import { getAttempt, getAttemptResult, listAttempts, retakeAttempt, startAssessment, submitAttempt, updateAttemptAnswer } from "./service";
+import { answerInputSchema, assessmentAvailabilitySchema, attemptIdSchema, attemptListSchema, startAssessmentSchema } from "./schemas";
+import { getAssessmentAvailability, getAttempt, getAttemptResult, listAttempts, retakeAttempt, startAssessment, submitAttempt, updateAttemptAnswer } from "./service";
 
 type AttemptContext = { params: Promise<{ attemptId: string }> };
 type AnswerContext = { params: Promise<{ attemptId: string; attemptQuestionId: string }> };
@@ -31,6 +31,13 @@ export function assessmentStartHandler(request: Request) {
   return handle(request, true, async (userId, id) => {
     const input = startAssessmentSchema.parse(await request.json().catch(() => null));
     return apiSuccess(await startAssessment(userId, input), { requestId: id }, 201);
+  });
+}
+
+export function assessmentAvailabilityHandler(request: Request) {
+  return handle(request, false, async (_userId, id) => {
+    const input = assessmentAvailabilitySchema.parse(await request.json().catch(() => null));
+    return apiSuccess(await getAssessmentAvailability(input), { requestId: id });
   });
 }
 

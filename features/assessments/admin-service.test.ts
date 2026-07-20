@@ -39,9 +39,10 @@ describe("admin attempt reporting service", () => {
     });
     const query = mocks.findMany.mock.calls[0][0];
     expect(query.where).toMatchObject({
-      userId: "user", assessmentType: "TEST", organSystemId: "system", status: "COMPLETED",
+      userId: "user", assessmentType: "TEST", status: "COMPLETED",
       startedAt: { gte: from, lte: to }, questions: { some: { topicIdSnapshot: "topic" } },
     });
+    expect(query.where.OR).toEqual([{ organSystemId: "system" }, { questions: { some: { organSystemIdSnapshot: "system" } } }]);
     expect(query.where.user.OR).toHaveLength(2);
     expect(query.orderBy).toEqual([{ scorePercentage: "asc" }, { id: "asc" }]);
     expect(mocks.expireDueAttempts).toHaveBeenCalledWith({ limit: 50 });

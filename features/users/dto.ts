@@ -9,12 +9,12 @@ type SafeProfile = {
   updatedAt: Date;
 };
 
-export function adminUserListItemDto(value: SafeProfile) {
+export function adminUserListItemDto(value: SafeProfile, avatarUrl = value.avatarUrl) {
   return {
     id: value.id,
     fullName: value.fullName,
     email: value.email,
-    avatarUrl: value.avatarUrl,
+    avatarUrl,
     isActive: value.isActive,
     lastLoginAt: value.lastLoginAt,
     createdAt: value.createdAt,
@@ -27,6 +27,6 @@ export function adminUserDetailDto(value: SafeProfile, activity: {
   submittedAttempts: number;
   feedback: number;
   lastAttemptAt: Date | null;
-}) {
-  return { ...adminUserListItemDto(value), activity };
+}, avatarUrl = value.avatarUrl) {
+  return { ...adminUserListItemDto(value, avatarUrl), activity };
 }

@@ -52,11 +52,21 @@ function objectKeys(value: unknown, path = "data"): string[] {
 
 describe("OpenAPI/runtime contract", () => {
   it("has exact route parity, resolvable refs, unique IDs, and complete JSON response headers", () => {
-    expect(validateOpenApiContract()).toEqual({ operations: 110, operationIds: 110 });
+    expect(validateOpenApiContract()).toEqual({ operations: 113, operationIds: 113 });
   });
 
   it("keeps the OpenAPI TrashType enum aligned with the domain contract", () => {
     expect(inlineEnum("TrashType")).toEqual([...TRASH_TYPES]);
+  });
+
+  it("keeps mixed-attempt and snapshot system nullability aligned with runtime DTOs", () => {
+    expect(schemaBlock("AttemptQuestionSafe")).toContain("organSystemId: { type: string, format: uuid }");
+    expect(schemaBlock("AttemptBase")).toMatch(/organSystemId: \{ type: \[string, 'null'\], format: uuid(?:,| \})/);
+  });
+
+  it("documents the per-topic assessment start failure", () => {
+    const operation = openApiSource.match(/^  \/assessments\/start:\r?\n[\s\S]*?(?=^  \/)/m)?.[0];
+    expect(operation).toContain("TOPIC_HAS_NO_QUESTIONS");
   });
 
   it("keeps rich-text color and highlight enums aligned with runtime validation", () => {
@@ -161,5 +171,6 @@ describe("OpenAPI/runtime contract", () => {
     const keys = outputs.flatMap((output, index) => objectKeys(output, `output[${index}]`));
     const denied = /(?:^|\.)(?:role|emailNormalized|bucket|path|expoPushToken|tokenSnapshot|deviceToken|processingToken|processingLeaseUntil|leaseToken|notes|adminNotes|correctOptionKey|isCorrect|explanation)$/i;
     expect(keys.filter((key) => denied.test(key))).toEqual([]);
+    expect(outputs[2]).not.toHaveProperty("rating");
   });
 });

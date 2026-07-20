@@ -28,7 +28,8 @@ export type AttemptDetailData = {
 
 export function AttemptDetail({ attempt, mediaById = new Map() }: { attempt: AttemptDetailData; mediaById?: ReadonlyMap<string, AttemptMediaReference> }) {
   const submitted = attempt.status === "COMPLETED" || attempt.status === "AUTO_SUBMITTED";
-  const systemName = attempt.questions[0]?.organSystemName ?? "Organ system unavailable";
+   const systemNames = [...new Set(attempt.questions.map((question) => question.organSystemName))];
+   const systemName = systemNames.length > 1 ? "Mixed systems" : systemNames[0] ?? "Organ system unavailable";
   const topicNames = [...new Set(attempt.questions.map((question) => question.topicTitle))];
 
   return (

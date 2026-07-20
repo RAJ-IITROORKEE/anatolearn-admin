@@ -10,7 +10,7 @@ export type AttemptListItem = {
   user: { id: string; fullName: string; email: string; isActive: boolean };
   assessmentType: AssessmentType;
   status: AttemptStatus;
-  organSystemId: string;
+  organSystemId: string | null;
   topicIds: string[];
   totalQuestionCount: number;
   startedAt: Date;
@@ -63,7 +63,7 @@ export function AttemptList({ attempts, systemLabels, topicLabels }: { attempts:
               </td>
               <td className="border-y border-border px-4 py-4 align-top">
                 <div className="flex flex-wrap gap-2"><AssessmentTypeBadge type={attempt.assessmentType} /><AttemptStatusBadge status={attempt.status} /></div>
-                <p className="mt-2 text-sm font-semibold text-body">{systemLabels.get(attempt.organSystemId) ?? "Organ system unavailable"}</p>
+                 <p className="mt-2 text-sm font-semibold text-body">{attempt.organSystemId === null ? "Mixed systems" : systemLabels.get(attempt.organSystemId) ?? "Organ system unavailable"}</p>
                 <p className="mt-1 max-w-64 text-xs text-muted">{topicSummary(attempt.topicIds, topicLabels)}</p>
               </td>
               <td className="border-y border-border px-4 py-4 align-top"><Result attempt={attempt} /></td>
@@ -82,7 +82,7 @@ export function AttemptList({ attempts, systemLabels, topicLabels }: { attempts:
           <Link className="mt-3 block text-base font-bold text-foreground hover:text-primary" href={`/users/${attempt.user.id}`}>{attempt.user.fullName}</Link>
           <p className="mt-1 break-all text-xs text-muted">{attempt.user.email}</p>
           <div className="mt-4 grid gap-3 border-y border-border py-4 sm:grid-cols-2">
-            <div><p className="text-xs font-semibold text-muted">Coverage</p><p className="mt-1 text-sm font-semibold text-body">{systemLabels.get(attempt.organSystemId) ?? "Organ system unavailable"}</p><p className="mt-1 text-xs text-muted">{topicSummary(attempt.topicIds, topicLabels)}</p></div>
+             <div><p className="text-xs font-semibold text-muted">Coverage</p><p className="mt-1 text-sm font-semibold text-body">{attempt.organSystemId === null ? "Mixed systems" : systemLabels.get(attempt.organSystemId) ?? "Organ system unavailable"}</p><p className="mt-1 text-xs text-muted">{topicSummary(attempt.topicIds, topicLabels)}</p></div>
             <div><p className="text-xs font-semibold text-muted">Result</p><div className="mt-1"><Result attempt={attempt} /></div></div>
             <div className="sm:col-span-2"><p className="text-xs font-semibold text-muted">Timing</p><div className="mt-1"><Timing attempt={attempt} /></div></div>
           </div>

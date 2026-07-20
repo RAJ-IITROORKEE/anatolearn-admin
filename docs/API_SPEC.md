@@ -103,10 +103,18 @@ and 2-100 character `fullName`; signup verification accepts `email` and exactly 
 OTP digits; resend accepts only `email`; login accepts only `email` and `password`; forgot-password
 accepts only `email`; reset-password accepts a provider recovery `accessToken` and a
 12-128 character `password`; profile update accepts a non-empty subset of `fullName` and
-nullable absolute `avatarUrl`; change-password requires `currentPassword` and a distinct
+compatibility-only `avatarUrl: null` (arbitrary non-null URLs are rejected); change-password requires `currentPassword` and a distinct
 12-128 character `newPassword`. Unknown fields return `400`.
 Auth/session/profile response DTOs do not expose the database role, normalized email, or
 provider-internal identity fields. Authorization continues to resolve role server-side.
+
+`PUT /api/v1/me/avatar` accepts multipart with exactly one `file`: a byte-validated PNG
+or JPEG no larger than 1,048,576 bytes. It creates a private managed asset under a
+server-derived actor/path, atomically replaces the profile link, clears the legacy URL,
+and trashes replacement/old assets on failure/success where safe. `DELETE /me/avatar`
+clears both links. Both mutations are limited to 10/profile/minute. `GET/PATCH /me`
+returns a short-lived managed presentation URL when available, otherwise the legacy URL;
+signing failure returns null. Bucket, path, and media ID are never returned.
 
 The Supabase project URL and publishable key are public native-client configuration, so a
 modified client can still call Supabase signup directly and may create Auth identities or
@@ -430,6 +438,7 @@ All request bodies and query strings are strict: undeclared fields/parameters re
 | Method and path | Success | Contract |
 | --- | --- | --- |
 | `POST /api/v1/assessments/start` | `201` safe attempt detail | Start a randomized snapshot attempt |
+| `POST /api/v1/assessments/availability` | `200` current availability | Eligible total, count bounds, and selected topic/system/count rows |
 | `GET /api/v1/attempts` | `200` paginated list | Owned history, newest `createdAt` then ID |
 | `GET /api/v1/attempts/{attemptId}` | `200` safe attempt detail | Never reveals result secrets; lazily expires a due test |
 | `PUT /api/v1/attempts/{attemptId}/answers/{attemptQuestionId}` | `200` answer receipt | Set/clear one owned in-progress snapshot answer |
@@ -449,12 +458,20 @@ All request bodies and query strings are strict: undeclared fields/parameters re
 ```
 
 - `assessmentType` is `QUIZ` or `TEST`.
-- `organSystemId` is a UUID for a published, active system.
-- `topicIds` is optional. When present it contains 1-100 unique UUIDs, all published
-  topics in the selected system. When omitted, every published topic in the system is
-  in scope.
+- Legacy requests retain `organSystemId` for a published, active system and optional
+  1-100 unique in-system `topicIds`; omission selects every published topic in that system.
+- New requests may omit `organSystemId` and provide 1-100 unique published `topicIds`
+  spanning systems.
 - `questionCount` is an integer from 5 through 50. The service requires at least that
-  many currently eligible questions of the chosen type and scope.
+  many currently eligible questions and at least the selected topic count. Every selected
+  topic must have one eligible question. Selection chooses at least one random question
+  per topic before randomly filling the remainder.
+
+Availability accepts the same scope plus `assessmentType` and no question count. It
+returns `totalEligibleCount`, `minimumQuestionCount=max(5, selected topic count)`,
+`maximumQuestionCount=min(50, total eligible)`, and each topic's ID/title, system ID/name,
+and eligible count. Mixed attempts store and return `organSystemId: null`; single-system
+scopes retain it. Retakes preserve this topic scope safely.
 
 The service randomly selects questions and independently shuffles each option set, then
 persists ordered immutable snapshots. Snapshot option keys are fresh UUIDs and are the
@@ -464,7 +481,8 @@ seconds per requested question, measured from database `startedAt`.
 
 `404 SYSTEM_NOT_FOUND` hides an unavailable system. `422 INVALID_TOPIC_SCOPE` means one
 or more supplied topics are outside the published system scope; `422 NO_TOPICS` means
-the effective scope has no published topics; `422 INSUFFICIENT_QUESTIONS` includes the
+the effective scope has no published topics; `422 TOPIC_HAS_NO_QUESTIONS` identifies a
+selected topic without an eligible question; `422 INSUFFICIENT_QUESTIONS` includes the
 eligible count in its safe message. A selection that becomes unavailable while being
 locked returns `409 QUESTION_UNAVAILABLE`; exhausted serialization retries return `409
 TRANSACTION_FAILED`.
@@ -559,6 +577,22 @@ percentages are calculated after summing topic numerators and denominators.
   that type, including unanswered; numerator: correct snapshots. Attribution requires
   both snapshot system ID and topic ID to match the current published hierarchy.
 
+The response additively includes exact current `inventory` counts for lessons,
+flashcards, quiz questions, and test questions. Quiz/test `activity` reports distinct
+currently eligible source questions seen, available questions, latest-terminal-answer
+correct count, coverage, and accuracy. Repeated attempts do not multiply evidence: only
+the latest terminal answer per current eligible source question is used.
+
+Each system/topic has `score.value`, `status`, and transparent components. Content is
+lesson completion; quiz/test are 50% coverage plus 50% latest-answer accuracy. Base
+weights are 20/40/40 and renormalize only across components with current inventory.
+Flashcards remain a separate progress metric and do not affect the score. Value is null
+only when all three scored inventories are empty. `NO_ACTIVITY` means no scored evidence,
+`ESTABLISHED` means every inventoried component is complete/full-coverage and accurate,
+otherwise status is `IN_PROGRESS`. `formulaVersion` is
+`2026-07-current-inventory-v1`; `asOf` is the database evidence timestamp. Mixed recent
+attempts return null singular system ID and the safe label `Mixed systems`.
+
 `TopicProgress` is refreshed as a projection after lesson/flashcard changes and attempt
 finalization, but these APIs recompute from authoritative progress rows and immutable
 attempt history rather than reading the projection.
@@ -627,7 +661,8 @@ and `sortOrder=asc|desc`. Defaults are page 1, page size 20, `createdAt desc`; I
 same-direction tie-breaker and date bounds are inclusive. `createdFrom` must not exceed
 `createdTo`. `meta.summary` is unfiltered `{ total, active, inactive, joined30Days }`.
 
-List/detail DTOs expose ID, name, email, avatar URL, active state, last login, and created/
+List/detail DTOs expose ID, name, email, a batch-signed managed avatar presentation URL
+(legacy fallback), active state, last login, and created/
 updated timestamps—never role, credentials, device tokens, or notification token
 snapshots. Detail additionally returns `{ attempts, submittedAttempts, feedback,
 lastAttemptAt }`.
@@ -649,18 +684,22 @@ query/body/UUID, `401`, `403` (including unsafe cookie origin), `404`, or safe `
 | `PATCH /api/v1/admin/feedback/{id}` | Admin | Review/resolve and/or notes; `200` |
 
 Create accepts `type=GENERAL|BUG_REPORT|QUESTION_REQUEST|IMPROVEMENT`, a trimmed subject
-of 1-160 characters, and a trimmed message of 1-5000. Ownership comes from verified
+of 1-160 characters, a trimmed message of 1-5000, and optional rating from 0.5 through 5
+in 0.5 steps (default 4.5). Ownership comes from verified
 identity. The configured limiter permits five attempts per user per 60 seconds;
 exhaustion returns `429 RATE_LIMITED` and `Retry-After: 60`.
 
 `feedback/mine` accepts standard pagination plus optional `type` and `status`. It sorts
 newest first and exposes only `{ id,type,subject,message,status,createdAt,updatedAt }`.
+Rating is deliberately also omitted for strict legacy mobile-client compatibility.
 Internal notes and review/resolve attribution are never in learner DTOs.
 
 The admin list additionally accepts trimmed `q` (subject, message, submitter name/email),
 `userId`, inclusive `createdFrom`/`createdTo`, `sortBy=createdAt|status|type`, and
 `sortOrder`; ID is a stable tie-breaker. Admin DTOs add `adminNotes`, review/resolve
 timestamps, and safe submitter/reviewer/resolver profile summaries.
+Admin feedback DTOs add nullable `rating` (`null` means historical unknown), and safe
+person summaries use batch-signed managed avatar presentation URLs without media IDs.
 
 Admin update is strict and non-empty: nullable trimmed `adminNotes` up to 5000 and/or
 `status=REVIEWED|RESOLVED`. Domain transitions establish reviewer before resolver and do

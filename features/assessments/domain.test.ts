@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildAttemptSnapshots, calculateAttemptResult, fisherYates, hasTestExpired, isSubmittedAttemptStatus } from "./domain";
+import { buildAttemptSnapshots, calculateAttemptResult, fisherYates, hasTestExpired, isSubmittedAttemptStatus, selectQuestionsByTopic } from "./domain";
 
 const candidate = {
   id: "10000000-0000-4000-8000-000000000001",
@@ -53,5 +53,23 @@ describe("assessment domain", () => {
     expect(isSubmittedAttemptStatus("AUTO_SUBMITTED")).toBe(true);
     expect(isSubmittedAttemptStatus("IN_PROGRESS")).toBe(false);
     expect(isSubmittedAttemptStatus("ABANDONED")).toBe(false);
+  });
+
+  it("selects at least one random question from every selected topic", () => {
+    const candidates = [
+      { ...candidate, id: "a1", topicId: "a" },
+      { ...candidate, id: "a2", topicId: "a" },
+      { ...candidate, id: "b1", topicId: "b" },
+      { ...candidate, id: "b2", topicId: "b" },
+    ];
+    const selected = selectQuestionsByTopic(candidates, ["a", "b"], 3, () => 0);
+    expect(selected).toHaveLength(3);
+    expect(new Set(selected.map((question) => question.topicId))).toEqual(new Set(["a", "b"]));
+    expect(new Set(selected.map((question) => question.id)).size).toBe(3);
+  });
+
+  it("reports the selected topic that has no eligible questions", () => {
+    expect(() => selectQuestionsByTopic([{ ...candidate, id: "a1", topicId: "a" }], ["a", "b"], 2, () => 0))
+      .toThrowError(expect.objectContaining({ code: "TOPIC_HAS_NO_QUESTIONS", details: { topicIds: ["b"] } }));
   });
 });

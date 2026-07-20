@@ -14,7 +14,7 @@ export const verifySignupOtpSchema = z.object({
 }).strict();
 export const profileUpdateSchema = z.object({
   fullName: z.string().trim().min(2).max(100).optional(),
-  avatarUrl: z.url().nullable().optional(),
+  avatarUrl: z.null().optional(),
 }).strict();
 export { deviceTokenSchema } from "@/features/notifications/schemas";
 

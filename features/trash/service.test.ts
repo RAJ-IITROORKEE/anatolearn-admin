@@ -45,6 +45,19 @@ describe("trash service", () => {
     expect(mocks.tx.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: "TRASH" }) }));
   });
 
+  it("does not archive media while any authoritative reference remains", async () => {
+    mocks.tx.$queryRaw
+      .mockResolvedValueOnce([{ id, label: "shared.png", trashedAt: null, purgeAfter: null, nextPurgeAttemptAt: null }])
+      .mockResolvedValueOnce([{ now: trashedAt }])
+      .mockResolvedValueOnce([{ id, uploadedById: context.actorId, trashedAt: null }])
+      .mockResolvedValueOnce([{ referenced: true }]);
+
+    await expect(moveToTrash("media-asset", id, context)).rejects.toMatchObject({ code: "PURGE_BLOCKED", status: 409 });
+
+    expect(mocks.tx.$queryRaw).toHaveBeenCalledTimes(4);
+    expect(mocks.tx.auditLog.create).not.toHaveBeenCalled();
+  });
+
   it("moves one feedback item without changing workflow status or auditing private fields", async () => {
     mocks.tx.$queryRaw
       .mockResolvedValueOnce([{ id, label: "Patient Jane Doe", trashedAt: null, purgeAfter: null, nextPurgeAttemptAt: null }])

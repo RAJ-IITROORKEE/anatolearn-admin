@@ -28,7 +28,7 @@ vi.mock("@/lib/env", () => ({ getServerEnv: () => ({
 }) }));
 vi.mock("./image", () => ({ inspectImage: vi.fn().mockResolvedValue({ mimeType: "image/png", width: 10, height: 10 }) }));
 
-import { getAdminMediaMap, getPublishedMedia, listMedia, uploadMedia } from "./service";
+import { getAdminMediaMap, getProfileAvatarUrlMap, getPublishedMedia, listMedia, uploadMedia } from "./service";
 
 const asset = {
   id: "10000000-0000-4000-8000-000000000001", originalFilename: "old.png", mimeType: "image/png", byteSize: BigInt(10),
@@ -66,6 +66,19 @@ describe("historical attempt media authorization", () => {
 
     expect(result).toMatchObject({ id: created.id, signedUrl: null, signedUrlExpiresIn: null });
     expect(mocks.remove).not.toHaveBeenCalled();
+  });
+
+  it("prefers batch-signed managed avatars, uses legacy only when unmanaged, and returns null on signing failure", async () => {
+    mocks.findMany.mockResolvedValue([{ id: asset.id, bucket: asset.bucket, path: asset.path, width: 10, height: 10, altText: "" }]);
+    mocks.createSignedUrls.mockResolvedValue({ data: [{ signedUrl: "https://signed.example/avatar" }], error: null });
+    const managed = { id: "managed-profile", avatarMediaId: asset.id, avatarUrl: "https://legacy.example/ignored" };
+    const legacy = { id: "legacy-profile", avatarMediaId: null, avatarUrl: "https://legacy.example/avatar" };
+    await expect(getProfileAvatarUrlMap([managed, legacy])).resolves.toEqual(new Map([
+      [managed.id, "https://signed.example/avatar"], [legacy.id, legacy.avatarUrl],
+    ]));
+    expect(mocks.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: { in: [asset.id] }, archivedAt: null, trashedAt: null } }));
+    mocks.createSignedUrls.mockResolvedValue({ data: null, error: { message: "temporary" } });
+    await expect(getProfileAvatarUrlMap([managed])).resolves.toEqual(new Map([[managed.id, null]]));
   });
 
   it("completes an upload when the optional preview signer throws", async () => {

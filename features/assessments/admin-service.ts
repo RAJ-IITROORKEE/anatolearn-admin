@@ -15,7 +15,7 @@ export async function listAdminAttempts(input: AdminAttemptListInput) {
   const where: Prisma.AssessmentAttemptWhereInput = {
     userId: input.userId,
     assessmentType: input.assessmentType,
-    organSystemId: input.organSystemId,
+    ...(input.organSystemId ? { OR: [{ organSystemId: input.organSystemId }, { questions: { some: { organSystemIdSnapshot: input.organSystemId } } }] } : {}),
     status: input.status,
     ...(input.q ? { user: { OR: [
       { fullName: { contains: input.q, mode: "insensitive" } },

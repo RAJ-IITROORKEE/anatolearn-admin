@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { answerInputSchema, attemptListSchema, startAssessmentSchema } from "./schemas";
+import { answerInputSchema, assessmentAvailabilitySchema, attemptListSchema, startAssessmentSchema } from "./schemas";
 
 const systemId = "10000000-0000-4000-8000-000000000001";
 const topicId = "20000000-0000-4000-8000-000000000001";
@@ -17,6 +17,16 @@ describe("assessment schemas", () => {
     expect(() => startAssessmentSchema.parse({ assessmentType: "QUIZ", organSystemId: systemId, topicIds: [], questionCount: 5 })).toThrow();
     expect(() => startAssessmentSchema.parse({ assessmentType: "QUIZ", organSystemId: systemId, topicIds: [topicId, topicId], questionCount: 5 })).toThrow();
     expect(() => startAssessmentSchema.parse({ assessmentType: "TEST", organSystemId: systemId, questionCount: 51 })).toThrow();
+  });
+
+  it("accepts cross-system topic scope while preserving legacy system scope", () => {
+    const otherTopicId = "20000000-0000-4000-8000-000000000002";
+    expect(startAssessmentSchema.parse({ assessmentType: "QUIZ", topicIds: [topicId, otherTopicId], questionCount: 5 })).toEqual({
+      assessmentType: "QUIZ", topicIds: [topicId, otherTopicId], questionCount: 5,
+    });
+    expect(() => startAssessmentSchema.parse({ assessmentType: "QUIZ", questionCount: 5 })).toThrow();
+    expect(() => startAssessmentSchema.parse({ assessmentType: "QUIZ", topicIds: [topicId, otherTopicId], questionCount: 1 })).toThrow();
+    expect(assessmentAvailabilitySchema.parse({ assessmentType: "TEST", topicIds: [topicId] })).toEqual({ assessmentType: "TEST", topicIds: [topicId] });
   });
 
   it("accepts answer clearing and bounds telemetry", () => {

@@ -19,6 +19,8 @@ describe("authentication API schemas", () => {
 
   it("does not allow account fields in profile updates", () => {
     expect(profileUpdateSchema.safeParse({ fullName: "Alex Admin", role: "ADMIN" }).success).toBe(false);
+    expect(profileUpdateSchema.safeParse({ avatarUrl: "https://attacker.example/avatar.png" }).success).toBe(false);
+    expect(profileUpdateSchema.parse({ avatarUrl: null })).toEqual({ avatarUrl: null });
   });
 
   it("accepts only a normalized email and six-digit signup OTP", () => {

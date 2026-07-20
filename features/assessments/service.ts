@@ -2,10 +2,10 @@ import { Prisma } from "@prisma/client";
 
 import { getEligibleQuestions } from "@/features/questions/selection-service";
 import { prisma } from "@/lib/db/prisma";
-import { AssessmentError, buildAttemptSnapshots, fisherYates, hasTestExpired, isSubmittedAttemptStatus, type SnapshotOption } from "./domain";
+import { AssessmentError, buildAttemptSnapshots, hasTestExpired, isSubmittedAttemptStatus, selectQuestionsByTopic, type SnapshotOption } from "./domain";
 import { attemptDetailDto, attemptListItemDto, attemptResultDto } from "./dto";
 import { attemptInclude, databaseNow, expireDueAttempts, finalizeLockedAttempt, lockOwnedAttempt, readOwnedAttemptWithLazyExpiry, retryAssessmentTransaction } from "./finalization-service";
-import type { AnswerInput, AttemptListInput, StartAssessmentInput } from "./schemas";
+import type { AnswerInput, AssessmentAvailabilityInput, AttemptListInput, StartAssessmentInput } from "./schemas";
 
 function parsedOptions(value: Prisma.JsonValue): SnapshotOption[] {
   if (!Array.isArray(value)) throw new AssessmentError("INVALID_SNAPSHOT", "Attempt snapshot is invalid.", 500);
@@ -13,29 +13,32 @@ function parsedOptions(value: Prisma.JsonValue): SnapshotOption[] {
 }
 
 async function validateScope(tx: Prisma.TransactionClient, input: StartAssessmentInput) {
-  const systems = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-    SELECT "id" FROM "OrganSystem"
-    WHERE "id" = ${input.organSystemId}::uuid AND "trashedAt" IS NULL AND "status" = 'PUBLISHED' AND "isActive" = true
-    ORDER BY "id"
-    FOR SHARE
-  `);
-  if (!systems.length) throw new AssessmentError("SYSTEM_NOT_FOUND", "Published organ system was not found.", 404);
+  if (input.organSystemId) {
+    const systems = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT "id" FROM "OrganSystem"
+      WHERE "id" = ${input.organSystemId}::uuid AND "trashedAt" IS NULL AND "status" = 'PUBLISHED' AND "isActive" = true
+      ORDER BY "id" FOR SHARE
+    `);
+    if (!systems.length) throw new AssessmentError("SYSTEM_NOT_FOUND", "Published organ system was not found.", 404);
+  }
   const topics = await tx.topic.findMany({
     where: {
       organSystemId: input.organSystemId,
       trashedAt: null,
       status: "PUBLISHED",
       ...(input.topicIds ? { id: { in: input.topicIds } } : {}),
+      organSystem: { trashedAt: null, status: "PUBLISHED", isActive: true },
     },
-    select: { id: true }, orderBy: { id: "asc" },
+    select: { id: true, title: true, organSystem: { select: { id: true, name: true } } }, orderBy: { id: "asc" },
   });
   if (input.topicIds && topics.length !== input.topicIds.length) {
-    throw new AssessmentError("INVALID_TOPIC_SCOPE", "One or more published topics are unavailable for this organ system.", 422);
+    throw new AssessmentError("INVALID_TOPIC_SCOPE", "One or more selected published topics are unavailable for this scope.", 422);
   }
   if (!topics.length) throw new AssessmentError("NO_TOPICS", "No published topics are available for this organ system.", 422);
   const topicIds = topics.map((topic) => topic.id).sort();
   await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Topic" WHERE "id" = ANY(ARRAY[${Prisma.join(topicIds)}]::uuid[]) AND "trashedAt" IS NULL ORDER BY "id" FOR SHARE`);
-  return topicIds;
+  const systemIds = [...new Set(topics.map((topic) => topic.organSystem.id))];
+  return { topicIds, topics, organSystemId: systemIds.length === 1 ? systemIds[0] : null };
 }
 
 async function createAttemptInTransaction(
@@ -45,12 +48,16 @@ async function createAttemptInTransaction(
   retakeSourceId: string | null,
   random: () => number,
 ) {
-  const topicIds = await validateScope(tx, input);
+  const scope = await validateScope(tx, input);
+  const { topicIds } = scope;
+  if (input.questionCount < topicIds.length) {
+    throw new AssessmentError("QUESTION_COUNT_TOO_SMALL", "questionCount must be at least the selected topic count.", 422);
+  }
   const eligible = await getEligibleQuestions({ ...input, topicIds }, tx);
   if (eligible.length < input.questionCount) {
     throw new AssessmentError("INSUFFICIENT_QUESTIONS", `Only ${eligible.length} eligible questions are available.`, 422);
   }
-  const selected = fisherYates(eligible, random).slice(0, input.questionCount);
+  const selected = selectQuestionsByTopic(eligible, topicIds, input.questionCount, random);
   const selectedIds = selected.map((question) => question.id).sort();
   await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Question" WHERE "id" = ANY(ARRAY[${Prisma.join(selectedIds)}]::uuid[]) AND "trashedAt" IS NULL ORDER BY "id" FOR SHARE`);
   const eligibleAfterLock = await getEligibleQuestions({ ...input, topicIds }, tx);
@@ -68,7 +75,7 @@ async function createAttemptInTransaction(
   const expiresAt = timeLimitSeconds === null ? null : new Date(now.getTime() + timeLimitSeconds * 1000);
   return tx.assessmentAttempt.create({
     data: {
-      userId, assessmentType: input.assessmentType, organSystemId: input.organSystemId,
+      userId, assessmentType: input.assessmentType, organSystemId: scope.organSystemId,
       requestedQuestionCount: input.questionCount, totalQuestionCount: input.questionCount,
       unansweredCount: input.questionCount, startedAt: now, expiresAt, timeLimitSeconds, retakeSourceId,
       topics: { create: topicIds.map((topicId) => ({ topicId })) },
@@ -81,6 +88,26 @@ async function createAttemptInTransaction(
 export async function startAssessment(userId: string, input: StartAssessmentInput, random: () => number = Math.random) {
   const attempt = await retryAssessmentTransaction((tx) => createAttemptInTransaction(tx, userId, input, null, random));
   return attemptDetailDto(attempt);
+}
+
+export async function getAssessmentAvailability(input: AssessmentAvailabilityInput) {
+  return prisma.$transaction(async (tx) => {
+    const scope = await validateScope(tx, { ...input, questionCount: Math.max(5, input.topicIds?.length ?? 1) });
+    const eligible = await getEligibleQuestions({ ...input, topicIds: scope.topicIds }, tx);
+    const counts = new Map<string, number>();
+    for (const question of eligible) counts.set(question.topicId, (counts.get(question.topicId) ?? 0) + 1);
+    return {
+      totalEligibleCount: eligible.length,
+      minimumQuestionCount: Math.max(5, scope.topicIds.length),
+      maximumQuestionCount: Math.min(50, eligible.length),
+      topics: scope.topics.map((topic) => ({
+        id: topic.id,
+        title: topic.title,
+        organSystem: { id: topic.organSystem.id, name: topic.organSystem.name },
+        eligibleQuestionCount: counts.get(topic.id) ?? 0,
+      })),
+    };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
 }
 
 export async function updateAttemptAnswer(attemptId: string, attemptQuestionId: string, userId: string, input: AnswerInput) {
@@ -151,7 +178,7 @@ export async function retakeAttempt(attemptId: string, userId: string, random: (
     if (!isSubmittedAttemptStatus(source.status)) throw new AssessmentError("SOURCE_NOT_SUBMITTED", "Only a submitted attempt can be retaken.", 409);
     return createAttemptInTransaction(tx, userId, {
       assessmentType: source.assessmentType,
-      organSystemId: source.organSystemId,
+      ...(source.organSystemId ? { organSystemId: source.organSystemId } : {}),
       topicIds: source.topics.map((topic) => topic.topicId).sort(),
       questionCount: source.requestedQuestionCount,
     }, source.id, random);
@@ -162,7 +189,8 @@ export async function retakeAttempt(attemptId: string, userId: string, random: (
 export async function listAttempts(userId: string, input: AttemptListInput) {
   await expireDueAttempts({ limit: 50, userId });
   const where: Prisma.AssessmentAttemptWhereInput = {
-    userId, assessmentType: input.assessmentType, status: input.status, organSystemId: input.organSystemId,
+    userId, assessmentType: input.assessmentType, status: input.status,
+    ...(input.organSystemId ? { OR: [{ organSystemId: input.organSystemId }, { questions: { some: { organSystemIdSnapshot: input.organSystemId } } }] } : {}),
   };
   const [total, items] = await prisma.$transaction([
     prisma.assessmentAttempt.count({ where }),

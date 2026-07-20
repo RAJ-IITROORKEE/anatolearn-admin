@@ -10,7 +10,7 @@ vi.mock("@/lib/db/prisma", () => ({ prisma: { $transaction: mocks.transaction } 
 vi.mock("@/features/questions/selection-service", () => ({ getEligibleQuestions: mocks.getEligibleQuestions }));
 vi.mock("@/features/progress/projection", () => ({ refreshTopicProgressPairs: mocks.refreshTopicProgress }));
 
-import { getAttemptResult, retakeAttempt, submitAttempt, updateAttemptAnswer } from "./service";
+import { getAssessmentAvailability, getAttemptResult, retakeAttempt, startAssessment, submitAttempt, updateAttemptAnswer } from "./service";
 
 const now = new Date("2026-01-01T00:01:00Z");
 const active = {
@@ -135,7 +135,7 @@ describe("assessment service lifecycle", () => {
     tx.assessmentAttempt.findUnique.mockResolvedValueOnce(active).mockResolvedValueOnce(terminal);
     tx.assessmentAttempt.update.mockResolvedValue(terminal);
     tx.attemptQuestion.update.mockResolvedValue(active.questions[0]);
-    tx.topic.findMany.mockResolvedValue([{ id: active.topics[0].topicId }]);
+    tx.topic.findMany.mockResolvedValue([{ id: active.topics[0].topicId, title: "Topic", organSystem: { id: active.organSystemId, name: "System" } }]);
     tx.assessmentAttempt.create.mockResolvedValue(retake);
     mocks.getEligibleQuestions.mockResolvedValue([{
       id: active.questions[0].sourceQuestionSnapshotId, questionText: "Fresh prompt", imageUrl: null, mediaId: null,
@@ -154,5 +154,46 @@ describe("assessment service lifecycle", () => {
     mocks.transaction.mockRejectedValue(transactionError());
     await expect(submitAttempt(active.id, active.userId)).rejects.toMatchObject({ code: "TRANSACTION_FAILED", status: 409 });
     expect(mocks.transaction).toHaveBeenCalledTimes(3);
+  });
+
+  it("starts a mixed-system assessment with one question guaranteed per topic", async () => {
+    const tx = transactionClient();
+    const topicA = crypto.randomUUID();
+    const topicB = crypto.randomUUID();
+    const systemA = crypto.randomUUID();
+    const systemB = crypto.randomUUID();
+    tx.topic.findMany.mockResolvedValue([
+      { id: topicA, title: "A", organSystem: { id: systemA, name: "System A" } },
+      { id: topicB, title: "B", organSystem: { id: systemB, name: "System B" } },
+    ]);
+    tx.$queryRaw.mockResolvedValueOnce([{ id: topicA }, { id: topicB }]).mockResolvedValueOnce([]).mockResolvedValueOnce([{ now }]);
+    const candidates = Array.from({ length: 5 }, (_, index) => ({
+      id: crypto.randomUUID(), questionText: `Question ${index}`, imageUrl: null, mediaId: null,
+      explanation: "Explanation", difficulty: "EASY", conceptTag: null, topicId: index === 0 ? topicB : topicA,
+      topic: { title: index === 0 ? "B" : "A", organSystem: { id: index === 0 ? systemB : systemA, name: index === 0 ? "System B" : "System A" } },
+      options: [{ optionText: "Correct", imageUrl: null, mediaId: null, isCorrect: true }, { optionText: "Wrong", imageUrl: null, mediaId: null, isCorrect: false }],
+    }));
+    mocks.getEligibleQuestions.mockResolvedValue(candidates);
+    tx.assessmentAttempt.create.mockImplementation(({ data }) => ({ ...terminal, id: crypto.randomUUID(), assessmentType: "QUIZ", organSystemId: data.organSystemId, topics: data.topics.create.map(({ topicId }: { topicId: string }) => ({ topicId })), questions: data.questions.create }));
+    mocks.transaction.mockImplementation((callback: (client: typeof tx) => unknown) => callback(tx));
+
+    const result = await startAssessment(active.userId, { assessmentType: "QUIZ", topicIds: [topicA, topicB], questionCount: 5 }, () => 0);
+    expect(result.organSystemId).toBeNull();
+    expect(new Set(result.questions.map((question) => question.topicId))).toEqual(new Set([topicA, topicB]));
+    expect(tx.assessmentAttempt.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ organSystemId: null }) }));
+  });
+
+  it("returns per-topic eligible availability and dynamic count bounds", async () => {
+    const tx = transactionClient();
+    const topicId = crypto.randomUUID();
+    const systemId = crypto.randomUUID();
+    tx.topic.findMany.mockResolvedValue([{ id: topicId, title: "Heart", organSystem: { id: systemId, name: "Circulatory" } }]);
+    tx.$queryRaw.mockResolvedValue([{ id: topicId }]);
+    mocks.getEligibleQuestions.mockResolvedValue(Array.from({ length: 7 }, (_, index) => ({ id: String(index), topicId })));
+    mocks.transaction.mockImplementation((callback: (client: typeof tx) => unknown) => callback(tx));
+    await expect(getAssessmentAvailability({ assessmentType: "TEST", topicIds: [topicId] })).resolves.toEqual({
+      totalEligibleCount: 7, minimumQuestionCount: 5, maximumQuestionCount: 7,
+      topics: [{ id: topicId, title: "Heart", organSystem: { id: systemId, name: "Circulatory" }, eligibleQuestionCount: 7 }],
+    });
   });
 });

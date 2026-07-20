@@ -9,7 +9,7 @@ import { FeedbackTabs } from "./feedback-tabs";
 
 const item = {
   id: crypto.randomUUID(), subject: "Login issue", message: "The app signed me out.", type: "BUG_REPORT", status: "NEW",
-  createdAt: new Date("2026-07-14T12:00:00Z"), submitter: { fullName: "Ada Learner", email: "ada@example.com" },
+  rating: 4.5, createdAt: new Date("2026-07-14T12:00:00Z"), submitter: { fullName: "Ada Learner", email: "ada@example.com", avatarUrl: "https://signed.example/avatar" },
 };
 
 describe("feedback admin list", () => {
@@ -17,6 +17,8 @@ describe("feedback admin list", () => {
     render(<FeedbackList bulkTrashAction={vi.fn()} items={[item]} trashAction={vi.fn()} />);
     expect(screen.getByRole("table", { name: "Submitted feedback" })).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Login issue" })).toHaveLength(2);
+    expect(screen.getAllByText("4.5")).toHaveLength(2);
+    expect(screen.getAllByRole("img", { name: "Ada Learner's avatar" })).toHaveLength(2);
   });
 
   it("synchronizes responsive row selection and confirms row and bulk Delete", async () => {

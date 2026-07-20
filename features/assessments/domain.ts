@@ -43,6 +43,23 @@ export function fisherYates<T>(values: readonly T[], random: () => number = Math
   return shuffled;
 }
 
+export function selectQuestionsByTopic<T extends { id: string; topicId: string }>(
+  candidates: readonly T[],
+  topicIds: readonly string[],
+  count: number,
+  random: () => number = Math.random,
+) {
+  const selected: T[] = [];
+  for (const topicId of topicIds) {
+    const topicCandidates = candidates.filter((candidate) => candidate.topicId === topicId);
+    if (!topicCandidates.length) throw new AssessmentError("TOPIC_HAS_NO_QUESTIONS", "Every selected topic must have an eligible question.", 422, { topicIds: [topicId] });
+    selected.push(fisherYates(topicCandidates, random)[0]);
+  }
+  const selectedIds = new Set(selected.map((question) => question.id));
+  const remainder = fisherYates(candidates.filter((question) => !selectedIds.has(question.id)), random).slice(0, count - selected.length);
+  return fisherYates([...selected, ...remainder], random);
+}
+
 export function buildAttemptSnapshots(
   candidates: readonly SnapshotCandidate[],
   random: () => number = Math.random,

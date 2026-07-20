@@ -2,7 +2,7 @@ import { AssessmentError, isSubmittedAttemptStatus, type SnapshotOption } from "
 
 type DecimalLike = number | string | { toString(): string };
 type DtoAttempt = {
-  id: string; assessmentType: "QUIZ" | "TEST"; organSystemId: string; requestedQuestionCount: number; totalQuestionCount: number;
+  id: string; assessmentType: "QUIZ" | "TEST"; organSystemId: string | null; requestedQuestionCount: number; totalQuestionCount: number;
   correctCount: number; incorrectCount: number; unansweredCount: number; scorePercentage: DecimalLike; durationSeconds: number | null;
   timeLimitSeconds: number | null; startedAt: Date; expiresAt: Date | null; completedAt: Date | null;
   status: "IN_PROGRESS" | "COMPLETED" | "AUTO_SUBMITTED" | "ABANDONED"; retakeSourceId: string | null;

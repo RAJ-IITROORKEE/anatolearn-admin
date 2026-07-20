@@ -2,8 +2,8 @@ import "server-only";
 
 import { prisma } from "@/lib/db/prisma";
 
-export async function getAdminAttemptLabels({ organSystemIds, topicIds }: { organSystemIds: readonly string[]; topicIds: readonly string[] }) {
-  const uniqueSystemIds = [...new Set(organSystemIds)];
+export async function getAdminAttemptLabels({ organSystemIds, topicIds }: { organSystemIds: readonly (string | null)[]; topicIds: readonly string[] }) {
+  const uniqueSystemIds = [...new Set(organSystemIds.filter((id): id is string => id !== null))];
   const uniqueTopicIds = [...new Set(topicIds)];
   const [systems, topics] = await Promise.all([
     uniqueSystemIds.length ? prisma.organSystem.findMany({ where: { id: { in: uniqueSystemIds }, trashedAt: null }, select: { id: true, name: true } }) : [],

@@ -3,12 +3,13 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
+import { getProfileAvatarUrlMap } from "@/features/media/service";
 import { adminUserDetailDto, adminUserListItemDto } from "./dto";
 import { UserManagementError } from "./domain";
 import type { AdminUserListInput } from "./schemas";
 
 const profileSelect = {
-  id: true, fullName: true, email: true, avatarUrl: true, isActive: true,
+  id: true, fullName: true, email: true, avatarUrl: true, avatarMediaId: true, isActive: true,
   lastLoginAt: true, createdAt: true, updatedAt: true,
 } as const;
 
@@ -66,8 +67,9 @@ export async function listLearners(input: AdminUserListInput) {
     prisma.profile.count({ where: { role: "USER", isActive: false } }),
     prisma.profile.count({ where: { role: "USER", createdAt: { gte: joinedSince } } }),
   ]);
+  const avatarUrls = await getProfileAvatarUrlMap(items);
   return {
-    items: items.map(adminUserListItemDto),
+    items: items.map((item) => adminUserListItemDto(item, avatarUrls.get(item.id) ?? null)),
     summary: { total: active + inactive, active, inactive, joined30Days },
     pagination: { page: input.page, pageSize: input.pageSize, total, totalPages: Math.ceil(total / input.pageSize) },
   };
@@ -82,7 +84,8 @@ export async function getLearner(id: string) {
     prisma.feedback.count({ where: { userId: id, trashedAt: null } }),
     prisma.assessmentAttempt.aggregate({ where: { userId: id }, _max: { startedAt: true } }),
   ]);
-  return adminUserDetailDto(profile, { attempts, submittedAttempts, feedback, lastAttemptAt: latest._max.startedAt });
+  const avatarUrls = await getProfileAvatarUrlMap([profile]);
+  return adminUserDetailDto(profile, { attempts, submittedAttempts, feedback, lastAttemptAt: latest._max.startedAt }, avatarUrls.get(profile.id) ?? null);
 }
 
 // UI-only aggregate; the public admin user DTO remains unchanged.

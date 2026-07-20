@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { metric, rankTopicPerformance } from "./domain";
+import { buildProgressScore, metric, rankTopicPerformance } from "./domain";
 
 describe("progress calculations", () => {
   it("rounds weighted percentages to two decimals and keeps zero denominators neutral", () => {
@@ -31,5 +31,18 @@ describe("progress calculations", () => {
     expect(ranked.strengths.map((item) => item.topicId)).toEqual(["topic-b", "topic-a"]);
     expect(ranked.weaknesses.map((item) => item.topicId)).toEqual(["topic-a", "topic-b"]);
     expect(ranked.strengths).toHaveLength(2);
+  });
+
+  it("scores coverage plus latest-answer accuracy and renormalizes available components", () => {
+    expect(buildProgressScore({
+      content: { inventory: 0, completed: 0 },
+      quiz: { available: 10, seen: 5, correct: 4 },
+      test: { available: 0, seen: 0, correct: 0 },
+    })).toMatchObject({
+      value: 65,
+      status: "IN_PROGRESS",
+      components: { quiz: { value: 65, coverage: { percentage: 50 }, accuracy: { percentage: 80 }, normalizedWeight: 100 } },
+    });
+    expect(buildProgressScore({ content: { inventory: 0, completed: 0 }, quiz: { available: 0, seen: 0, correct: 0 }, test: { available: 0, seen: 0, correct: 0 } }).value).toBeNull();
   });
 });

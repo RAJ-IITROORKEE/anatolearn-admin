@@ -6,7 +6,7 @@
 
 Date: 2026-07-16
 
-Phases 0-7 are implemented and all twelve migrations are current in the configured
+Phases 0-7 are implemented and all fourteen migrations are current in the configured
 development database. The product is not claimed as fully deployed or production-ready.
 `npm run env:check` passes locally. The production Vercel project now has a free Upstash
 resource; the adapter accepts its standard `KV_REST_API_*` credentials as well as the
@@ -188,6 +188,38 @@ the topics, and 20 eligible assessment questions. No user account or test data w
 
 ## Final verification record
 
+### Backend compatibility follow-up (2026-07-21)
+
+- Added nullable half-step feedback ratings with a future-row 4.5 default; historical
+  rows remain null and learner feedback DTOs remain unchanged.
+- Added cross-system assessment scopes, authenticated availability, one-question-per-topic
+  random selection, nullable singular system storage, mixed-safe admin presentation, and
+  a deferred scope invariant without changing UUID routes or immutable snapshots.
+- Extended progress with exact current inventory, latest terminal evidence per current
+  source question, coverage/accuracy, transparent renormalized scoring, status,
+  `formulaVersion`, `asOf`, and mixed-attempt attribution.
+- Added managed avatar PUT/DELETE with strict bytes/size/multipart/auth/rate-limit controls,
+  private media linking/Trash compensation, signed `/me` presentation, and batch-signed
+  accessible admin user/feedback avatars.
+- Added and deployed migrations `20260721120000_add_ratings_and_cross_system_assessments`
+  and `20260721130000_revalidate_attempt_topic_updates` to the configured development
+  database. No production data was modified.
+- TDD red run failed in the expected new behavior. Prisma generate/validate and focused
+  tests passed during implementation. Final verification: Prisma generate/validate,
+  lint, typecheck, OpenAPI validation (113 unique operations), `git diff --check`, and the
+  46-unit production build passed. Full Vitest passed 167 files/657 tests with 3 files/15
+  tests skipped because no dedicated `TEST_DATABASE_URL` was configured. The new
+  rollback-only mixed-scope PostgreSQL case therefore did not run locally.
+- Code-review follow-up made the pending migration atomic and added deferred scope checks
+  for both affected link IDs and attempt-system changes; snapshot system nullability and
+  the per-topic start error now match OpenAPI. Progress dashboard reads share one
+  repeatable-read transaction/snapshot. Avatar cleanup and media Trash preserve every
+  profile/content/feedback/attempt reference under an asset lock. Focused tests passed
+  35 with 5 conditional PostgreSQL skips; full Vitest passed 167 files/664 tests with 3
+  files/15 tests skipped. Lint, typecheck, Prisma validation, and OpenAPI validation passed.
+  Both migrations are deployed to configured development; PostgreSQL integration coverage
+  remains conditional on a separate `TEST_DATABASE_URL`.
+
 | Command/check | Result |
 | --- | --- |
 | `npm run lint` | Passed |
@@ -197,8 +229,8 @@ the topics, and 20 eligible assessment questions. No user account or test data w
 | Isolated `TEST_DATABASE_URL` | Passed: 2 files/9 tests (4 assessment lifecycle + 5 direct DB access) |
 | `npm run build` | Passed: 44 static-generation units under nonce dynamic CSP output; all routes |
 | `npm run test:e2e` | 17 passed, 14 skipped |
-| `npm run openapi:validate` | Passed: 110 operations, 110 unique operation IDs, exact route parity |
-| Prisma generation, validation, deploy/status | Passed; all 12 migrations current, including Feedback Trash and Prisma metadata protection |
+| `npm run openapi:validate` | Passed: 113 operations, 113 unique operation IDs, exact route parity |
+| Prisma generation, validation, deploy/status | Passed; all 14 migrations current, including ratings, cross-system assessments, and topic-scope follow-up |
 | `npm audit` | 0 high/critical; 2 moderate PostCSS-through-Next findings remain |
 | `npm run env:check` | Passed locally; production deployment values remain an external gate |
 | `git diff --check` | Passed; line-ending notices only |

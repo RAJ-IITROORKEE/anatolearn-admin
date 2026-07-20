@@ -192,4 +192,49 @@ integrationDescribe("assessment PostgreSQL guards with dedicated TEST_DATABASE_U
       await secondClient.$disconnect();
     }
   });
+
+  it("accepts mixed-system topic links only with a null singular system", async () => {
+    const suffix = crypto.randomUUID();
+    const userId = crypto.randomUUID();
+    const firstSystemId = crypto.randomUUID();
+    const secondSystemId = crypto.randomUUID();
+    const firstTopicId = crypto.randomUUID();
+    const secondTopicId = crypto.randomUUID();
+    await client.profile.create({ data: { id: userId, fullName: "Mixed learner", email: `${suffix}@example.test`, emailNormalized: `${suffix}@example.test` } });
+    await client.organSystem.createMany({ data: [
+      { id: firstSystemId, name: `Mixed A ${suffix}`, slug: `mixed-a-${suffix}`, shortDescription: "Test", displayOrder: 0, status: "PUBLISHED" },
+      { id: secondSystemId, name: `Mixed B ${suffix}`, slug: `mixed-b-${suffix}`, shortDescription: "Test", displayOrder: 1, status: "PUBLISHED" },
+    ] });
+    await client.topic.createMany({ data: [
+      { id: firstTopicId, organSystemId: firstSystemId, title: "Mixed A", slug: `mixed-a-${suffix}`, displayOrder: 0, status: "PUBLISHED" },
+      { id: secondTopicId, organSystemId: secondSystemId, title: "Mixed B", slug: `mixed-b-${suffix}`, displayOrder: 0, status: "PUBLISHED" },
+    ] });
+    const mixed = await client.assessmentAttempt.create({ data: {
+      userId, assessmentType: "QUIZ", organSystemId: null, requestedQuestionCount: 5,
+      totalQuestionCount: 5, unansweredCount: 5,
+      topics: { create: [{ topicId: firstTopicId }, { topicId: secondTopicId }] },
+    }, include: { topics: true } });
+    expect(mixed.organSystemId).toBeNull();
+    expect(mixed.topics).toHaveLength(2);
+
+    await expect(client.$transaction(async (tx) => {
+      await tx.assessmentAttempt.create({ data: {
+        userId, assessmentType: "QUIZ", organSystemId: firstSystemId, requestedQuestionCount: 5,
+        totalQuestionCount: 5, unansweredCount: 5,
+        topics: { create: [{ topicId: firstTopicId }, { topicId: secondTopicId }] },
+      } });
+    })).rejects.toThrow(/Mixed-system attempt scope must not retain a singular organ system/);
+
+    await expect(client.assessmentAttempt.update({
+      where: { id: mixed.id },
+      data: { organSystemId: firstSystemId },
+    })).rejects.toThrow(/Assessment attempt scope and timing are immutable/);
+    await expect(client.assessmentAttemptTopic.delete({
+      where: { attemptId_topicId: { attemptId: mixed.id, topicId: secondTopicId } },
+    })).rejects.toThrow(/Assessment history cannot be deleted/);
+    await expect(client.assessmentAttemptTopic.update({
+      where: { attemptId_topicId: { attemptId: mixed.id, topicId: secondTopicId } },
+      data: { attemptId: crypto.randomUUID() },
+    })).rejects.toThrow(/Assessment history cannot be deleted/);
+  });
 });

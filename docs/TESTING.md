@@ -78,6 +78,8 @@ Install Chromium once with `npx playwright install chromium`.
 - full Sharp decode of PNG, JPEG, and WebP plus malformed, truncated, unsupported,
   and over-dimension image rejection
 - eligible published-media reference detection
+- managed-avatar replacement/clear preserves shared content media, and media Trash repeats
+  the locked authoritative profile/content/feedback/attempt dependency check
 - audit pagination/action/entity/actor/date schema parsing
 
 ### Component behavior
@@ -136,6 +138,9 @@ Install Chromium once with `npx playwright install chromium`.
 - migration SQL guards have a conditional rollback-only PostgreSQL suite for snapshot
   immutability, terminal-result immutability, and source-edit stability; it was skipped
   in the latest run because no dedicated database was configured
+- legacy and cross-system schemas, authenticated availability, dynamic bounds, per-topic
+  eligible counts, mandatory random topic coverage, nullable mixed storage, and deferred
+  scope migration SQL
 
 ### Progress and Phase 5 admin UI
 
@@ -148,6 +153,8 @@ Install Chromium once with `npx playwright install chromium`.
   and 10-item recent-attempt bound
 - read-only admin attempt filters/detail disclosure, UUID page guards, labels, badges,
   answer breakdown, historical media authorization, and narrow user progress components
+- exact current inventories, latest-terminal-answer deduplication, coverage/accuracy
+  evidence, 20/40/40 renormalized scoring, status/null semantics, and mixed recent labels
 
 ### Phase 5 concurrency acceptance repair
 
@@ -172,6 +179,14 @@ Install Chromium once with `npx playwright install chromium`.
 - strict feedback create/mine/admin schemas; owner/admin DTO privacy; adapter-backed
   submission limiting; list/detail routing; review/resolve attribution; internal-note
   behavior; no-op handling; and redacted audit snapshots
+- half-step feedback ratings with historical null/admin display and explicit learner DTO
+  omission; batch-signed user/feedback avatars and accessible UI fallbacks
+
+### Managed avatars
+
+- exact multipart shape, active owner/origin/rate-limit boundaries, PNG/JPEG byte and 1 MiB
+  validation, row-locked link/clear behavior, replacement compensation, legacy clearing,
+  signed presentation fallback, and storage-field omission
 
 ### Phase 6 notifications
 
@@ -232,11 +247,11 @@ Install Chromium once with `npx playwright install chromium`.
 | Final full `npm run test` | Passed: 160 files/600 tests; 3 files/14 tests skipped |
 | Isolated `TEST_DATABASE_URL` run | Passed: 2 files/9 tests (4 assessment lifecycle + 5 direct database access) |
 | `npm run prisma:deploy` | Passed; the Phase 7 RLS/revoke migrations, including Prisma metadata protection, are deployed to the configured database |
-| Prisma migration status | Current: all twelve migrations, including Feedback Trash and Prisma metadata protection |
+| Prisma migration status | Current: all fourteen migrations, including ratings, cross-system assessments, and topic-scope follow-up |
 | `npm run test:e2e` | 17 passed, 14 skipped |
 | `npm run build` | Passed: 44 static-generation units under dynamic nonce CSP output; all routes included |
 | `npm run env:check` | Passed locally; production deployment values remain an external gate |
-| `npm run openapi:validate` | Passed: 110 operations and 110 unique operation IDs with exact route parity |
+| `npm run openapi:validate` | Passed: 113 operations and 113 unique operation IDs with exact route parity |
 | `npm audit` | 0 high/critical; 2 moderate PostCSS findings through Next.js remain |
 | `git diff --check` | Passed; line-ending conversion warnings only |
 

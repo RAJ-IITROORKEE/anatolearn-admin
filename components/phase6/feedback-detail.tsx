@@ -6,17 +6,18 @@ import { ActionForm } from "@/components/phase3/action-form";
 import { fieldClass, labelClass, panelClass } from "@/components/phase3/admin-ui";
 import { ConfirmedAction } from "./confirmed-action";
 import { Phase6StatusBadge } from "./status-badge";
+import { PersonAvatar } from "@/components/shared/person-avatar";
 
-type Person = { id: string; fullName: string; email: string; isActive: boolean };
+type Person = { id: string; fullName: string; email: string; isActive: boolean; avatarUrl: string | null };
 export type FeedbackDetailData = {
-  id: string; type: string; subject: string; message: string; status: string; adminNotes: string | null;
+  id: string; type: string; subject: string; message: string; rating: number | null; status: string; adminNotes: string | null;
   createdAt: Date; updatedAt: Date; reviewedAt: Date | null; resolvedAt: Date | null;
   submitter: Person | null; reviewer: Person | null; resolver: Person | null;
 };
 
 function PersonValue({ person }: { person: Person | null }) {
   if (!person) return <span>Not recorded</span>;
-  return <span>{person.fullName} <span className="text-muted">({person.email})</span></span>;
+  return <span className="inline-flex items-center gap-2"><PersonAvatar name={person.fullName} size="sm" url={person.avatarUrl} /><span>{person.fullName} <span className="text-muted">({person.email})</span></span></span>;
 }
 
 export function FeedbackDetail({ feedback }: { feedback: FeedbackDetailData }) {
@@ -28,7 +29,7 @@ export function FeedbackDetail({ feedback }: { feedback: FeedbackDetailData }) {
       <div className="grid min-w-0 gap-6"><section className={panelClass} aria-labelledby="feedback-message"><h2 className="text-lg font-bold" id="feedback-message">Message</h2><p className="mt-4 whitespace-pre-wrap break-words text-sm leading-7 text-body">{feedback.message}</p></section>
         <section className={panelClass} aria-labelledby="internal-notes"><h2 className="text-lg font-bold" id="internal-notes">Internal notes</h2><p className="mt-1 text-sm text-muted">Visible only to administrators.</p><div className="mt-4"><ActionForm action={updateFeedbackNotesAction.bind(null, feedback.id)} label="Save internal notes"><label className={labelClass}>Notes<textarea className={`${fieldClass} min-h-36 py-3`} defaultValue={feedback.adminNotes ?? ""} maxLength={5000} name="adminNotes" /></label></ActionForm></div></section>
       </div>
-      <aside className={panelClass} aria-labelledby="feedback-metadata"><h2 className="text-lg font-bold" id="feedback-metadata">Submission details</h2><dl className="mt-4 grid gap-4 text-sm"><div><dt className="font-semibold text-muted">Submitted by</dt><dd className="mt-1 text-body">{feedback.submitter ? <Link className="font-semibold text-primary hover:underline" href={`/users/${feedback.submitter.id}`}>{feedback.submitter.fullName}</Link> : "Unknown user"}{feedback.submitter && <span className="block break-all text-muted">{feedback.submitter.email}</span>}</dd></div><div><dt className="font-semibold text-muted">Submitted</dt><dd className="mt-1 tabular-nums text-body">{formatDateTime(feedback.createdAt)}</dd></div><div><dt className="font-semibold text-muted">Last updated</dt><dd className="mt-1 tabular-nums text-body">{formatDateTime(feedback.updatedAt)}</dd></div><div><dt className="font-semibold text-muted">Reviewed by</dt><dd className="mt-1 text-body"><PersonValue person={feedback.reviewer} />{feedback.reviewedAt && <span className="block tabular-nums text-muted">{formatDateTime(feedback.reviewedAt)}</span>}</dd></div><div><dt className="font-semibold text-muted">Resolved by</dt><dd className="mt-1 text-body"><PersonValue person={feedback.resolver} />{feedback.resolvedAt && <span className="block tabular-nums text-muted">{formatDateTime(feedback.resolvedAt)}</span>}</dd></div></dl></aside>
+       <aside className={panelClass} aria-labelledby="feedback-metadata"><h2 className="text-lg font-bold" id="feedback-metadata">Submission details</h2><dl className="mt-4 grid gap-4 text-sm"><div><dt className="font-semibold text-muted">Rating</dt><dd className="mt-1 tabular-nums text-body">{feedback.rating === null ? "Unknown rating" : `${feedback.rating} out of 5`}</dd></div><div><dt className="font-semibold text-muted">Submitted by</dt><dd className="mt-1 text-body">{feedback.submitter ? <span className="inline-flex items-center gap-2"><PersonAvatar name={feedback.submitter.fullName} size="sm" url={feedback.submitter.avatarUrl} /><span><Link className="font-semibold text-primary hover:underline" href={`/users/${feedback.submitter.id}`}>{feedback.submitter.fullName}</Link><span className="block break-all text-muted">{feedback.submitter.email}</span></span></span> : "Unknown user"}</dd></div><div><dt className="font-semibold text-muted">Submitted</dt><dd className="mt-1 tabular-nums text-body">{formatDateTime(feedback.createdAt)}</dd></div><div><dt className="font-semibold text-muted">Last updated</dt><dd className="mt-1 tabular-nums text-body">{formatDateTime(feedback.updatedAt)}</dd></div><div><dt className="font-semibold text-muted">Reviewed by</dt><dd className="mt-1 text-body"><PersonValue person={feedback.reviewer} />{feedback.reviewedAt && <span className="block tabular-nums text-muted">{formatDateTime(feedback.reviewedAt)}</span>}</dd></div><div><dt className="font-semibold text-muted">Resolved by</dt><dd className="mt-1 text-body"><PersonValue person={feedback.resolver} />{feedback.resolvedAt && <span className="block tabular-nums text-muted">{formatDateTime(feedback.resolvedAt)}</span>}</dd></div></dl></aside>
     </div>
   </>;
 }

@@ -132,11 +132,11 @@ export async function getMedia(id: string) {
   return withSignedUrl(asset);
 }
 
-export async function getAdminMediaMap(ids: readonly string[]) {
+async function getSignedMediaMap(ids: readonly string[], activeOnly: boolean) {
   const uniqueIds = [...new Set(ids)];
   if (!uniqueIds.length) return new Map<string, AdminMediaReference>();
   const assets = await prisma.mediaAsset.findMany({
-    where: { id: { in: uniqueIds } },
+    where: { id: { in: uniqueIds }, ...(activeOnly ? { archivedAt: null, trashedAt: null } : {}) },
     select: { id: true, bucket: true, path: true, width: true, height: true, altText: true },
   });
   const byBucket = new Map<string, typeof assets>();
@@ -162,6 +162,19 @@ export async function getAdminMediaMap(ids: readonly string[]) {
     });
   }));
   return new Map<string, AdminMediaReference>(entries.flat());
+}
+
+export async function getAdminMediaMap(ids: readonly string[]) {
+  return getSignedMediaMap(ids, false);
+}
+
+export async function getProfileAvatarUrlMap(profiles: readonly { id: string; avatarMediaId: string | null; avatarUrl: string | null }[]) {
+  const managedIds = profiles.flatMap((profile) => profile.avatarMediaId ? [profile.avatarMediaId] : []);
+  const managed = await getSignedMediaMap(managedIds, true);
+  return new Map(profiles.map((profile) => [
+    profile.id,
+    profile.avatarMediaId ? managed.get(profile.avatarMediaId)?.signedUrl ?? null : profile.avatarUrl,
+  ]));
 }
 
 async function getPublishedMediaInTransaction(tx: Prisma.TransactionClient, id: string) {

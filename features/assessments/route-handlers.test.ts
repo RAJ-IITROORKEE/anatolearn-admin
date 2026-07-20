@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  resolveRequestIdentity: vi.fn(), startAssessment: vi.fn(), submitAttempt: vi.fn(), retakeAttempt: vi.fn(), updateAttemptAnswer: vi.fn(),
+  resolveRequestIdentity: vi.fn(), startAssessment: vi.fn(), availability: vi.fn(), submitAttempt: vi.fn(), retakeAttempt: vi.fn(), updateAttemptAnswer: vi.fn(),
 }));
 vi.mock("@/lib/auth/request", () => ({ resolveRequestIdentity: mocks.resolveRequestIdentity }));
 vi.mock("./service", () => ({
   startAssessment: mocks.startAssessment, submitAttempt: mocks.submitAttempt, updateAttemptAnswer: mocks.updateAttemptAnswer,
-  getAttempt: vi.fn(), getAttemptResult: vi.fn(), retakeAttempt: mocks.retakeAttempt, listAttempts: vi.fn(),
+  getAssessmentAvailability: mocks.availability, getAttempt: vi.fn(), getAttemptResult: vi.fn(), retakeAttempt: mocks.retakeAttempt, listAttempts: vi.fn(),
 }));
 
-import { assessmentStartHandler, attemptAnswerHandler, attemptRetakeHandler, attemptSubmitHandler } from "./route-handlers";
+import { assessmentAvailabilityHandler, assessmentStartHandler, attemptAnswerHandler, attemptRetakeHandler, attemptSubmitHandler } from "./route-handlers";
 
 const id = "10000000-0000-4000-8000-000000000001";
 const identity = { profile: { id: "owner" }, user: {}, mode: "cookie" };
@@ -39,6 +39,16 @@ describe("assessment route handlers", () => {
     const response = await attemptAnswerHandler(request, { params: Promise.resolve({ attemptId: id, attemptQuestionId: id }) });
     expect(response.status).toBe(200);
     expect(mocks.updateAttemptAnswer).toHaveBeenCalledWith(id, id, "owner", { answeredOptionKey: null });
+  });
+
+  it("serves authenticated cross-system availability without accepting an actor", async () => {
+    mocks.resolveRequestIdentity.mockResolvedValue({ ...identity, mode: "bearer" });
+    mocks.availability.mockResolvedValue({ totalEligibleCount: 10, topics: [] });
+    const response = await assessmentAvailabilityHandler(new Request("https://app.example/api/v1/assessments/availability", {
+      method: "POST", headers: { authorization: "Bearer token", "content-type": "application/json" }, body: JSON.stringify({ assessmentType: "QUIZ", topicIds: [id] }),
+    }));
+    expect(response.status).toBe(200);
+    expect(mocks.availability).toHaveBeenCalledWith({ assessmentType: "QUIZ", topicIds: [id] });
   });
 
   it.each([

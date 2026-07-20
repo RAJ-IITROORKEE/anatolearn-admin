@@ -2,7 +2,7 @@
 
 ## Status
 
-Phases 0-7 are implemented in the repository and all twelve migrations are current in the
+Phases 0-7 are implemented in the repository and all fourteen migrations are current in the
 configured development database. Production readiness remains externally gated by cron,
 Upstash, provider, authenticated-E2E, backup/restore, and deployment work. This document
 describes current behavior; it does not claim a production deployment.
@@ -182,6 +182,15 @@ system with 2-6 options, one correct answer, and no archived question/option med
 
 ## Phase 5 assessment engine
 
+### Cross-system scope follow-up
+
+Assessment scope now accepts either the legacy system plus optional in-system topics or
+topic IDs alone across systems. A deferred constraint trigger validates the complete
+attempt-topic set at commit: one-system attempts retain that system ID and mixed attempts
+store null. Start guarantees one randomized eligible question per selected topic before
+filling the remainder; availability exposes the same current eligibility boundary.
+Snapshot columns remain immutable and each mixed question carries its own system/topic.
+
 ### Start and immutable snapshot flow
 
 `POST /api/v1/assessments/start` derives the owner from the active cookie or bearer
@@ -261,6 +270,13 @@ inside the route and is returned safely by the centralized error mapper. The bro
 a short configured secret remains a deployment configuration failure.
 
 ## Progress and reporting
+
+Progress formula version `2026-07-current-inventory-v1` adds current lesson/flashcard/
+quiz/test inventory and latest-answer activity. A windowed query selects only the latest
+terminal answer per currently eligible source question, preventing retakes from inflating
+coverage or accuracy. Inventory, activity, recent attempts, and the reported `asOf` are
+read through one repeatable-read transaction and transaction-scoped Prisma client. Content/quiz/test score weights are 20/40/40 and renormalize only
+for inventoried components; flashcards remain visible but unscored.
 
 `PUT /api/v1/content-lessons/{id}/progress` writes the authenticated user's absolute
 completion state only for a currently published lesson beneath a published topic and
@@ -501,6 +517,14 @@ passes the resulting managed-media ID to the existing domain service. Existing I
 retained on edits unless an image is replaced or explicitly cleared.
 
 ## Media flow
+
+Managed avatars reuse the private media upload/Sharp boundary with a stricter PNG/JPEG
+and 1 MiB policy. The server derives actor/path, links the profile under a row lock,
+clears the legacy URL, and uses recoverable Trash compensation. Replacement and clear
+lock the old asset and preserve it when any profile, content, feedback, or attempt-snapshot
+reference remains; the Trash transaction repeats the authoritative dependency check.
+Profile/admin list and
+feedback presentation batch-sign managed assets by bucket, avoiding per-row signing.
 
 1. An admin submits multipart `file` and optional `altText`.
 2. The server enforces the configured byte limit and uses Sharp 0.35.3 to identify and
