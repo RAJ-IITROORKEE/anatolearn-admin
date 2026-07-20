@@ -11,13 +11,14 @@ import Link from "@tiptap/extension-link";
 import TextAlign from "@tiptap/extension-text-align";
 import { FontSize, TextStyle } from "@tiptap/extension-text-style";
 import Underline from "@tiptap/extension-underline";
+import { NodeSelection } from "@tiptap/pm/state";
 import { EditorContent, Extension, type JSONContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import {
   AlignCenter, AlignLeft, AlignRight, Bold, ChevronDown, Eye, Highlighter, ImagePlus, Italic, Link2,
   List, ListOrdered, Quote, Redo2, RemoveFormatting, Strikethrough, UnderlineIcon, Undo2, X,
 } from "lucide-react";
-import { type CSSProperties, type DragEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import { type CSSProperties, type DragEvent, type MouseEvent, type ReactNode, useEffect, useRef, useState } from "react";
 
 import {
   legacyBlocksToRichContent,
@@ -35,6 +36,7 @@ import { Button } from "@/components/ui/button";
 type ExistingMedia = Record<string, { signedUrl: string; altText: string }>;
 type PendingMedia = { file: File; name: string; url: string };
 type PendingMediaMap = Map<string, PendingMedia>;
+type HoveredImage = { left: number; pos: number; top: number };
 type RichTextDraftDocument = ReturnType<typeof richTextDraftDocumentSchema.parse>;
 
 const acceptedImageTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
@@ -316,7 +318,9 @@ export function LessonEditor({ initialBlocks, initialRichContent, existingMedia 
   const pendingRef = useRef(pendingMedia);
   const pickerRef = useRef<HTMLInputElement>(null);
   const serializedRef = useRef<HTMLInputElement>(null);
+  const editorSurfaceRef = useRef<HTMLDivElement>(null);
   const mountedRef = useRef(false);
+  const [hoveredImage, setHoveredImage] = useState<HoveredImage | null>(null);
 
   const createPendingImage = (file: File) => {
     if (!acceptedImageTypes.has(file.type)) return null;
@@ -334,11 +338,24 @@ export function LessonEditor({ initialBlocks, initialRichContent, existingMedia 
     extensions: editorExtensions,
     content: addPreviewSources(editableInitialDocument, existingMedia),
     immediatelyRender: false,
-    editorProps: { attributes: {
-      "aria-label": "Lesson rich text editor",
-      class: "min-h-[28rem] px-5 py-6 text-[16px] leading-7 text-body outline-none sm:px-8 [&_blockquote]:border-l-4 [&_blockquote]:border-primary/30 [&_blockquote]:bg-primary-soft [&_blockquote]:px-4 [&_blockquote]:py-3 [&_h2]:text-2xl [&_h2]:font-bold [&_h3]:text-xl [&_h3]:font-bold [&_h4]:text-lg [&_h4]:font-bold [&_hr]:my-6 [&_li]:ml-6 [&_ol]:list-decimal [&_p]:min-h-6 [&_ul]:list-disc",
-      role: "textbox",
-    } },
+     editorProps: {
+       attributes: {
+         "aria-label": "Lesson rich text editor",
+         class: "min-h-[28rem] px-5 py-6 text-[16px] leading-7 text-body outline-none sm:px-8 [&_blockquote]:border-l-4 [&_blockquote]:border-primary/30 [&_blockquote]:bg-primary-soft [&_blockquote]:px-4 [&_blockquote]:py-3 [&_h2]:text-2xl [&_h2]:font-bold [&_h3]:text-xl [&_h3]:font-bold [&_h4]:text-lg [&_h4]:font-bold [&_hr]:my-6 [&_li]:ml-6 [&_ol]:list-decimal [&_p]:min-h-6 [&_ul]:list-disc",
+         role: "textbox",
+       },
+       handleDOMEvents: {
+         dragstart(view, event) {
+           const target = event.target;
+           if (!(target instanceof HTMLImageElement)) return false;
+           const position = view.posAtDOM(target, 0);
+           const node = view.state.doc.nodeAt(position);
+           if (!node || node.type.name !== "image") return false;
+           view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, position)));
+           return false;
+         },
+       },
+     },
     onUpdate({ editor: current }) {
       const raw = sanitizedDocumentValue(current.getJSON());
       const checked = richTextDraftDocumentSchema.safeParse(raw);
@@ -384,6 +401,35 @@ export function LessonEditor({ initialBlocks, initialRichContent, existingMedia 
     const position = canLocateDrop ? editor.view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos : undefined;
     editor.chain().focus(undefined, { scrollIntoView: false }).insertContentAt(position ?? editor.state.selection.to, { type: "image", attrs: { src: pending.value.url, uploadId: pending.uploadId, alt: "", caption: null, legacyId: pending.uploadId } }).run();
   };
+  const updateHoveredImage = (event: MouseEvent<HTMLDivElement>) => {
+    if (!editor || !editorSurfaceRef.current) return;
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    if (target?.closest("[data-image-remove]")) return;
+    const image = target?.closest("img");
+    if (!(image instanceof HTMLImageElement)) {
+      setHoveredImage(null);
+      return;
+    }
+    const pos = editor.view.posAtDOM(image, 0);
+    const node = editor.state.doc.nodeAt(pos);
+    if (!node || node.type.name !== "image") {
+      setHoveredImage(null);
+      return;
+    }
+    const imageRect = image.getBoundingClientRect();
+    const surfaceRect = editorSurfaceRef.current.getBoundingClientRect();
+    setHoveredImage({ left: imageRect.right - surfaceRect.left - 52, pos, top: imageRect.top - surfaceRect.top + 8 });
+  };
+  const removeHoveredImage = () => {
+    if (!editor || !hoveredImage) return;
+    const node = editor.state.doc.nodeAt(hoveredImage.pos);
+    if (!node || node.type.name !== "image") {
+      setHoveredImage(null);
+      return;
+    }
+    editor.chain().focus(undefined, { scrollIntoView: false }).deleteRange({ from: hoveredImage.pos, to: hoveredImage.pos + node.nodeSize }).run();
+    setHoveredImage(null);
+  };
   const selectedImage = editor?.isActive("image") ? editor.getAttributes("image") : null;
   const activeUploadIds = new Set<string>();
   const nodes = [...richDocument.content] as RichTextNode[];
@@ -415,7 +461,10 @@ export function LessonEditor({ initialBlocks, initialRichContent, existingMedia 
     <section aria-label="Lesson rich text editor" className="min-w-0 max-w-full rounded-2xl border border-border bg-surface shadow-sm">
       {editor ? <RichToolbar editor={editor} onImage={() => pickerRef.current?.click()} /> : <div className="border-b border-border bg-subtle p-3 text-sm text-muted">Loading editor...</div>}
       <input accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) insertImage(file); event.target.value = ""; }} ref={pickerRef} tabIndex={-1} type="file" />
-      <div className="min-w-0 max-w-full overflow-x-auto" onDragOverCapture={(event) => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); }} onDropCapture={dropImage}><EditorContent editor={editor} /></div>
+      <div className="relative min-w-0 max-w-full overflow-x-auto" onDragOverCapture={(event) => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); }} onDropCapture={dropImage} onMouseLeave={() => setHoveredImage(null)} onMouseMove={updateHoveredImage} ref={editorSurfaceRef}>
+        <EditorContent editor={editor} />
+        {hoveredImage ? <button aria-label="Remove image" className="absolute z-10 inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-destructive/30 bg-surface/95 px-2 text-sm font-semibold text-destructive shadow-sm transition hover:bg-destructive-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive" data-image-remove onClick={(event) => { event.preventDefault(); removeHoveredImage(); }} onMouseDown={(event) => event.preventDefault()} style={{ left: hoveredImage.left, top: hoveredImage.top }} title="Remove image" type="button">Remove</button> : null}
+      </div>
     </section>
     {selectedImage && editor ? <div className="grid gap-3 rounded-xl border border-border bg-subtle p-4 sm:grid-cols-2">
       <label className="grid gap-2 text-sm font-semibold">Image alt text <span className="font-normal text-muted">Optional</span><input className="min-h-11 rounded-xl border border-border bg-surface px-3" maxLength={300} onChange={(event) => editor.chain().focus(undefined, { scrollIntoView: false }).updateAttributes("image", { alt: event.target.value }).run()} value={String(selectedImage.alt ?? "")} /></label>

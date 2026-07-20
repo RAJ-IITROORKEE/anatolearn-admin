@@ -219,6 +219,58 @@ test("drops a managed image using a stable multipart name without serializing it
   expect(container.querySelector(`input[name="lessonFile.${image.attrs.uploadId}"]`)).toBeInTheDocument();
 });
 
+test("selects only the dragged image so internal drag moves the image instead of copying the document", async () => {
+  const mediaId = crypto.randomUUID();
+  const { container } = render(
+    <LessonEditor
+      existingMedia={{ [mediaId]: { signedUrl: "https://signed.test/heart", altText: "Heart diagram" } }}
+      initialBlocks={[
+        { type: "paragraph", text: "Before image" },
+        { type: "image", mediaId, altText: "Heart diagram", caption: null },
+        { type: "paragraph", text: "After image" },
+      ]}
+    />,
+  );
+  const image = await screen.findByRole("img", { name: "Heart diagram" });
+  const elementFromPoint = document.elementFromPoint;
+  Object.defineProperty(document, "elementFromPoint", { configurable: true, value: () => image });
+
+  try {
+    fireEvent.dragStart(image, { dataTransfer: { clearData: vi.fn(), effectAllowed: "move", files: [], setData: vi.fn() } });
+  } finally {
+    Object.defineProperty(document, "elementFromPoint", { configurable: true, value: elementFromPoint });
+  }
+
+  expect(image).toHaveClass("ProseMirror-selectednode");
+  expect(serialized(container).richContent.content.filter((node) => node.type === "image")).toHaveLength(1);
+});
+
+test("offers an image remove action on hover and removes only that image node", async () => {
+  const user = userEvent.setup();
+  const mediaId = crypto.randomUUID();
+  const { container } = render(
+    <LessonEditor
+      existingMedia={{ [mediaId]: { signedUrl: "https://signed.test/heart", altText: "Heart diagram" } }}
+      initialBlocks={[
+        { type: "paragraph", text: "Keep this text" },
+        { type: "image", mediaId, altText: "Heart diagram", caption: "Remove me" },
+        { type: "paragraph", text: "Keep this too" },
+      ]}
+    />,
+  );
+
+  const image = screen.getByRole("img", { name: "Heart diagram" });
+  fireEvent.mouseMove(image);
+  const removeButton = screen.getByRole("button", { name: "Remove image" });
+  expect(removeButton).toBeInTheDocument();
+  await user.click(removeButton);
+
+  expect(screen.queryByRole("img", { name: "Heart diagram" })).not.toBeInTheDocument();
+  expect(screen.getByRole("textbox", { name: "Lesson rich text editor" })).toHaveTextContent("Keep this text");
+  expect(screen.getByRole("textbox", { name: "Lesson rich text editor" })).toHaveTextContent("Keep this too");
+  expect(serialized(container).richContent.content.some((node) => node.type === "image")).toBe(false);
+});
+
 test("submits only pending image files still referenced by the rich document", async () => {
   const user = userEvent.setup();
   const submitted = vi.fn();
