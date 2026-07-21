@@ -6,6 +6,8 @@ const publicPages = [
   { path: "/login", heading: "Welcome back" },
   { path: "/forgot-password", heading: "Reset your password" },
   { path: "/reset-password", heading: "Choose a new password" },
+  { path: "/privacy", heading: "Privacy Policy" },
+  { path: "/terms", heading: "Terms of Use" },
 ] as const;
 
 for (const { path, heading } of publicPages) {

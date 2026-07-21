@@ -189,6 +189,28 @@ the topics, and 20 eligible assessment questions. No user account or test data w
 
 ## Final verification record
 
+### Public legal pages follow-up (2026-07-22)
+
+- Added unauthenticated `/privacy` and `/terms` pages in a dedicated `(legal)` route group
+  outside the protected `(admin)` layout. Both pages share the existing light semantic
+  theme, responsive navigation, skip link, visible focus behavior, and links to each other
+  and `/login`.
+- The Privacy Policy documents account/profile/avatar data, learning and assessment
+  activity, feedback, notifications/device tokens, security/audit/technical data, Supabase
+  Auth and private storage, service providers, constrained no-sale wording, retention,
+  deletion requests, security, changes, and contact. The Terms cover the educational-only
+  medical disclaimer, acceptable use, account security, content/IP, availability,
+  suspension/termination, disclaimers, liability, and changes. Both state the July 22, 2026
+  effective date and `rajrabidas001@gmail.com` support contact.
+- TDD red verification failed on both absent route headings. The focused green browser run
+  passed 2/2. The final desktop/mobile legal and public-accessibility run passed 16/16,
+  including axe serious/critical checks for both new pages. `npm run lint`, `npm run
+  typecheck`, and the 47-unit production build passed; the build route manifest includes
+  `/privacy` and `/terms`.
+- No API, OpenAPI, setup, dependency, environment, Prisma schema/migration, seed, demo data,
+  or production data change was required. Existing unrelated README, setup, package, seed,
+  demo-script, and image work was preserved.
+
 ### Recovery and learner contract hardening follow-up (2026-07-22)
 
 - Added enumeration-safe recovery initiation/resend provider mapping and strict
