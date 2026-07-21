@@ -67,6 +67,12 @@ describe("OpenAPI/runtime contract", () => {
   it("documents the per-topic assessment start failure", () => {
     const operation = openApiSource.match(/^  \/assessments\/start:\r?\n[\s\S]*?(?=^  \/)/m)?.[0];
     expect(operation).toContain("TOPIC_HAS_NO_QUESTIONS");
+    expect(operation).toContain("QUESTION_COUNT_TOO_SMALL");
+  });
+
+  it("documents retake scope failures after eligibility changes", () => {
+    const operation = openApiSource.match(/^  \/attempts\/\{attemptId\}\/retake:\r?\n[\s\S]*?(?=^  \/)/m)?.[0];
+    expect(operation).toContain("TOPIC_HAS_NO_QUESTIONS");
   });
 
   it("keeps rich-text color and highlight enums aligned with runtime validation", () => {

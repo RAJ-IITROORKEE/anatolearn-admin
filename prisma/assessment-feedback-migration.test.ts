@@ -29,6 +29,8 @@ describe("ratings and cross-system migration", () => {
     expect(sql).toMatch(/TG_OP IN \('UPDATE', 'DELETE'\)[\s\S]*OLD\."attemptId"/);
     expect(sql).toMatch(/TG_OP IN \('INSERT', 'UPDATE'\)[\s\S]*NEW\."attemptId"/);
     expect(sql).toMatch(/AFTER INSERT OR UPDATE OF "organSystemId" ON "AssessmentAttempt"/);
+    expect(sql).toMatch(/CREATE CONSTRAINT TRIGGER "AssessmentAttempt_scope"[\s\S]*AFTER INSERT OR UPDATE OF "organSystemId" ON "AssessmentAttempt"/);
+    expect(sql).toMatch(/ELSE\s+PERFORM assert_attempt_topic_scope\(NEW\."id"\)/);
     expect(sql).toMatch(/system_count = 0/);
   });
 

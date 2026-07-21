@@ -31,4 +31,9 @@ describe("feedback DTO privacy", () => {
   it("represents historical unrated feedback as unknown to admins", () => {
     expect(adminFeedbackDto({ ...feedback, rating: null }).rating).toBeNull();
   });
+
+  it("does not expose a stale legacy avatar when managed signing fails", () => {
+    const value = { ...feedback, user: { ...person, avatarUrl: "https://legacy.example/avatar.png" } };
+    expect(adminFeedbackDto(value, new Map([[person.id, null]])).submitter?.avatarUrl).toBeNull();
+  });
 });

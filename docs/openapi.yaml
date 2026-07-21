@@ -336,7 +336,7 @@ paths:
     post:
       tags: [Assessments]
       operationId: startAssessment
-      x-error-codes: [VALIDATION_ERROR, UNAUTHORIZED, INVALID_ORIGIN, SYSTEM_NOT_FOUND, INVALID_TOPIC_SCOPE, NO_TOPICS, TOPIC_HAS_NO_QUESTIONS, INSUFFICIENT_QUESTIONS, QUESTION_UNAVAILABLE, TRANSACTION_FAILED, INVALID_QUESTION, INVALID_SNAPSHOT, INTERNAL_ERROR]
+      x-error-codes: [VALIDATION_ERROR, UNAUTHORIZED, INVALID_ORIGIN, SYSTEM_NOT_FOUND, INVALID_TOPIC_SCOPE, NO_TOPICS, TOPIC_HAS_NO_QUESTIONS, QUESTION_COUNT_TOO_SMALL, INSUFFICIENT_QUESTIONS, QUESTION_UNAVAILABLE, TRANSACTION_FAILED, INVALID_QUESTION, INVALID_SNAPSHOT, INTERNAL_ERROR]
       description: Starts an owned randomized immutable snapshot attempt. Accepts legacy organSystemId with optional in-system topicIds, or topicIds alone across systems. Every selected topic contributes at least one random question. Cookie mode requires safe Origin.
       requestBody:
         required: true
@@ -464,7 +464,7 @@ paths:
     post:
       tags: [Assessments]
       operationId: retakeOwnedAttempt
-      x-error-codes: [VALIDATION_ERROR, UNAUTHORIZED, INVALID_ORIGIN, NOT_FOUND, SOURCE_NOT_SUBMITTED, SYSTEM_NOT_FOUND, INVALID_TOPIC_SCOPE, NO_TOPICS, INSUFFICIENT_QUESTIONS, QUESTION_UNAVAILABLE, TRANSACTION_FAILED, INVALID_SNAPSHOT, INTERNAL_ERROR]
+      x-error-codes: [VALIDATION_ERROR, UNAUTHORIZED, INVALID_ORIGIN, NOT_FOUND, SOURCE_NOT_SUBMITTED, SYSTEM_NOT_FOUND, INVALID_TOPIC_SCOPE, NO_TOPICS, TOPIC_HAS_NO_QUESTIONS, INSUFFICIENT_QUESTIONS, QUESTION_UNAVAILABLE, TRANSACTION_FAILED, INVALID_SNAPSHOT, INTERNAL_ERROR]
       description: Creates a fresh random attempt from the submitted source type/system/topic scope/requested count. It does not copy the old questions. Cookie mode requires safe Origin.
       requestBody:
         required: false

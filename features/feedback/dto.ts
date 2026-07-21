@@ -18,7 +18,7 @@ type AdminFeedbackValue = FeedbackValue & {
 };
 
 function personDto(value: Person | null, avatarUrls: ReadonlyMap<string, string | null>) {
-  return value ? { id: value.id, fullName: value.fullName, email: value.email, isActive: value.isActive, avatarUrl: avatarUrls.get(value.id) ?? value.avatarUrl ?? null } : null;
+  return value ? { id: value.id, fullName: value.fullName, email: value.email, isActive: value.isActive, avatarUrl: avatarUrls.has(value.id) ? avatarUrls.get(value.id) ?? null : value.avatarUrl ?? null } : null;
 }
 
 export function adminFeedbackDto(value: AdminFeedbackValue, avatarUrls: ReadonlyMap<string, string | null> = new Map()) {
