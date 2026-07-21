@@ -3,7 +3,7 @@ import { apiError, apiSuccess, requestId } from "@/lib/api/response";
 import { resolveRequestIdentity } from "@/lib/auth/request";
 import { hasSafeOrigin } from "@/lib/security/origin";
 import { updateLessonProgress } from "./lesson-service";
-import { lessonProgressSchema, resourceIdSchema } from "./schemas";
+import { dashboardQuerySchema, lessonProgressSchema, resourceIdSchema } from "./schemas";
 import { getUserDashboard, getUserProgress } from "./service";
 
 type SystemContext = { params: Promise<{ organSystemId: string }> };
@@ -36,7 +36,10 @@ export function progressDetailHandler(request: Request, context: SystemContext) 
 }
 
 export function dashboardHandler(request: Request) {
-  return userHandler(request, false, async (userId, id) => apiSuccess(await getUserDashboard(userId), { requestId: id }));
+  return userHandler(request, false, async (userId, id) => {
+    const query = dashboardQuerySchema.parse(Object.fromEntries(new URL(request.url).searchParams));
+    return apiSuccess(await getUserDashboard(userId, query.organSystemId), { requestId: id });
+  });
 }
 
 export function lessonProgressHandler(request: Request, context: LessonContext) {

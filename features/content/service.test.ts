@@ -22,7 +22,7 @@ vi.mock("@/lib/db/prisma", () => ({ prisma: {
   contentLesson: { findFirst: mocks.adminLessonFindFirst, findMany: mocks.lessonListFindMany, count: mocks.lessonListCount },
 } }));
 
-import { createContent, getAdminLessonBySlugs, getAdminLessonRouteById, getAdminTopicBySlugs, listAdmin, reorderContent, updateContent } from "./service";
+import { createContent, getAdminLessonBySlugs, getAdminLessonRouteById, getAdminTopicBySlugs, getPublishedLessons, listAdmin, reorderContent, updateContent } from "./service";
 
 const context = { actorId: crypto.randomUUID(), requestId: crypto.randomUUID() };
 const parentId = crypto.randomUUID();
@@ -211,6 +211,43 @@ describe("canonical admin lesson lookup", () => {
       include: { topic: { select: { slug: true, organSystem: { select: { slug: true } } } } },
     }));
     expect(mocks.adminTopicFindFirst).not.toHaveBeenCalled();
+  });
+});
+
+describe("published lesson owner progress", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("joins only the requesting owner's progress in the ordered lesson query", async () => {
+    const completedAt = new Date("2026-07-22T10:00:00Z");
+    const lastViewedAt = new Date("2026-07-22T11:00:00Z");
+    mocks.adminTopicFindFirst.mockResolvedValue({ id: parentId });
+    mocks.lessonListFindMany.mockResolvedValue([{
+      id: first, topicId: parentId, title: "Overview", slug: "overview", summary: null,
+      contentBlocks: [], estimatedReadingMinutes: 2, displayOrder: 0, status: "PUBLISHED",
+      createdAt: new Date(), updatedAt: new Date(),
+      progress: [{ completedAt, lastViewedAt }],
+    }]);
+
+    await expect(getPublishedLessons(parentId, "owner-id")).resolves.toMatchObject([{
+      id: first,
+      progress: { completed: true, completedAt, lastViewedAt },
+    }]);
+    expect(mocks.lessonListFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      include: { progress: { where: { userId: "owner-id" }, select: { completedAt: true, lastViewedAt: true } } },
+    }));
+    expect(mocks.lessonListFindMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns null progress without changing legacy lesson fields", async () => {
+    mocks.adminTopicFindFirst.mockResolvedValue({ id: parentId });
+    mocks.lessonListFindMany.mockResolvedValue([{
+      id: first, topicId: parentId, title: "Overview", slug: "overview", summary: null,
+      contentBlocks: [], estimatedReadingMinutes: 2, displayOrder: 0, status: "PUBLISHED",
+      createdAt: new Date(), updatedAt: new Date(), progress: [],
+    }]);
+    await expect(getPublishedLessons(parentId, "owner-id")).resolves.toMatchObject([{
+      id: first, title: "Overview", contentBlocks: [], progress: null,
+    }]);
   });
 });
 

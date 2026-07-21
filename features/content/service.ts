@@ -336,8 +336,18 @@ export async function getPublishedTopic(id: string) {
   return topicDto(row);
 }
 
-export async function getPublishedLessons(topicId: string) {
+export async function getPublishedLessons(topicId: string, userId: string) {
   await getPublishedTopic(topicId);
-  const rows = await prisma.contentLesson.findMany({ where: { topicId, trashedAt: null, status: "PUBLISHED", topic: { trashedAt: null, organSystem: { trashedAt: null } } }, orderBy: [{ displayOrder: "asc" }, { id: "asc" }] });
-  return rows.map((row) => lessonDto(row));
+  const rows = await prisma.contentLesson.findMany({
+    where: { topicId, trashedAt: null, status: "PUBLISHED", topic: { trashedAt: null, organSystem: { trashedAt: null } } },
+    include: { progress: { where: { userId }, select: { completedAt: true, lastViewedAt: true } } },
+    orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
+  });
+  return rows.map((row) => {
+    const progress = row.progress[0];
+    return {
+      ...lessonDto(row),
+      progress: progress ? { completed: progress.completedAt !== null, completedAt: progress.completedAt, lastViewedAt: progress.lastViewedAt } : null,
+    };
+  });
 }

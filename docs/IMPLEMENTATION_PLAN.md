@@ -272,6 +272,12 @@ avatars, and admin avatar presentation. It adds one non-deployed migration and p
 legacy learner DTOs and system-scoped assessment requests. This is an exception to the
 general continuation note below, not a new broad product phase.
 
+The 2026-07-22 backend-only continuation adds secure six-digit recovery OTP verification,
+recovery-token isolation and password action reauthentication, owner lesson progress on the
+published lesson DTO, ranking-only personal-dashboard system filtering, and safe avatar
+multipart/provider error mapping. It requires no schema migration and preserves legacy
+content/dashboard fields and the hosted web recovery link.
+
 Do not add another repository feature phase before external deployment acceptance. Install
 a valid random 32+ character `CRON_SECRET` and verify the Vercel daily plus GitHub Actions
 jobs; provision and

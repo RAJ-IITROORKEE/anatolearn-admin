@@ -22,6 +22,16 @@ export async function POST(request: Request) {
   }
   const supabase = createSupabaseAuthClient();
   const { passwordReset } = getAuthRedirectUrls();
-  await supabase.auth.resetPasswordForEmail(input.data.email, { redirectTo: passwordReset });
+  try {
+    const result = await supabase.auth.resetPasswordForEmail(input.data.email, { redirectTo: passwordReset });
+    const providerStatus = result.error && typeof result.error === "object" && "status" in result.error
+      ? Number(result.error.status)
+      : Number.NaN;
+    if (Number.isFinite(providerStatus) && providerStatus >= 500) {
+      return apiError("AUTH_UNAVAILABLE", "Password recovery is temporarily unavailable.", 503, id);
+    }
+  } catch {
+    return apiError("AUTH_UNAVAILABLE", "Password recovery is temporarily unavailable.", 503, id);
+  }
   return apiSuccess({ message: "If an account exists, reset instructions have been sent." }, { requestId: id });
 }

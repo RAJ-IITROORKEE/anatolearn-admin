@@ -4,6 +4,7 @@ const uuid = z.string().uuid();
 const isoDate = z.string().datetime({ offset: true }).transform((value) => new Date(value));
 
 export const lessonProgressSchema = z.object({ completed: z.boolean() }).strict();
+export const dashboardQuerySchema = z.object({ organSystemId: uuid.optional() }).strict();
 
 export const adminAttemptListSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),

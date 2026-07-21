@@ -41,6 +41,11 @@ Install Chromium once with `npx playwright install chromium`.
   provisioning, server-owned marker writes, immediate-session deletion compensation,
   session-token omission, marked-only missing-profile repair, validated name fallback,
   provider transient/error classification, and invalid/expired OTP behavior
+- non-enumerating recovery initiation/resend, strict six-digit provider recovery verification,
+  access-token/expiry-only response privacy, provider `429` versus absent-account response
+  comparison, provider exception/`5xx` mapping, shared client/account limits, recovery-token
+  identity rejection, reset audit/revocation despite profile/audit rejection, web recovery
+  AMR, and settings current-password reauthentication
 - shared empty and confirmation UI states
 - anonymous protected-page redirect and narrow-screen login controls
 
@@ -151,6 +156,9 @@ Install Chromium once with `npx playwright install chromium`.
   system/topic IDs, weighted percentages, and neutral `0/0 = 0%` semantics
 - five-answer strength/weakness eligibility, deterministic ties, unanswered samples,
   and 10-item recent-attempt bound
+- published lesson lists join nullable authenticated-owner completion/view timestamps
+  without per-row reads; dashboard organ-system filtering changes only rankings and safely
+  rejects malformed or inaccessible scopes
 - read-only admin attempt filters/detail disclosure, UUID page guards, labels, badges,
   answer breakdown, historical media authorization, and narrow user progress components
 - exact current inventories, latest-terminal-answer deduplication, coverage/accuracy
@@ -187,6 +195,8 @@ Install Chromium once with `npx playwright install chromium`.
 - exact multipart shape, active owner/origin/rate-limit boundaries, PNG/JPEG byte and 1 MiB
   validation, row-locked link/clear behavior, replacement compensation, legacy clearing,
   signed presentation fallback, and storage-field omission
+- wrong media type and malformed multipart `400`, invalid file `422`, and redacted Storage
+  unavailability `503` route mappings
 
 ### Phase 6 notifications
 

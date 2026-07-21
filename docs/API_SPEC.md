@@ -51,8 +51,9 @@ Missing/invalid/inactive identity returns `401`. An authenticated non-admin rece
 | `POST /api/v1/auth/verify-signup-otp` | Public, rate limited | Verify signup OTP and idempotently provision the USER profile; no session tokens returned |
 | `POST /api/v1/auth/resend-signup-otp` | Public, rate limited | Non-enumerating resend for a pending signup OTP; `202` |
 | `POST /api/v1/auth/login` | Public, rate limited | Email/password API login and safe session DTO; returns `EMAIL_CONFIRMATION_REQUIRED` when Supabase verifies the credentials but the email is unconfirmed; admin UI uses SSR server actions |
-| `POST /api/v1/auth/forgot-password` | Public, rate limited | Non-enumerating reset request with configured redirect |
-| `POST /api/v1/auth/reset-password` | Recovery token | Requires provider-verified recovery AMR |
+| `POST /api/v1/auth/forgot-password` | Public, rate limited | Non-enumerating recovery initiation/resend with configured redirect |
+| `POST /api/v1/auth/verify-recovery-otp` | Public, rate limited | Verifies a six-digit recovery OTP and returns only a short-lived recovery access token and epoch expiry |
+| `POST /api/v1/auth/reset-password` | Recovery token, rate limited | Consumes provider-verified recovery AMR, audits the password change, and requests global refresh-session revocation |
 | `POST /api/v1/auth/logout` | Public/idempotent | Returns success without a session; otherwise cookie sign-out or bearer-session revocation |
 | `GET /api/v1/auth/session` | User | Safe session/profile summary |
 | `GET /api/v1/me` | User | Authenticated profile DTO |
@@ -70,7 +71,9 @@ returns `429 RATE_LIMITED` with `Retry-After: 60`.
 Public authentication applies SHA-256-derived client and normalized-account limits.
 Register and resend share a 15-minute signup-email namespace capped at 10/client and
 3/account; OTP verification allows 10/client and 5/account per 10 minutes. Login retains
-its one-minute 10/client and 30/account limits. Limiter failures fail closed.
+its one-minute 10/client and 30/account limits. Recovery initiation/resend share the
+one-minute `auth:forgot-password` namespace at 5/client and 15/account; recovery OTP
+verification allows 10/client and 5/account per 10 minutes. Limiter failures fail closed.
 
 Registration never reveals whether an email exists and never provisions a Prisma profile.
 The same `202` response is returned for valid account-dependent registration/resend
@@ -101,12 +104,28 @@ API surface exists; it does not claim that the optional Expo provider is enabled
 Auth/profile JSON bodies are strict: register accepts `email`, 8-128 character `password`,
 and 2-100 character `fullName`; signup verification accepts `email` and exactly six numeric
 OTP digits; resend accepts only `email`; login accepts only `email` and `password`; forgot-password
-accepts only `email`; reset-password accepts a provider recovery `accessToken` and a
+accepts only `email`; recovery verification accepts only normalized `email` and exactly six
+numeric `otp` digits; reset-password accepts a provider recovery `accessToken` and a
 12-128 character `password`; profile update accepts a non-empty subset of `fullName` and
 compatibility-only `avatarUrl: null` (arbitrary non-null URLs are rejected); change-password requires `currentPassword` and a distinct
 12-128 character `newPassword`. Unknown fields return `400`.
 Auth/session/profile response DTOs do not expose the database role, normalized email, or
 provider-internal identity fields. Authorization continues to resolve role server-side.
+
+Recovery verification calls Supabase `verifyOtp` with `type: recovery`. Invalid/expired
+codes return `400`; provider transport, `429`, and `5xx` outcomes return a redacted `503`.
+The success DTO is exactly `{ accessToken, expiresAt }`; refresh tokens and user data are
+not returned. Recovery-AMR bearer and cookie tokens are rejected by normal User/Admin
+identity resolution and can only be consumed by password reset. The hosted recovery email
+template contains both `{{ .Token }}` and `{{ .ConfirmationURL }}`, preserving the existing
+web callback/link flow while enabling native OTP entry.
+
+Recovery initiation treats every provider-returned `4xx`, including provider throttling
+`429`, like an absent account: `200` with the same generic success data. Only a thrown
+transport failure or provider-returned `5xx` maps to redacted `503 AUTH_UNAVAILABLE`.
+After reset confirms the provider password update, profile lookup/audit failures are logged
+without provider, user, or database details. They do not change the success response or
+prevent the required best-effort global refresh-session revocation attempt.
 
 `PUT /api/v1/me/avatar` accepts multipart with exactly one `file`: a byte-validated PNG
 or JPEG no larger than 1,048,576 bytes. It creates a private managed asset under a
@@ -134,7 +153,7 @@ are indistinguishable as `404` for item/parent lookups.
 | `GET /api/v1/organ-systems/{slug}` | none | Published active system DTO or `404` |
 | `GET /api/v1/organ-systems/{slug}/topics` | `page`, `pageSize`, `q`, `sortOrder` | Paginated published topics; always sorted by display order then ID |
 | `GET /api/v1/topics/{id}` | none | Published topic whose parent is published/active, or `404` |
-| `GET /api/v1/topics/{id}/content` | none | All published lessons ordered by display order then ID; not paginated |
+| `GET /api/v1/topics/{id}/content` | none | All published lessons ordered by display order then ID, each with nullable owner progress `{ completed, completedAt, lastViewedAt }`; not paginated |
 | `GET /api/v1/topics/{id}/flashcards` | none | All eligible published flashcards ordered by display order then ID, each with this user's progress or `null`; not paginated |
 | `GET /api/v1/media/{id}` | none | Minimal media DTO with a 300-second signed URL for eligible published media or media in this user's historical attempt snapshots; otherwise `404` |
 
@@ -556,7 +575,7 @@ verified identity.
 | `PUT /api/v1/content-lessons/{id}/progress` | Strict `{ "completed": boolean }`; absolute lesson state and timestamps |
 | `GET /api/v1/progress` | All current published active systems and published topics |
 | `GET /api/v1/progress/{organSystemId}` | One accessible system or `404` |
-| `GET /api/v1/dashboard/me` | Submitted attempt totals, weighted accuracy, recent 10, progress, strengths/weaknesses |
+| `GET /api/v1/dashboard/me` | Optional strict `organSystemId`; filters only strengths/weaknesses. Submitted totals, weighted accuracy, recent 10, and all system progress remain global |
 
 Lesson progress is available only for a currently published lesson beneath a published
 topic and published active system. Inaccessible IDs return `404`. Repeating `true`
@@ -602,6 +621,10 @@ are ordered by completion then ID descending and limited to 10. Strengths and we
 use submitted snapshot history, require at least five question samples per topic, and
 return up to five highest/lowest accuracy topics. The lists can overlap when few topics
 qualify. Accuracy ties prefer larger samples then topic ID.
+An optional `organSystemId` scopes only those two server-ranked lists. It must be one
+currently accessible published active system from the same report snapshot; malformed or
+unknown query input is `400`, while an inaccessible/absent system is `404`. Overall counts,
+accuracy, recent attempts, formula metadata, and organ-system progress are unchanged.
 
 ## Admin attempt and user-progress APIs
 

@@ -12,6 +12,7 @@ export const verifySignupOtpSchema = z.object({
   email: emailSchema.shape.email,
   otp: z.string().regex(/^\d{6}$/),
 }).strict();
+export const verifyRecoveryOtpSchema = verifySignupOtpSchema;
 export const profileUpdateSchema = z.object({
   fullName: z.string().trim().min(2).max(100).optional(),
   avatarUrl: z.null().optional(),

@@ -36,7 +36,19 @@ describe("progress route handlers", () => {
     expect(detail.status).toBe(200);
     expect(dashboard.status).toBe(200);
     expect(mocks.getUserProgress).toHaveBeenCalledWith("owner", uuid);
-    expect(mocks.getUserDashboard).toHaveBeenCalledWith("owner");
+    expect(mocks.getUserDashboard).toHaveBeenCalledWith("owner", undefined);
+  });
+
+  it("accepts one strict organSystemId dashboard filter", async () => {
+    mocks.getUserDashboard.mockResolvedValue({ strengths: [], weaknesses: [] });
+    const response = await dashboardHandler(new Request(`https://app.example/api/v1/dashboard/me?organSystemId=${uuid}`));
+    expect(response.status).toBe(200);
+    expect(mocks.getUserDashboard).toHaveBeenCalledWith("owner", uuid);
+
+    const invalid = await dashboardHandler(new Request("https://app.example/api/v1/dashboard/me?organSystemId=bad"));
+    expect(invalid.status).toBe(400);
+    const unknown = await dashboardHandler(new Request(`https://app.example/api/v1/dashboard/me?organSystemId=${uuid}&extra=true`));
+    expect(unknown.status).toBe(400);
   });
 
   it("requires a safe origin and strict body for cookie lesson mutations", async () => {

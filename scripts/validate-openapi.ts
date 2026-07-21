@@ -7,6 +7,7 @@ const PUBLIC_RESPONSE_COMPONENTS = new Set(["HealthSuccess", "MetaSuccess"]);
 const RATE_LIMITED_OPERATIONS = new Set([
   "POST /auth/register",
   "POST /auth/verify-signup-otp",
+  "POST /auth/verify-recovery-otp",
   "POST /auth/resend-signup-otp",
   "POST /auth/login",
   "POST /auth/forgot-password",

@@ -52,7 +52,8 @@ privileged server-only Auth operations.
   profiles redirect to `/login?reason=admin-required`.
 - API identity resolution accepts a Supabase bearer token when `Authorization` is
   present, otherwise it uses the SSR cookie session. It then loads the matching
-  active `Profile`; role is never accepted from request data.
+  active `Profile`; role is never accepted from request data. Recovery-AMR access tokens
+  are rejected before this application identity boundary in both bearer and cookie modes.
 - Published-content APIs require any active profile. Admin resource and audit/media
   APIs require an active `ADMIN` profile.
 - Signup verification calls Supabase `verifyOtp`, then uses the server-only admin client
@@ -65,6 +66,14 @@ privileged server-only Auth operations.
 - Registration treats an immediate provider session as confirmation misconfiguration,
   attempts to delete a newly created identity, and returns `AUTH_CONFIGURATION_ERROR`.
   This compensation is best effort and its failure is logged only as a redacted event.
+- Password recovery initiation/resend is enumeration-safe, including provider-returned
+  `429`; thrown transport and returned `5xx` failures map to safe unavailability. Six-digit
+  recovery verification uses provider `type: recovery` and emits only the recovery access
+  token plus expiry. Reset revalidates recovery AMR/provider identity, changes the password,
+  appends a `PASSWORD_CHANGE` audit when profile persistence is available, and requests
+  global refresh revocation even when profile lookup/audit fails. Those failures are logged
+  with redacted structured context and do not make a completed password update ambiguous.
+  The hosted template retains both OTP and web confirmation-link paths.
 - Cookie-authenticated mutations require an `Origin` whose exact parsed origin matches
   `NEXT_PUBLIC_APP_URL`. Missing/malformed origins fail closed; bearer requests do not
   depend on browser Origin headers.
@@ -310,6 +319,9 @@ metrics, and snapshot-based strengths/weaknesses. A topic needs at least five su
 snapshot questions. Strengths sort highest accuracy first and weaknesses lowest first;
 both return at most five, so small eligible sets can overlap. Ties prefer more samples,
 then topic ID. Historical snapshot titles are retained in those rankings.
+Its optional `organSystemId` is validated against the current published system set and
+filters only ranking evidence. Counts, weighted accuracy, recent attempts, current system
+progress, formula version, and `asOf` remain global in the same repeatable-read snapshot.
 
 Admin reporting consists of paginated attempt list/detail APIs and pages plus a narrow
 `/users/{id}` progress API. Phase 6 extends this with a learner-only directory, safe
@@ -423,6 +435,9 @@ Status transitions and reorder operations have separate request schemas.
 Published endpoints cover systems, a system by slug, system topics, a topic by ID, all
 published lessons and flashcards for a topic, and eligible managed media by ID. Lesson
 and flashcard lists are ordered by `displayOrder`, then ID; they are not paginated.
+Published lesson rows include nullable progress for the authenticated owner. Prisma applies
+the owner predicate in the lesson relation include, so the list uses one lesson query rather
+than one progress query per lesson; legacy lesson fields and admin DTOs are unchanged.
 
 ## Content model and lifecycle
 

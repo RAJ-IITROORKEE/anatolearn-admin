@@ -99,6 +99,27 @@ describe("authoritative progress service", () => {
     expect(mocks.attemptFindMany.mock.calls[0][0]).toMatchObject({ take: 10 });
   });
 
+  it("filters only server-ranked strengths and weaknesses while retaining global dashboard data", async () => {
+    const filteredAggregate = {
+      ...aggregate,
+      topicStats: [
+        { topicId: "topic", topicTitle: "Current system topic", organSystemId: "system", assessmentType: "QUIZ", correctCount: 5, sampleCount: 5 },
+        { topicId: "other-topic", topicTitle: "Other system topic", organSystemId: "other-system", assessmentType: "QUIZ", correctCount: 0, sampleCount: 5 },
+      ],
+    };
+    mocks.queryRaw.mockResolvedValue([filteredAggregate]);
+    const dashboard = await getUserDashboard("user", "system");
+    expect(dashboard.attempts.total).toBe(1);
+    expect(dashboard.recentAttempts).toHaveLength(1);
+    expect(dashboard.organSystems).toHaveLength(1);
+    expect(dashboard.strengths).toEqual([expect.objectContaining({ topicTitle: "Current system topic" })]);
+    expect(dashboard.weaknesses).toEqual([expect.objectContaining({ topicTitle: "Current system topic" })]);
+  });
+
+  it("hides an inaccessible dashboard ranking scope as not found", async () => {
+    await expect(getUserDashboard("user", "missing-system")).rejects.toMatchObject({ code: "NOT_FOUND", status: 404 });
+  });
+
   it("queries latest terminal evidence once per current source question", async () => {
     await getUserProgress("user");
     const query = mocks.queryRaw.mock.calls[0][0].strings.join(" ");

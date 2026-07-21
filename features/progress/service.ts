@@ -272,7 +272,7 @@ export async function getUserProgress(userId: string, organSystemId?: string) {
   return buildProgress(systems, aggregate);
 }
 
-export async function getUserDashboard(userId: string) {
+export async function getUserDashboard(userId: string, organSystemId?: string) {
   await expireDueAttempts({ limit: 50, userId });
   const [systems, aggregate, recent] = await prisma.$transaction(async (tx) => Promise.all([
     readSystems(tx, userId),
@@ -292,6 +292,12 @@ export async function getUserDashboard(userId: string) {
       take: 10,
     }),
   ]), { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
+  if (organSystemId && !systems.some((system) => system.id === organSystemId)) {
+    throw new ProgressError("NOT_FOUND", "Organ system was not found.", 404);
+  }
+  const rankingStats = organSystemId
+    ? aggregate.topicStats.filter((stat) => stat.organSystemId === organSystemId)
+    : aggregate.topicStats;
   return {
     attempts: {
       total: aggregate.totalAttempts, quiz: aggregate.quizAttempts, test: aggregate.testAttempts,
@@ -312,7 +318,7 @@ export async function getUserDashboard(userId: string) {
     organSystems: buildProgress(systems, aggregate),
     formulaVersion: PROGRESS_FORMULA_VERSION,
     asOf: aggregate.asOf,
-    ...rankTopicPerformanceStats(aggregate.topicStats),
+    ...rankTopicPerformanceStats(rankingStats),
   };
 }
 

@@ -26,8 +26,15 @@ untrusted. The Next.js server is the authorization boundary.
   APIs require an active `ADMIN` profile.
 - Missing/invalid/inactive identity maps to `401`; an active non-admin maps to `403`.
 - Password storage, hashing, reset, and token issuance remain in Supabase Auth.
-  Recovery APIs require provider-verified recovery AMR, and forgot-password responses
-  do not reveal account existence.
+  Recovery initiation/resend responses do not reveal account existence. Six-digit recovery
+  verification returns only the short-lived access token and expiry, never refresh/user
+  data. Recovery-AMR tokens are rejected by normal cookie/bearer identity resolution and
+  accepted only by reset. Provider-returned recovery-initiation `429` responses use the
+  same generic success as absent accounts; only thrown transport failures and returned
+  `5xx` map to safe unavailability. Once a password update succeeds, profile/audit failures
+  are redacted and logged, and global refresh-session revocation is still attempted.
+- Web recovery reset requires recovery AMR. Authenticated settings password changes require
+  current-password reauthentication and derive the account/profile server-side.
 - Auth callback/reset redirects come from environment configuration rather than an
   arbitrary request URL.
 
@@ -69,6 +76,9 @@ untrusted. The Next.js server is the authorization boundary.
 - Unexpected errors are logged as redacted structured JSON containing only level,
   request ID, safe code/status, and optional route. Bodies, passwords, tokens, stack
   traces, provider payloads, and arbitrary exception text are excluded.
+- Avatar upload rejects non-multipart or malformed multipart as `400`, maps invalid image
+  content to a generic `422`, and maps Storage unavailability to a generic `503`; provider
+  messages are never copied into the response.
 
 ## Flashcard and question controls
 

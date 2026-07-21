@@ -52,7 +52,7 @@ function objectKeys(value: unknown, path = "data"): string[] {
 
 describe("OpenAPI/runtime contract", () => {
   it("has exact route parity, resolvable refs, unique IDs, and complete JSON response headers", () => {
-    expect(validateOpenApiContract()).toEqual({ operations: 113, operationIds: 113 });
+    expect(validateOpenApiContract()).toEqual({ operations: 114, operationIds: 114 });
   });
 
   it("keeps the OpenAPI TrashType enum aligned with the domain contract", () => {
@@ -115,6 +115,9 @@ describe("OpenAPI/runtime contract", () => {
     expect(getOpenApiOperationContract("POST /auth/resend-signup-otp")?.responses).toMatchObject({
       "202": "RegisterSuccess", "400": "BadRequest", "429": "RateLimited", "503": "InternalError",
     });
+    expect(getOpenApiOperationContract("POST /auth/verify-recovery-otp")?.responses).toMatchObject({
+      "200": "RecoveryOtpVerifiedSuccess", "400": "BadRequest", "429": "RateLimited", "503": "InternalError",
+    });
     expect(getOpenApiOperationContract("POST /me/device-tokens")?.responses).toMatchObject({
       "201": "DeviceTokenSuccess", "429": "RateLimited",
     });
@@ -148,6 +151,16 @@ describe("OpenAPI/runtime contract", () => {
     expect(error.headers.get("cache-control")).toBe("private, no-store");
     expect(error.headers.get("vary")).toBe("Authorization, Cookie");
     await expect(error.json()).resolves.toMatchObject({ success: false, error: { code: "VALIDATION_ERROR", requestId: expect.any(String) } });
+  });
+
+  it("documents recovery response privacy, lesson progress, and dashboard ranking scope", () => {
+    const recovery = schemaBlock("RecoveryOtpVerified");
+    expect(recovery).toContain("required: [accessToken, expiresAt]");
+    expect(recovery).not.toMatch(/refreshToken|user:/);
+    expect(schemaBlock("PublishedLesson")).toContain("progress: { oneOf:");
+    const dashboard = openApiSource.match(/^  \/dashboard\/me:\r?\n[\s\S]*?(?=^  \/)/m)?.[0] ?? "";
+    expect(dashboard).toContain("OrganSystemIdQuery");
+    expect(dashboard).toContain("only strengths and weaknesses");
   });
 
   it("keeps representative learner/public builders free of denied private fields", () => {

@@ -40,9 +40,10 @@ cron, and production deployment acceptance remain external gates.
 - Added a server-controlled `app_metadata.signup_otp_verified` marker after `verifyOtp`;
   password login repairs only a missing, marked profile. Immediate signup sessions trigger
   best-effort new-identity deletion, and malformed Auth names fall back to `Learner`.
-- Classified Auth transport/`429`/`5xx` failures as `AUTH_UNAVAILABLE`, kept account-
+- Classified signup Auth transport/`429`/`5xx` failures as `AUTH_UNAVAILABLE`, kept account-
   dependent registration/resend 4xx outcomes enumeration-safe, and distinguished transient
-  verification failures from invalid/expired OTPs.
+  verification failures from invalid/expired OTPs. Recovery initiation's later reviewed
+  provider-`429` exception is recorded in the 2026-07-22 follow-up below.
 - Kept `email_not_confirmed` classification so pending users receive no tokens.
 - Classified permanent Expo HTTP/shape failures so claimed deliveries fail immediately;
   transient network/429/5xx failures retain bounded retry behavior.
@@ -187,6 +188,52 @@ bearer-authenticated APIs: 11 systems, 2 circulatory topics, 1 lesson, 4 flashca
 the topics, and 20 eligible assessment questions. No user account or test data was retained.
 
 ## Final verification record
+
+### Recovery and learner contract hardening follow-up (2026-07-22)
+
+- Added enumeration-safe recovery initiation/resend provider mapping and strict
+  `POST /api/v1/auth/verify-recovery-otp`. Supabase verification uses `type: recovery`;
+  success returns only `{ accessToken, expiresAt }`, with private no-store headers.
+- Recovery-AMR bearer/cookie sessions are rejected by normal application identity
+  resolution. REST reset revalidates provider identity, audits an existing profile's
+  password change, and requests global refresh-session revocation. The web reset action
+  now requires recovery AMR; authenticated settings changes require current-password
+  reauthentication and use a separate action.
+- Review hardening keeps provider-returned forgot-password `429` outcomes identical to the
+  absent-account generic success while reserving safe `503` for thrown transport and
+  returned `5xx` failures. Once the provider updates a password, REST and web recovery both
+  attempt global revocation even if profile lookup or audit persistence fails; those
+  failures are redacted/logged and the completed update retains its success response.
+- Review-hardening TDD verification: the red run failed on provider `429` and on profile
+  rejection before REST/web revocation. The final focused run passed 2 files/15 tests;
+  `npm run lint`, `npm run typecheck`, and `npm run openapi:validate` passed, with OpenAPI
+  reporting 114 operations and 114 unique operation IDs.
+- Added a dedicated recovery email template containing both `{{ .Token }}` and
+  `{{ .ConfirmationURL }}` so native six-digit OTP and existing web-link recovery remain
+  compatible. Hosted template deployment and SMTP behavior remain external acceptance.
+- Extended authenticated published lesson rows with nullable owner progress
+  `{ completed, completedAt, lastViewedAt }` through one owner-filtered relation include;
+  legacy lesson fields and admin DTOs are unchanged.
+- Added optional strict `organSystemId` to `GET /api/v1/dashboard/me`. Only server-ranked
+  strengths/weaknesses are scoped; counts, weighted accuracy, recent attempts, all system
+  progress, formula metadata, and evidence timestamp remain global. Inaccessible scopes
+  return `404`.
+- Hardened avatar PUT content-type/multipart parsing and safely maps malformed requests to
+  `400`, invalid image content to `422`, and Storage unavailability to `503` without
+  provider details.
+- No dependency, Prisma schema, migration, seed, environment, deployment, or production
+  data change was required. Task files are limited to auth/content/progress/avatar routes,
+  services/actions/schemas/tests, Supabase recovery template/config, OpenAPI validation,
+  and API/architecture/security/testing/plan/status documentation. Existing unrelated
+  README, setup, package, seed-data, demo script/image changes were preserved untouched.
+- TDD red run failed on all new boundaries as expected. The focused development run passed
+  10 files/56 tests and the final targeted rerun passed 4 files/29 tests. The full final run
+  passed 172 files/689 tests with 3 files/15 conditional PostgreSQL tests skipped. One
+  initial full run had an unrelated existing lesson-editor five-second timeout; that file
+  passed 17/17 in isolation and the complete rerun passed.
+- Final verification passed: lint, typecheck, OpenAPI validation (114 unique operations),
+  production build (47 static-generation units), and `git diff --check`. Prisma generate/
+  validate were not run because neither schema nor migrations changed.
 
 ### Backend compatibility follow-up (2026-07-21)
 

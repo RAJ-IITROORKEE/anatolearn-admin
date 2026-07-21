@@ -104,16 +104,34 @@ paths:
     post:
       tags: [Auth]
       operationId: forgotPassword
+      x-error-codes: [VALIDATION_ERROR, RATE_LIMITED, AUTH_UNAVAILABLE]
+      description: Starts or resends password recovery without revealing account existence. All provider-returned 4xx outcomes, including 429, retain the same generic success response; thrown transport failures and provider-returned 5xx failures return 503.
       security: []
       requestBody: { $ref: '#/components/requestBodies/EmailBody' }
       responses:
         '200': { $ref: '#/components/responses/MessageSuccess' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/InternalError' }
+  /auth/verify-recovery-otp:
+    post:
+      tags: [Auth]
+      operationId: verifyRecoveryOtp
+      x-error-codes: [VALIDATION_ERROR, RATE_LIMITED, INVALID_OR_EXPIRED_OTP, AUTH_UNAVAILABLE]
+      description: Verifies exactly six recovery digits with Supabase type recovery. Returns only the short-lived provider recovery access token and its epoch expiry; refresh tokens and user data are omitted. This token is accepted only by reset-password and is rejected by normal application identity resolution.
+      security: []
+      requestBody: { $ref: '#/components/requestBodies/VerifyRecoveryOtpBody' }
+      responses:
+        '200': { $ref: '#/components/responses/RecoveryOtpVerifiedSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/InternalError' }
   /auth/reset-password:
     post:
       tags: [Auth]
       operationId: resetPassword
+      x-error-codes: [VALIDATION_ERROR, RATE_LIMITED, INVALID_RECOVERY_SESSION, PASSWORD_UPDATE_FAILED, AUTH_UNAVAILABLE]
+      description: Consumes a provider-verified recovery-AMR access token, updates the password, writes a PASSWORD_CHANGE audit when an application profile exists, and requests global refresh-session revocation. After the provider confirms the password update, profile/audit persistence failures are logged without sensitive details and do not skip revocation or change the success response.
       security: []
       requestBody: { $ref: '#/components/requestBodies/ResetPasswordBody' }
       responses:
@@ -122,6 +140,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '422': { $ref: '#/components/responses/Unprocessable' }
         '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/InternalError' }
   /auth/logout:
     post:
       tags: [Auth]
@@ -157,7 +176,7 @@ paths:
     put:
       tags: [Profile]
       operationId: replaceMyAvatar
-      x-error-codes: [VALIDATION_ERROR, UNAUTHORIZED, INVALID_ORIGIN, INVALID_FILE, RATE_LIMITED, NOT_FOUND, INTERNAL_ERROR]
+      x-error-codes: [VALIDATION_ERROR, UNAUTHORIZED, INVALID_ORIGIN, INVALID_FILE, MEDIA_UNAVAILABLE, RATE_LIMITED, NOT_FOUND, INTERNAL_ERROR]
       description: Replaces the authenticated active profile's avatar with one byte-validated PNG or JPEG up to 1,048,576 bytes. The server owns the actor, storage path, private MediaAsset, and profile link. Cookie mode requires safe Origin.
       requestBody:
         required: true
@@ -175,8 +194,10 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/InternalError' }
     delete:
       tags: [Profile]
       operationId: deleteMyAvatar
@@ -282,7 +303,7 @@ paths:
     get:
       tags: [Published content]
       operationId: listPublishedLessons
-      description: Returns all published lessons ordered by displayOrder then id; not paginated.
+      description: Returns all published lessons ordered by displayOrder then id with nullable progress for the authenticated owner; not paginated and loaded without per-lesson queries.
       responses:
         '200': { $ref: '#/components/responses/PublishedLessonListSuccess' }
         '401': { $ref: '#/components/responses/Unauthorized' }
@@ -528,11 +549,15 @@ paths:
     get:
       tags: [Progress]
       operationId: getOwnedDashboard
-      x-error-codes: [UNAUTHORIZED, TRANSACTION_FAILED, INTERNAL_ERROR]
-      description: Submitted attempt totals, weighted all-question accuracy, latest 10 submitted attempts, current progress, and up to five strength/weakness topics requiring at least five answers.
+      parameters:
+        - { $ref: '#/components/parameters/OrganSystemIdQuery' }
+      x-error-codes: [VALIDATION_ERROR, UNAUTHORIZED, NOT_FOUND, TRANSACTION_FAILED, INTERNAL_ERROR]
+      description: Submitted attempt totals, weighted all-question accuracy, latest 10 submitted attempts, current progress, and up to five strength/weakness topics requiring at least five answers. Optional organSystemId filters only strengths and weaknesses; all counts, recent attempts, accuracy, and organ-system progress remain global. An inaccessible scope is 404.
       responses:
         '200': { $ref: '#/components/responses/UserDashboardSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
         '500': { $ref: '#/components/responses/InternalError' }
   /feedback:
@@ -1691,6 +1716,9 @@ components:
     VerifySignupOtpBody:
       required: true
       content: { application/json: { schema: { $ref: '#/components/schemas/VerifySignupOtpInput' } } }
+    VerifyRecoveryOtpBody:
+      required: true
+      content: { application/json: { schema: { $ref: '#/components/schemas/VerifyRecoveryOtpInput' } } }
     EmailBody:
       required: true
       content: { application/json: { schema: { $ref: '#/components/schemas/EmailInput' } } }
@@ -1784,6 +1812,13 @@ components:
       properties:
         email: { type: string, format: email }
         otp: { type: string, pattern: '^\d{6}$' }
+    VerifyRecoveryOtpInput:
+      type: object
+      additionalProperties: false
+      required: [email, otp]
+      properties:
+        email: { type: string, format: email }
+        otp: { type: string, pattern: '^\d{6}$' }
     EmailInput:
       type: object
       additionalProperties: false
@@ -1848,6 +1883,13 @@ components:
       required: [verified]
       properties:
         verified: { type: boolean, const: true }
+    RecoveryOtpVerified:
+      type: object
+      additionalProperties: false
+      required: [accessToken, expiresAt]
+      properties:
+        accessToken: { type: string, minLength: 1, description: Short-lived provider recovery-AMR access token; not valid as normal application identity. }
+        expiresAt: { type: integer, minimum: 1, description: Provider token expiry as Unix epoch seconds. }
     LoginResult:
       type: object
       additionalProperties: false
@@ -1889,7 +1931,7 @@ components:
     PublishedLesson:
       type: object
       additionalProperties: false
-      required: [id, topicId, title, slug, summary, contentBlocks, estimatedReadingMinutes, displayOrder]
+      required: [id, topicId, title, slug, summary, contentBlocks, estimatedReadingMinutes, displayOrder, progress]
       properties:
         id: { type: string, format: uuid }
         topicId: { type: string, format: uuid }
@@ -1899,6 +1941,15 @@ components:
         contentBlocks: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/ContentBlock' } }
         estimatedReadingMinutes: { type: integer, minimum: 0, maximum: 600 }
         displayOrder: { type: integer, minimum: 0 }
+        progress: { oneOf: [{ $ref: '#/components/schemas/LessonOwnerProgress' }, { type: 'null' }] }
+    LessonOwnerProgress:
+      type: object
+      additionalProperties: false
+      required: [completed, completedAt, lastViewedAt]
+      properties:
+        completed: { type: boolean }
+        completedAt: { type: [string, 'null'], format: date-time }
+        lastViewedAt: { type: string, format: date-time }
     PublishStatus: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
     EditableStatus: { type: string, enum: [DRAFT, PUBLISHED] }
     Difficulty: { type: string, enum: [EASY, MEDIUM, HARD] }
@@ -3495,6 +3546,14 @@ components:
         success: { type: boolean, const: true }
         data: { $ref: '#/components/schemas/SignupOtpVerifiedResult' }
         meta: { $ref: '#/components/schemas/RequestMeta' }
+    RecoveryOtpVerifiedEnvelope:
+      type: object
+      additionalProperties: false
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/RecoveryOtpVerified' }
+        meta: { $ref: '#/components/schemas/RequestMeta' }
     LoginEnvelope:
       type: object
       additionalProperties: false
@@ -3969,6 +4028,10 @@ components:
       description: Signup OTP verified and application profile provisioned; no session tokens are returned
       headers: *privateResponseHeaders
       content: { application/json: { schema: { $ref: '#/components/schemas/SignupOtpVerifiedEnvelope' } } }
+    RecoveryOtpVerifiedSuccess:
+      description: Recovery OTP verified; only a short-lived recovery access token and expiry are returned
+      headers: *privateResponseHeaders
+      content: { application/json: { schema: { $ref: '#/components/schemas/RecoveryOtpVerifiedEnvelope' } } }
     LoginSuccess:
       description: Provider session tokens and safe profile summary
       headers: *privateResponseHeaders
