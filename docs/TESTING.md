@@ -62,6 +62,9 @@ Install Chromium once with `npx playwright install chromium`.
   files, strips pending IDs, regenerates untrusted fallback data, and dispatches only
   validated managed-media UUIDs
 - page-size cap and unique reorder IDs
+- cross-system learner study catalog query defaults/bounds, active server-resolved
+  identity, published/nontrashed parent visibility, deterministic ordering, filtered
+  lesson/flashcard counts, standard envelopes, and route delegation
 - draft/published transitions and recoverable Trash behavior
 - published-state invariant validation for systems, topics, and lessons
 - collision-safe canonical lesson lookup across system/topic/lesson slugs, canonical list

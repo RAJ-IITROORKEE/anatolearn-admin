@@ -432,8 +432,13 @@ Status transitions and reorder operations have separate request schemas.
 4. Project a public DTO without editorial status, managed-media IDs (except image
    block references), or timestamps.
 
-Published endpoints cover systems, a system by slug, system topics, a topic by ID, all
-published lessons and flashcards for a topic, and eligible managed media by ID. Lesson
+Published endpoints cover systems, a system by slug, system topics, the cross-system
+study catalog at `GET /api/v1/topics`, a topic by ID, all published lessons and flashcards
+for a topic, and eligible managed media by ID. The catalog is paginated and ordered by
+system display order/ID then topic display order/ID. It returns only published nontrashed
+topics beneath active published nontrashed systems, alongside published nontrashed lesson
+counts and flashcard counts that reuse the learner card media-eligibility predicate.
+Lesson
 and flashcard lists are ordered by `displayOrder`, then ID; they are not paginated.
 Published lesson rows include nullable progress for the authenticated owner. Prisma applies
 the owner predicate in the lesson relation include, so the list uses one lesson query rather

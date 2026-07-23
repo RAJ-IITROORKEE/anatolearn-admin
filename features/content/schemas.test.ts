@@ -13,6 +13,7 @@ import {
   richContentToLegacyBlocks,
   richTextDraftDocumentSchema,
   richTextDocumentSchema,
+  studyCatalogQuerySchema,
 } from "./schemas";
 
 describe("content administration schemas", () => {
@@ -33,6 +34,13 @@ describe("content administration schemas", () => {
       shortDescription: "Circulation.",
       displayOrder: 0,
     }).success).toBe(true);
+  });
+
+  it("uses strict, bounded defaults for the learner study catalog", () => {
+    expect(studyCatalogQuerySchema.parse({})).toEqual({ page: 1, pageSize: 20 });
+    expect(studyCatalogQuerySchema.parse({ page: "2", pageSize: "100", q: " heart " })).toEqual({ page: 2, pageSize: 100, q: "heart" });
+    expect(studyCatalogQuerySchema.safeParse({ pageSize: "101" }).success).toBe(false);
+    expect(studyCatalogQuerySchema.safeParse({ userId: crypto.randomUUID() }).success).toBe(false);
   });
 
   it("accepts every supported structured lesson block", () => {

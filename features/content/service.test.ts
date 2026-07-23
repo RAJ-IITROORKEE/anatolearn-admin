@@ -22,7 +22,7 @@ vi.mock("@/lib/db/prisma", () => ({ prisma: {
   contentLesson: { findFirst: mocks.adminLessonFindFirst, findMany: mocks.lessonListFindMany, count: mocks.lessonListCount },
 } }));
 
-import { createContent, getAdminLessonBySlugs, getAdminLessonRouteById, getAdminTopicBySlugs, getPublishedLessons, listAdmin, reorderContent, updateContent } from "./service";
+import { createContent, getAdminLessonBySlugs, getAdminLessonRouteById, getAdminTopicBySlugs, getPublishedLessons, listAdmin, listStudyCatalog, reorderContent, updateContent } from "./service";
 
 const context = { actorId: crypto.randomUUID(), requestId: crypto.randomUUID() };
 const parentId = crypto.randomUUID();
@@ -248,6 +248,64 @@ describe("published lesson owner progress", () => {
     await expect(getPublishedLessons(parentId, "owner-id")).resolves.toMatchObject([{
       id: first, title: "Overview", contentBlocks: [], progress: null,
     }]);
+  });
+});
+
+describe("learner study catalog", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("returns only accessible published topics with matching lesson and flashcard eligibility counts", async () => {
+    const row = {
+      id: first,
+      title: "Heart overview",
+      slug: "heart-overview",
+      summary: "Heart anatomy.",
+      displayOrder: 2,
+      organSystem: { id: parentId, name: "Circulatory", slug: "circulatory", displayOrder: 1 },
+      _count: { lessons: 3, flashcards: 4 },
+    };
+    mocks.transaction.mockResolvedValue([[row], 1]);
+
+    await expect(listStudyCatalog({ page: 1, pageSize: 20, q: "heart" })).resolves.toEqual({
+      items: [{
+        id: first,
+        title: "Heart overview",
+        slug: "heart-overview",
+        summary: "Heart anatomy.",
+        organSystem: { id: parentId, name: "Circulatory", slug: "circulatory" },
+        publishedLessonCount: 3,
+        publishedFlashcardCount: 4,
+      }],
+      pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
+    });
+
+    expect(mocks.topicListFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        trashedAt: null,
+        status: "PUBLISHED",
+        title: { contains: "heart", mode: "insensitive" },
+        organSystem: { trashedAt: null, status: "PUBLISHED", isActive: true },
+      }),
+      include: expect.objectContaining({
+        _count: { select: expect.objectContaining({
+          lessons: { where: { trashedAt: null, status: "PUBLISHED" } },
+          flashcards: { where: {
+            trashedAt: null,
+            status: "PUBLISHED",
+            AND: [
+              { OR: [{ frontMediaId: null }, { frontMedia: { archivedAt: null } }] },
+              { OR: [{ backMediaId: null }, { backMedia: { archivedAt: null } }] },
+            ],
+          } },
+        }) },
+      }),
+      orderBy: [
+        { organSystem: { displayOrder: "asc" } },
+        { organSystem: { id: "asc" } },
+        { displayOrder: "asc" },
+        { id: "asc" },
+      ],
+    }));
   });
 });
 

@@ -278,6 +278,11 @@ published lesson DTO, ranking-only personal-dashboard system filtering, and safe
 multipart/provider error mapping. It requires no schema migration and preserves legacy
 content/dashboard fields and the hosted web recovery link.
 
+The approved learner catalog follow-up adds the authenticated, paginated cross-system
+`GET /api/v1/topics` session-selection read. It derives the active profile exclusively from
+the request, reuses existing published-content and flashcard-media eligibility, and adds no
+schema migration or dependency.
+
 Do not add another repository feature phase before external deployment acceptance. Install
 a valid random 32+ character `CRON_SECRET` and verify the Vercel daily plus GitHub Actions
 jobs; provision and

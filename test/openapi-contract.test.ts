@@ -52,7 +52,7 @@ function objectKeys(value: unknown, path = "data"): string[] {
 
 describe("OpenAPI/runtime contract", () => {
   it("has exact route parity, resolvable refs, unique IDs, and complete JSON response headers", () => {
-    expect(validateOpenApiContract()).toEqual({ operations: 114, operationIds: 114 });
+    expect(validateOpenApiContract()).toEqual({ operations: 115, operationIds: 115 });
   });
 
   it("keeps the OpenAPI TrashType enum aligned with the domain contract", () => {
@@ -126,6 +126,9 @@ describe("OpenAPI/runtime contract", () => {
     });
     expect(getOpenApiOperationContract("GET /admin/trash")?.responses).toMatchObject({
       "200": "TrashListSuccess", "400": "BadRequest", "401": "Unauthorized", "403": "Forbidden",
+    });
+    expect(getOpenApiOperationContract("GET /topics")?.responses).toMatchObject({
+      "200": "StudyCatalogListSuccess", "400": "BadRequest", "401": "Unauthorized", "500": "InternalError",
     });
     expect(getOpenApiOperationContract("POST /admin/trash/{type}/{id}/restore")?.responses).toMatchObject({
       "200": "TrashRestoreSuccess", "404": "NotFound", "409": "Conflict",

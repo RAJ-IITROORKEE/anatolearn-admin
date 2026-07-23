@@ -8,6 +8,7 @@ import { lessonMediaIds, readLessonContent } from "./schemas";
 
 type Resource = "organSystem" | "topic" | "contentLesson";
 type ListInput = { page: number; pageSize: number; q?: string; status?: PublishStatus; organSystemId?: string; topicId?: string; sortBy: string; sortOrder: "asc" | "desc" };
+type StudyCatalogInput = { page: number; pageSize: number; q?: string };
 type MutationContext = { actorId: string; requestId: string; userAgent?: string | null };
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 const lessonRouteInclude = {
@@ -27,7 +28,7 @@ function lessonImageIds(value: unknown) {
   return lessonMediaIds(value);
 }
 
-function pagination(total: number, input: ListInput) {
+function pagination(total: number, input: Pick<ListInput, "page" | "pageSize">) {
   return { page: input.page, pageSize: input.pageSize, total, totalPages: Math.ceil(total / input.pageSize) };
 }
 
@@ -328,6 +329,60 @@ export async function listPublishedTopics(slug: string, input: ListInput) {
   const skip = (input.page - 1) * input.pageSize;
   const [rows, total] = await prisma.$transaction([prisma.topic.findMany({ where, skip, take: input.pageSize, orderBy: [{ displayOrder: input.sortOrder }, { id: input.sortOrder }] }), prisma.topic.count({ where })]);
   return { items: rows.map((row) => topicDto(row)), pagination: pagination(total, input) };
+}
+
+export async function listStudyCatalog(input: StudyCatalogInput) {
+  const where: Prisma.TopicWhereInput = {
+    trashedAt: null,
+    status: "PUBLISHED",
+    ...(input.q ? { title: { contains: input.q, mode: "insensitive" } } : {}),
+    organSystem: { trashedAt: null, status: "PUBLISHED", isActive: true },
+  };
+  const skip = (input.page - 1) * input.pageSize;
+  const [rows, total] = await prisma.$transaction([
+    prisma.topic.findMany({
+      where,
+      skip,
+      take: input.pageSize,
+      orderBy: [
+        { organSystem: { displayOrder: "asc" } },
+        { organSystem: { id: "asc" } },
+        { displayOrder: "asc" },
+        { id: "asc" },
+      ],
+      include: {
+        organSystem: { select: { id: true, name: true, slug: true } },
+        _count: {
+          select: {
+            lessons: { where: { trashedAt: null, status: "PUBLISHED" } },
+            flashcards: {
+              where: {
+                trashedAt: null,
+                status: "PUBLISHED",
+                AND: [
+                  { OR: [{ frontMediaId: null }, { frontMedia: { archivedAt: null } }] },
+                  { OR: [{ backMediaId: null }, { backMedia: { archivedAt: null } }] },
+                ],
+              },
+            },
+          },
+        },
+      },
+    }),
+    prisma.topic.count({ where }),
+  ]);
+  return {
+    items: rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      slug: row.slug,
+      summary: row.summary,
+      organSystem: { id: row.organSystem.id, name: row.organSystem.name, slug: row.organSystem.slug },
+      publishedLessonCount: row._count.lessons,
+      publishedFlashcardCount: row._count.flashcards,
+    })),
+    pagination: pagination(total, input),
+  };
 }
 
 export async function getPublishedTopic(id: string) {

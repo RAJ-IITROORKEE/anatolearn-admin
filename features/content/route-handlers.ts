@@ -2,8 +2,8 @@ import { apiError, apiSuccess } from "@/lib/api/response";
 import { withApiErrors } from "@/lib/api/handler";
 import { hasRole, resolveRequestIdentity } from "@/lib/auth/request";
 import { hasSafeOrigin } from "@/lib/security/origin";
-import { contentLessonCreateSchema, contentLessonUpdateSchema, listQuerySchema, organSystemCreateSchema, organSystemUpdateSchema, reorderSchema, statusUpdateSchema, topicCreateSchema, topicUpdateSchema } from "./schemas";
-import { createContent, getAdmin, listAdmin, reorderContent, setStatus, updateContent } from "./service";
+import { contentLessonCreateSchema, contentLessonUpdateSchema, listQuerySchema, organSystemCreateSchema, organSystemUpdateSchema, reorderSchema, statusUpdateSchema, studyCatalogQuerySchema, topicCreateSchema, topicUpdateSchema } from "./schemas";
+import { createContent, getAdmin, listAdmin, listStudyCatalog, reorderContent, setStatus, updateContent } from "./service";
 import { resolveLessonContentFromForm } from "./lesson-multipart";
 import { moveToTrash } from "@/features/trash/service";
 import { cleanupDirectUploads, directUploadContext, formBoolean, formNullable, formNumber, formValue, resolveMediaField } from "@/features/media/direct-upload";
@@ -96,4 +96,13 @@ export function adminItemHandlers(resource: Resource) {
 export async function requireUser(request: Request, id: string) {
   const identity = await resolveRequestIdentity(request);
   return identity ? null : apiError("UNAUTHORIZED", "Authentication is required.", 401, id);
+}
+
+export function publishedTopicCatalogHandler(request: Request) {
+  return withApiErrors(async (id) => {
+    const denied = await requireUser(request, id); if (denied) return denied;
+    const query = studyCatalogQuerySchema.parse(Object.fromEntries(new URL(request.url).searchParams));
+    const result = await listStudyCatalog(query);
+    return apiSuccess(result.items, { requestId: id, pagination: result.pagination });
+  }, "/api/v1/topics");
 }

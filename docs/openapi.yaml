@@ -289,6 +289,20 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /topics:
+    get:
+      tags: [Published content]
+      operationId: listStudyCatalogTopics
+      description: Cross-system study catalog for an active server-resolved profile. Returns only published, nontrashed topics under active published nontrashed systems. Lesson and flashcard counts use current learner visibility; flashcards additionally require eligible unarchived side media. Ordered by system displayOrder/id, then topic displayOrder/id.
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+        - { $ref: '#/components/parameters/Q' }
+      responses:
+        '200': { $ref: '#/components/responses/StudyCatalogListSuccess' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalError' }
   /topics/{id}:
     parameters: [{ $ref: '#/components/parameters/Id' }]
     get:
@@ -1928,6 +1942,26 @@ components:
         summary: { type: [string, 'null'] }
         coverImageUrl: { type: [string, 'null'] }
         displayOrder: { type: integer, minimum: 0 }
+    StudyCatalogOrganSystem:
+      type: object
+      additionalProperties: false
+      required: [id, name, slug]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+    StudyCatalogTopic:
+      type: object
+      additionalProperties: false
+      required: [id, title, slug, summary, organSystem, publishedLessonCount, publishedFlashcardCount]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        slug: { type: string }
+        summary: { type: [string, 'null'] }
+        organSystem: { $ref: '#/components/schemas/StudyCatalogOrganSystem' }
+        publishedLessonCount: { type: integer, minimum: 0 }
+        publishedFlashcardCount: { type: integer, minimum: 0 }
     PublishedLesson:
       type: object
       additionalProperties: false
@@ -3662,6 +3696,14 @@ components:
         success: { type: boolean, const: true }
         data: { type: array, items: { $ref: '#/components/schemas/PublishedTopic' } }
         meta: { $ref: '#/components/schemas/ListMeta' }
+    StudyCatalogListEnvelope:
+      type: object
+      additionalProperties: false
+      required: [success, data, meta]
+      properties:
+        success: { type: boolean, const: true }
+        data: { type: array, items: { $ref: '#/components/schemas/StudyCatalogTopic' } }
+        meta: { $ref: '#/components/schemas/ListMeta' }
     PublishedLessonListEnvelope:
       type: object
       additionalProperties: false
@@ -4076,6 +4118,10 @@ components:
       description: Paginated published topics
       headers: *privateResponseHeaders
       content: { application/json: { schema: { $ref: '#/components/schemas/PublishedTopicListEnvelope' } } }
+    StudyCatalogListSuccess:
+      description: Paginated cross-system learner study catalog with eligible lesson and flashcard counts
+      headers: *privateResponseHeaders
+      content: { application/json: { schema: { $ref: '#/components/schemas/StudyCatalogListEnvelope' } } }
     PublishedLessonListSuccess:
       description: Non-paginated published lessons
       headers: *privateResponseHeaders

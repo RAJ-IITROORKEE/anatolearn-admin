@@ -152,6 +152,7 @@ are indistinguishable as `404` for item/parent lookups.
 | `GET /api/v1/organ-systems` | `page`, `pageSize`, `q`, `sortBy`, `sortOrder` | Paginated published active systems. Effective sort is `name` only when requested; otherwise `displayOrder`, then ID. |
 | `GET /api/v1/organ-systems/{slug}` | none | Published active system DTO or `404` |
 | `GET /api/v1/organ-systems/{slug}/topics` | `page`, `pageSize`, `q`, `sortOrder` | Paginated published topics; always sorted by display order then ID |
+| `GET /api/v1/topics` | `page`, `pageSize`, `q` | Paginated cross-system study catalog for session selection; ordered by system display order/ID, then topic display order/ID |
 | `GET /api/v1/topics/{id}` | none | Published topic whose parent is published/active, or `404` |
 | `GET /api/v1/topics/{id}/content` | none | All published lessons ordered by display order then ID, each with nullable owner progress `{ completed, completedAt, lastViewedAt }`; not paginated |
 | `GET /api/v1/topics/{id}/flashcards` | none | All eligible published flashcards ordered by display order then ID, each with this user's progress or `null`; not paginated |
@@ -160,6 +161,17 @@ are indistinguishable as `404` for item/parent lookups.
 The shared query parser also recognizes `status`, parent IDs, and additional `sortBy`
 values, but published handlers ignore options that are not listed as effective above.
 Unknown query keys fail strict validation with `400`.
+
+`GET /api/v1/topics` accepts only the three listed query fields. `page` defaults to 1,
+`pageSize` defaults to 20 and is capped at 100, and `q` is a trimmed title search capped
+at 200 characters. It requires the active profile resolved from the bearer token or SSR
+cookie; it accepts no user ID. Every item is exactly `{ id, title, slug, summary,
+organSystem: { id, name, slug }, publishedLessonCount, publishedFlashcardCount }`.
+Topics and systems must be published and nontrashed, and systems must be active. Lesson
+counts include only published, nontrashed lessons. Flashcard counts use the learner
+flashcard visibility predicate: published, nontrashed cards with both referenced side
+media absent or nonarchived. Validation failures are `400`, missing/invalid/inactive
+identity is `401`, and unexpected failures use the shared safe `500` envelope.
 
 Public content DTOs omit editorial status and timestamps. Organ-system DTOs expose
 nullable managed `coverMediaId` and `iconMediaId` fields alongside legacy image URLs;

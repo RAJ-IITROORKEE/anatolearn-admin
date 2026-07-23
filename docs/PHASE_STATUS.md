@@ -189,6 +189,28 @@ the topics, and 20 eligible assessment questions. No user account or test data w
 
 ## Final verification record
 
+### Learner study catalog follow-up (2026-07-23)
+
+- Added authenticated `GET /api/v1/topics` as a paginated cross-system study catalog for
+  learner content/flashcard session selection. It derives the active identity only from
+  the verified cookie or bearer request and accepts no user ID.
+- The catalog returns only published, nontrashed topics beneath published, active,
+  nontrashed systems. Rows include the required system summary and current eligible lesson
+  and flashcard counts. Flashcard counts reuse the existing learner endpoint's safe
+  unarchived front/back managed-media predicate. Ordering is system display order/ID then
+  topic display order/ID.
+- TDD red coverage first failed for the absent query schema, service, handler, and route.
+  Green coverage now exercises schema bounds, service eligibility/count projection,
+  authenticated handler envelopes including safe `500`, and route delegation.
+- Updated `docs/API_SPEC.md`, `docs/openapi.yaml`, `docs/ARCHITECTURE.md`,
+  `docs/IMPLEMENTATION_PLAN.md`, and `docs/TESTING.md`. No Prisma schema/migration,
+  dependency, seed, demo, environment, or unrelated README/setup/package/image changes
+  were made.
+- Verification: focused Vitest passed 5 files/43 tests; `npm run lint` passed; `npm run
+  typecheck` passed; and `npm run openapi:validate` passed with 115 operations and 115
+  unique operation IDs. Full Vitest and production build were not run for this focused
+  endpoint follow-up.
+
 ### Public legal pages follow-up (2026-07-22)
 
 - Added unauthenticated `/privacy` and `/terms` pages in a dedicated `(legal)` route group
