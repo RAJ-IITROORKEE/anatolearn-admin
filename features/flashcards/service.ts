@@ -3,6 +3,7 @@ import "server-only";
 import { Prisma, type AuditAction, type Flashcard, type PublishStatus } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { refreshTopicProgress } from "@/features/progress/projection";
+import { createPublicationNotification } from "@/features/notifications/publication";
 import { assertFlashcardMutable, assertFlashcardPublishable, assertFlashcardStatusTransition, FlashcardError } from "./domain";
 import { flashcardDto, flashcardProgressDto } from "./dto";
 import type { FlashcardCreateInput, FlashcardListInput, FlashcardProgressInput, FlashcardUpdateInput } from "./schemas";
@@ -159,6 +160,14 @@ export async function setFlashcardStatus(id: string, status: PublishStatus, cont
     }
     const after = await tx.flashcard.update({ where: { id }, data: { status } });
     await audit(tx, context, status === "ARCHIVED" ? "ARCHIVE" : status === "PUBLISHED" ? "PUBLISH" : "UPDATE", id, before, after);
+    if (before.status !== "PUBLISHED" && status === "PUBLISHED") {
+      await createPublicationNotification(tx, {
+        actorId: context.actorId,
+        publicationSources: [{ type: "FLASHCARD", id }],
+        title: "New flashcard available",
+        message: `New flashcard: ${before.frontText}.`,
+      });
+    }
     return flashcardDto(after, true);
   });
 }
@@ -207,6 +216,7 @@ export async function bulkSetFlashcardStatus(ids: string[], status: PublishStatu
       ordered.forEach((row) => assertPublishable(row.topic, true));
     }
     const results: Flashcard[] = [];
+    const newlyPublished: string[] = [];
     for (const row of ordered) {
       if (row.status === status) {
         results.push(row);
@@ -214,7 +224,16 @@ export async function bulkSetFlashcardStatus(ids: string[], status: PublishStatu
       }
       const after = await tx.flashcard.update({ where: { id: row.id }, data: { status } });
       await audit(tx, context, status === "ARCHIVED" ? "ARCHIVE" : status === "PUBLISHED" ? "PUBLISH" : "UPDATE", row.id, row, after);
+      if (row.status !== "PUBLISHED" && status === "PUBLISHED") newlyPublished.push(row.id);
       results.push(after);
+    }
+    if (newlyPublished.length) {
+      await createPublicationNotification(tx, {
+        actorId: context.actorId,
+        publicationSources: newlyPublished.map((id) => ({ type: "FLASHCARD", id })),
+        title: "New flashcards available",
+        message: `${newlyPublished.length} new flashcard${newlyPublished.length === 1 ? " is" : "s are"} available.`,
+      });
     }
     return results.map((row) => flashcardDto(row, true));
   });

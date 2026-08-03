@@ -17,11 +17,13 @@ const mocks = vi.hoisted(() => {
       flashcardProgress: { findUnique: vi.fn() },
     },
     refreshTopicProgress: vi.fn(),
+    createPublicationNotification: vi.fn(),
   };
 });
 
 vi.mock("@/lib/db/prisma", () => ({ prisma: mocks.prisma }));
 vi.mock("@/features/progress/projection", () => ({ refreshTopicProgress: mocks.refreshTopicProgress }));
+vi.mock("@/features/notifications/publication", () => ({ createPublicationNotification: mocks.createPublicationNotification }));
 
 import { Prisma } from "@prisma/client";
 import { bulkSetFlashcardStatus, reorderFlashcards, setFlashcardStatus, updateFlashcard, updateFlashcardProgress } from "./service";
@@ -170,6 +172,17 @@ describe("flashcard mutation locks", () => {
     expect(mocks.tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(mocks.tx.flashcard.findUnique.mock.invocationCallOrder[0]);
     expect(mocks.tx.$queryRaw.mock.calls[0][0].values).toContain(flashcardId);
   });
+
+  it("creates an inbox announcement on first publication only", async () => {
+    await setFlashcardStatus(flashcardId, "PUBLISHED", { actorId: userId, requestId: eventId });
+
+    expect(mocks.createPublicationNotification).toHaveBeenCalledWith(mocks.tx, {
+      actorId: userId,
+      publicationSources: [{ type: "FLASHCARD", id: flashcardId }],
+      title: "New flashcard available",
+      message: "New flashcard: Front.",
+    });
+  });
 });
 
 describe("flashcard bulk lifecycle", () => {
@@ -193,10 +206,35 @@ describe("flashcard bulk lifecycle", () => {
       { ...card, id: flashcardId, status: "ARCHIVED", topic: { status: "PUBLISHED", organSystem: { status: "PUBLISHED", isActive: true } } },
       { ...card, id: otherId, status: "ARCHIVED", topic: { status: "PUBLISHED", organSystem: { status: "PUBLISHED", isActive: true } } },
     ]);
-
     await bulkSetFlashcardStatus([flashcardId, otherId], "ARCHIVED", { actorId: userId, requestId: eventId });
     expect(mocks.tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(mocks.tx.flashcard.findMany.mock.invocationCallOrder[0]);
     expect(mocks.tx.$queryRaw.mock.calls[0][0].values).toEqual([otherId, flashcardId]);
+  });
+
+  it("coalesces first-time bulk publications into one inbox announcement", async () => {
+    const otherId = "10000000-0000-4000-8000-000000000001";
+    mocks.tx.$queryRaw.mockResolvedValue([{ id: otherId }, { id: flashcardId }]);
+    mocks.tx.flashcard.findMany.mockResolvedValue([
+      { ...card, id: flashcardId, status: "DRAFT", topic: { status: "PUBLISHED", organSystem: { status: "PUBLISHED", isActive: true } } },
+      { ...card, id: otherId, frontText: "Second", status: "DRAFT", topic: { status: "PUBLISHED", organSystem: { status: "PUBLISHED", isActive: true } } },
+    ]);
+    mocks.tx.flashcard.update.mockImplementation(({ where, data }: { where: { id: string }; data: { status: string } }) => Promise.resolve({
+      ...(where.id === flashcardId ? card : { ...card, id: otherId, frontText: "Second" }),
+      ...data,
+    }));
+
+    await bulkSetFlashcardStatus([flashcardId, otherId], "PUBLISHED", { actorId: userId, requestId: eventId });
+
+    expect(mocks.createPublicationNotification).toHaveBeenCalledTimes(1);
+    expect(mocks.createPublicationNotification).toHaveBeenCalledWith(mocks.tx, {
+      actorId: userId,
+      publicationSources: [
+        { type: "FLASHCARD", id: flashcardId },
+        { type: "FLASHCARD", id: otherId },
+      ],
+      title: "New flashcards available",
+      message: "2 new flashcards are available.",
+    });
   });
 });
 

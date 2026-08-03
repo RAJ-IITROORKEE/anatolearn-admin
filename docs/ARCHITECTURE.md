@@ -411,6 +411,14 @@ Learner notification lists expose only recipients for `SENT`/`PARTIAL` campaigns
 mark-read is owner-scoped and idempotent. Device tokens and immutable token snapshots are
 never returned by campaign, delivery, learner, or provider-status DTOs.
 
+First publication of a lesson, flashcard, or active question creates a transactional
+`IN_APP` `ANNOUNCEMENT`: recipients are materialized for active learners immediately and
+the campaign is final without a provider delivery. The push worker claims only `PUSH`
+campaigns, so in-app announcements never fabricate push receipts or consume provider work.
+Each announced content source has a unique persisted source record, so later draft/re-publish
+or active/inactive cycles cannot duplicate its first-publication inbox event; bulk flashcard
+publication coalesces new source records into one campaign.
+
 ## Core content data flow
 
 ### Admin mutation

@@ -1,9 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ transaction: vi.fn(), queryRaw: vi.fn(), groupBy: vi.fn() }));
-vi.mock("@/lib/db/prisma", () => ({ prisma: { $transaction: mocks.transaction, $queryRaw: mocks.queryRaw, notificationCampaign: { groupBy: mocks.groupBy } } }));
+const mocks = vi.hoisted(() => ({ transaction: vi.fn(), queryRaw: vi.fn(), groupBy: vi.fn(), findMany: vi.fn(), count: vi.fn() }));
 
-import { createCampaignWithIntent, getCampaignEvidence, getCampaignStatusCounts, scheduleCampaign, sendCampaign, updateCampaignWithIntent } from "./service";
+vi.mock("server-only", () => ({}));
+vi.mock("@/lib/db/prisma", () => ({
+  prisma: {
+    $transaction: mocks.transaction,
+    $queryRaw: mocks.queryRaw,
+    notificationCampaign: { groupBy: mocks.groupBy },
+    notificationRecipient: { findMany: mocks.findMany, count: mocks.count },
+  },
+}));
+
+import { createCampaignWithIntent, getCampaignEvidence, getCampaignStatusCounts, listLearnerNotifications, scheduleCampaign, sendCampaign, updateCampaignWithIntent } from "./service";
 
 const context = { actorId: "00000000-0000-4000-8000-000000000002", requestId: "request" };
 const input = { type: "ANNOUNCEMENT" as const, title: "Title", message: "Message", target: { type: "ALL_ACTIVE_USERS" as const } };
@@ -13,7 +22,7 @@ describe("notification service", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("does not begin a mutation when immediate sending is disabled", async () => {
-    await expect(sendCampaign("00000000-0000-4000-8000-000000000001", { actorId: "00000000-0000-4000-8000-000000000002", requestId: "request" }, false)).rejects.toMatchObject({ code: "PROVIDER_UNAVAILABLE", status: 503 });
+    await expect(sendCampaign(row.id, context, false)).rejects.toMatchObject({ code: "PROVIDER_UNAVAILABLE", status: 503 });
     expect(mocks.transaction).not.toHaveBeenCalled();
   });
 
@@ -89,12 +98,24 @@ describe("notification service", () => {
       notificationCampaign: { findUnique: vi.fn(), update: vi.fn() },
     };
     mocks.transaction.mockImplementation((callback: (client: typeof tx) => unknown) => callback(tx));
-    await expect(scheduleCampaign(
-      "00000000-0000-4000-8000-000000000001",
-      new Date("2026-07-14T12:00:59.999Z"),
-      { actorId: "00000000-0000-4000-8000-000000000002", requestId: "request" },
-    )).rejects.toMatchObject({ code: "SCHEDULE_TOO_SOON", status: 422 });
+    await expect(scheduleCampaign(row.id, new Date("2026-07-14T12:00:59.999Z"), context)).rejects.toMatchObject({ code: "SCHEDULE_TOO_SOON", status: 422 });
     expect(tx.notificationCampaign.findUnique).not.toHaveBeenCalled();
     expect(tx.notificationCampaign.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("learner notification listing", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.transaction.mockImplementation((operations: Promise<unknown>[]) => Promise.all(operations));
+    mocks.findMany.mockResolvedValue([]);
+    mocks.count.mockResolvedValueOnce(25).mockResolvedValueOnce(7);
+  });
+
+  it("returns an authoritative unread total with the paginated list", async () => {
+    const result = await listLearnerNotifications("10000000-0000-4000-8000-000000000001", { page: 1, pageSize: 20 });
+
+    expect(result.pagination).toEqual({ page: 1, pageSize: 20, total: 25, totalPages: 2, unreadTotal: 7 });
+    expect(mocks.count).toHaveBeenLastCalledWith(expect.objectContaining({ where: expect.objectContaining({ readAt: null }) }));
   });
 });

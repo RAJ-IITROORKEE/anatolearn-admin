@@ -3529,6 +3529,13 @@ components:
         pageSize: { type: integer }
         total: { type: integer }
         totalPages: { type: integer }
+    LearnerNotificationPagination:
+      allOf:
+        - $ref: '#/components/schemas/Pagination'
+        - type: object
+          required: [unreadTotal]
+          properties:
+            unreadTotal: { type: integer, minimum: 0, description: Total unread owned notifications across all pages. }
     ApiSuccess:
       type: object
       required: [success, data]
@@ -4030,7 +4037,13 @@ components:
       properties:
         success: { type: boolean, const: true }
         data: { type: array, items: { $ref: '#/components/schemas/LearnerNotification' } }
-        meta: { $ref: '#/components/schemas/ListMeta' }
+        meta:
+          type: object
+          additionalProperties: false
+          required: [requestId, pagination]
+          properties:
+            requestId: { type: string, format: uuid }
+            pagination: { $ref: '#/components/schemas/LearnerNotificationPagination' }
     ProviderStatusEnvelope:
       type: object
       required: [success, data, meta]

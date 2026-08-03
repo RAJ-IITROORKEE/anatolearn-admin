@@ -7,6 +7,9 @@ const { tx, prisma } = vi.hoisted(() => {
     question: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
     questionOption: { deleteMany: vi.fn() },
     auditLog: { create: vi.fn() },
+    notificationCampaign: { create: vi.fn() },
+    profile: { findMany: vi.fn() },
+    notificationRecipient: { createMany: vi.fn() },
   };
   return {
     tx,
@@ -16,8 +19,10 @@ const { tx, prisma } = vi.hoisted(() => {
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db/prisma", () => ({ prisma }));
+const createPublicationNotification = vi.hoisted(() => vi.fn());
+vi.mock("@/features/notifications/publication", () => ({ createPublicationNotification }));
 
-import { bulkSetQuestionStatus, createQuestion, duplicateQuestion, setQuestionStatus, updateQuestion } from "./service";
+import { bulkSetQuestionStatus, createQuestion, duplicateQuestion, setQuestionActivity, setQuestionStatus, updateQuestion } from "./service";
 
 const context = { actorId: crypto.randomUUID(), requestId: crypto.randomUUID() };
 const topicId = crypto.randomUUID();
@@ -116,6 +121,36 @@ describe("question transactional writes", () => {
     await setQuestionStatus(before.id, "DRAFT", context);
 
     expect(tx.$queryRaw.mock.calls.some((call) => call[0].strings.join(" ").includes("FOR SHARE OF topic, system"))).toBe(true);
+  });
+
+  it("creates an inbox announcement only for an active question's first publication", async () => {
+    const before = storedQuestion();
+    tx.question.findFirst.mockResolvedValue(before);
+    tx.question.update.mockResolvedValue({ ...before, status: "PUBLISHED" });
+
+    await setQuestionStatus(before.id, "PUBLISHED", context);
+
+    expect(createPublicationNotification).toHaveBeenCalledWith(tx, {
+      actorId: context.actorId,
+      publicationSources: [{ type: "QUESTION", id: before.id }],
+      title: "New practice question available",
+      message: "New practice question: Question.",
+    });
+  });
+
+  it("creates an inbox announcement when an already published question becomes active", async () => {
+    const before = storedQuestion({ status: "PUBLISHED", isActive: false });
+    tx.question.findFirst.mockResolvedValue(before);
+    tx.question.update.mockResolvedValue({ ...before, isActive: true });
+
+    await setQuestionActivity(before.id, true, context);
+
+    expect(createPublicationNotification).toHaveBeenCalledWith(tx, {
+      actorId: context.actorId,
+      publicationSources: [{ type: "QUESTION", id: before.id }],
+      title: "New practice question available",
+      message: "New practice question: Question.",
+    });
   });
 
   it("locks bulk questions in deterministic order before mutation", async () => {

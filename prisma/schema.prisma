@@ -66,6 +66,17 @@ enum NotificationStatus {
   CANCELLED
 }
 
+enum NotificationDeliveryMode {
+  PUSH
+  IN_APP
+}
+
+enum PublicationSourceType {
+  CONTENT_LESSON
+  FLASHCARD
+  QUESTION
+}
+
 enum NotificationDeliveryStatus {
   PENDING
   TICKETED
@@ -466,6 +477,7 @@ model Feedback {
 model NotificationCampaign {
   id                   String                  @id @default(uuid()) @db.Uuid
   type                 NotificationType
+  deliveryMode         NotificationDeliveryMode @default(PUSH)
   title                String
   message              String
   targetFilter         Json
@@ -487,12 +499,25 @@ model NotificationCampaign {
   createdAt            DateTime                @default(now()) @db.Timestamptz(3)
   updatedAt            DateTime                @updatedAt @db.Timestamptz(3)
   recipients           NotificationRecipient[]
+  publicationSources   NotificationPublicationSource[]
 
   @@index([status, createdAt, id])
   @@index([status, scheduledAt, id])
   @@index([status, nextProcessAt, id])
   @@index([createdById])
   @@index([cancelledById])
+}
+
+model NotificationPublicationSource {
+  id         String                @id @default(uuid()) @db.Uuid
+  sourceType PublicationSourceType
+  sourceId   String                @db.Uuid
+  campaignId String                @db.Uuid
+  campaign   NotificationCampaign  @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  createdAt  DateTime              @default(now()) @db.Timestamptz(3)
+
+  @@unique([sourceType, sourceId])
+  @@index([campaignId])
 }
 
 model NotificationRecipient {

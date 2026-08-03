@@ -16,6 +16,7 @@ import type {
   QuestionUpdateInput,
 } from "./schemas";
 import { moveToTrash } from "@/features/trash/service";
+import { createPublicationNotification } from "@/features/notifications/publication";
 
 type MutationContext = { actorId: string; requestId: string; userAgent?: string | null };
 const includeOptions = { topic: { select: { title: true } }, options: { orderBy: { displayOrder: "asc" as const } } };
@@ -218,6 +219,14 @@ async function setStatusInTransaction(
   }
   const after = await tx.question.update({ where: { id }, data: { status }, include: includeOptions });
   await audit(tx, context, status === "PUBLISHED" ? "PUBLISH" : status === "ARCHIVED" ? "ARCHIVE" : "UPDATE", id, before, after);
+  if (before.status !== "PUBLISHED" && status === "PUBLISHED" && before.isActive) {
+    await createPublicationNotification(tx, {
+      actorId: context.actorId,
+      publicationSources: [{ type: "QUESTION", id }],
+      title: "New practice question available",
+      message: `New practice question: ${before.questionText}.`,
+    });
+  }
   return after;
 }
 
@@ -257,6 +266,14 @@ export async function setQuestionActivity(id: string, isActive: boolean, context
     if (before.isActive === isActive) return questionDto(before);
     const after = await tx.question.update({ where: { id }, data: { isActive }, include: includeOptions });
     await audit(tx, context, isActive ? "ACTIVATE" : "DEACTIVATE", id, before, after);
+    if (before.status === "PUBLISHED" && !before.isActive && isActive) {
+      await createPublicationNotification(tx, {
+        actorId: context.actorId,
+        publicationSources: [{ type: "QUESTION", id }],
+        title: "New practice question available",
+        message: `New practice question: ${before.questionText}.`,
+      });
+    }
     return questionDto(after);
   });
 }

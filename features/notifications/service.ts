@@ -269,11 +269,12 @@ export async function listDeliveries(campaignId: string, input: { page: number; 
 
 export async function listLearnerNotifications(userId: string, input: { page: number; pageSize: number }) {
   const where = { userId, campaign: { status: { in: ["SENT", "PARTIAL"] as NotificationStatus[] } } };
-  const [rows, total] = await prisma.$transaction([
+  const [rows, total, unreadTotal] = await prisma.$transaction([
     prisma.notificationRecipient.findMany({ where, include: { campaign: true }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: (input.page - 1) * input.pageSize, take: input.pageSize }),
     prisma.notificationRecipient.count({ where }),
+    prisma.notificationRecipient.count({ where: { ...where, readAt: null } }),
   ]);
-  return { items: rows.map(learnerNotificationDto), pagination: { ...input, total, totalPages: Math.ceil(total / input.pageSize) } };
+  return { items: rows.map(learnerNotificationDto), pagination: { ...input, total, totalPages: Math.ceil(total / input.pageSize), unreadTotal } };
 }
 
 export async function markNotificationRead(userId: string, recipientId: string) {

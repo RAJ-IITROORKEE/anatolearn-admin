@@ -794,7 +794,7 @@ INVALID_AUDIENCE`/`SCHEDULE_TOO_SOON`, `503 PROVIDER_UNAVAILABLE`, and safe `500
 
 | Method and path | Access | Behavior |
 | --- | --- | --- |
-| `GET /api/v1/notifications` | User | Paginated owned recipients for `SENT`/`PARTIAL` campaigns |
+| `GET /api/v1/notifications` | User | Paginated owned recipients for final push campaigns and in-app publication announcements; `meta.pagination.unreadTotal` is the authoritative unread count across all pages |
 | `POST /api/v1/notifications/{recipientId}/read` | Owner | Idempotently set read time; `200` |
 
 The list accepts `page`, `pageSize`, and an optional campaign `status`. Because it reuses
@@ -805,7 +805,12 @@ type, title, message, campaign sent time, read time, and recipient creation time
 route uses the recipient ID, derives owner from identity, requires safe cookie origin,
 accepts only an absent body or strict `{}`, and returns the same `404` for absent, another user's,
 or non-final campaign recipients.
-Read state is operational history and is not added to `AuditLog`.
+Publishing a lesson, flashcard, or active question for the first time creates an immediate
+`ANNOUNCEMENT` recipient for every currently active learner. These inbox-only announcements
+do not send a push notification, require no registered device token, and reuse the same
+read-state contract. A persisted source record prevents duplicate events after a later
+draft/re-publish or active/inactive cycle; a bulk flashcard publish produces one announcement
+for its newly published sources. Read state is operational history and is not added to `AuditLog`.
 
 ### Provider evidence semantics
 

@@ -15,14 +15,16 @@ const mocks = vi.hoisted(() => ({
     contentLesson: { findFirst: vi.fn(), update: vi.fn() },
     auditLog: { create: vi.fn() },
   },
+  createPublicationNotification: vi.fn(),
 }));
 vi.mock("@/lib/db/prisma", () => ({ prisma: {
   $transaction: mocks.transaction,
   topic: { findFirst: mocks.adminTopicFindFirst, findMany: mocks.topicListFindMany, count: mocks.topicListCount },
   contentLesson: { findFirst: mocks.adminLessonFindFirst, findMany: mocks.lessonListFindMany, count: mocks.lessonListCount },
 } }));
+vi.mock("@/features/notifications/publication", () => ({ createPublicationNotification: mocks.createPublicationNotification }));
 
-import { createContent, getAdminLessonBySlugs, getAdminLessonRouteById, getAdminTopicBySlugs, getPublishedLessons, listAdmin, listStudyCatalog, reorderContent, updateContent } from "./service";
+import { createContent, getAdminLessonBySlugs, getAdminLessonRouteById, getAdminTopicBySlugs, getPublishedLessons, listAdmin, listStudyCatalog, reorderContent, setStatus, updateContent } from "./service";
 
 const context = { actorId: crypto.randomUUID(), requestId: crypto.randomUUID() };
 const parentId = crypto.randomUUID();
@@ -82,6 +84,45 @@ describe("content mutation locking", () => {
     const mediaQuery = mocks.tx.$queryRaw.mock.calls[1][0];
     expect(mediaQuery.strings.join(" ")).toContain("::uuid");
     expect(mediaQuery.values).toContain(mediaId);
+  });
+});
+
+describe("lesson publication notifications", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.transaction.mockImplementation((callback: (tx: typeof mocks.tx) => unknown) => callback(mocks.tx));
+  });
+
+  it("creates one inbox announcement when a lesson is first published", async () => {
+    const lesson = {
+      id: first,
+      topicId: parentId,
+      title: "Cardiac anatomy",
+      slug: "cardiac-anatomy",
+      summary: null,
+      contentBlocks: [{ type: "paragraph", text: "Lesson body" }],
+      estimatedReadingMinutes: 2,
+      displayOrder: 0,
+      status: "DRAFT" as const,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      trashedAt: null,
+      purgeAfter: null,
+      nextPurgeAttemptAt: null,
+      topic: { status: "PUBLISHED", organSystem: { status: "PUBLISHED", isActive: true } },
+    };
+    mocks.tx.$queryRaw.mockResolvedValue([{ id: first }]);
+    mocks.tx.contentLesson.findFirst.mockResolvedValue(lesson);
+    mocks.tx.contentLesson.update.mockResolvedValue({ ...lesson, status: "PUBLISHED" });
+
+    await setStatus("contentLesson", first, "PUBLISHED", context);
+
+    expect(mocks.createPublicationNotification).toHaveBeenCalledWith(mocks.tx, {
+      actorId: context.actorId,
+      publicationSources: [{ type: "CONTENT_LESSON", id: first }],
+      title: "New lesson available",
+      message: "New lesson: Cardiac anatomy.",
+    });
   });
 });
 

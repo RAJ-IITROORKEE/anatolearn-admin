@@ -85,6 +85,7 @@ async function claimCampaign() {
     const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       SELECT "id" FROM "NotificationCampaign"
       WHERE "nextProcessAt" <= clock_timestamp()
+        AND "deliveryMode" = 'PUSH'
         AND (
           "status" = 'SCHEDULED'
           OR ("status" = 'PROCESSING' AND "processingLeaseUntil" <= clock_timestamp())

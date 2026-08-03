@@ -206,6 +206,11 @@ routes are invoked by the same approximately ten-minute GitHub Actions schedule.
   processing is therefore explicitly at-least-once in that window.
 - Learner list/read operations are owner-scoped and expose only final `SENT`/`PARTIAL`
   campaigns. An absent, foreign, or non-final recipient returns the same `404`.
+- First publication of lessons, flashcards, and active questions materializes an `IN_APP`
+  announcement for then-active learners in the content mutation transaction. It does not
+  create a delivery, claim a provider receipt, or expose a token. The worker is restricted
+  to `PUSH` campaigns. A unique persisted content-source record prevents duplicate inbox
+  events after later republish or reactivation transitions.
 - HTTP 4xx (other than 429), malformed JSON, invalid provider shapes, and batch cardinality
   mismatch are permanent provider failures. Claimed deliveries fail immediately without
   retry; transient network/429/5xx failures retain bounded retries.

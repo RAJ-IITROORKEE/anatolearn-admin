@@ -13,6 +13,20 @@ resource; the adapter accepts its standard `KV_REST_API_*` credentials as well a
 self-managed `UPSTASH_REDIS_REST_*` pair. Provider, authenticated E2E, backup/restore,
 cron, and production deployment acceptance remain external gates.
 
+## In-app publication announcements follow-up (2026-08-03)
+
+- Added `NotificationDeliveryMode` with a backwards-compatible `PUSH` default and a new
+  `IN_APP` mode. The migration preserves push lifecycle checks while allowing immediately
+  materialized, delivery-free inbox announcements.
+- First publication of content lessons, flashcards, and active questions now creates a
+  transactional `ANNOUNCEMENT` for all active learners. Persisted unique source records make
+  the event idempotent across republish/reactivation cycles; bulk flashcard publication
+  coalesces newly published cards into one announcement. The existing learner notification/read
+  endpoints are reused; no push success is claimed.
+- Restricted worker campaign claims to `PUSH` mode and added publication, transition, and
+  worker-boundary regression coverage. Prisma schema/client, API specification,
+  architecture, and security documentation were updated.
+
 ## Phase 7 completed repository work
 
 - Enforced exact configured-origin CSRF checks for cookie mutations; bearer-native Expo

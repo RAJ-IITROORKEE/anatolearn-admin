@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db/prisma";
 import { ContentError, assertPublishedContentValid, assertStatusTransition } from "./domain";
 import { lessonDto, organSystemDto, topicDto } from "./dto";
 import { lessonMediaIds, readLessonContent } from "./schemas";
+import { createPublicationNotification } from "@/features/notifications/publication";
 
 type Resource = "organSystem" | "topic" | "contentLesson";
 type ListInput = { page: number; pageSize: number; q?: string; status?: PublishStatus; organSystemId?: string; topicId?: string; sortBy: string; sortOrder: "asc" | "desc" };
@@ -259,6 +260,15 @@ export async function setStatus(resource: Resource, id: string, status: PublishS
     }
     const after = resource === "organSystem" ? await tx.organSystem.update({ where: { id }, data: { status } }) : resource === "topic" ? await tx.topic.update({ where: { id }, data: { status } }) : await tx.contentLesson.update({ where: { id }, data: { status } });
     await audit(tx, context, status === "ARCHIVED" ? "ARCHIVE" : status === "PUBLISHED" ? "PUBLISH" : "UPDATE", resource, id, before, after);
+    if (resource === "contentLesson" && before.status !== "PUBLISHED" && status === "PUBLISHED") {
+      const lesson = before as Prisma.ContentLessonGetPayload<{ include: { topic: { include: { organSystem: true } } } }>;
+      await createPublicationNotification(tx, {
+        actorId: context.actorId,
+        publicationSources: [{ type: "CONTENT_LESSON", id }],
+        title: "New lesson available",
+        message: `New lesson: ${lesson.title}.`,
+      });
+    }
     return resource === "organSystem" ? organSystemDto(after as never, true) : resource === "topic" ? topicDto(after as never, true) : lessonDto(after as never, true);
   });
 }
