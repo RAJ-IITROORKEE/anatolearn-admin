@@ -243,13 +243,22 @@ routes are invoked by the same approximately ten-minute GitHub Actions schedule.
 
 ## Structured content controls
 
-- Lessons store only a discriminated JSON block union; unrestricted HTML is rejected.
-- Every block has bounded text/list sizes and rejects undeclared properties.
+- Lessons store only validated legacy blocks or a strict version 2 rich document with a
+  deterministic legacy fallback; unrestricted HTML is rejected.
+- Rich documents have bounded block, node, depth, text, list, attribute, mark, and link
+  values and reject undeclared properties. Bullet and ordered lists are explicitly limited
+  to three levels, and each flattened list-item subtree remains within the legacy item limit.
 - Image blocks require a managed media UUID; alt text is accepted but optional.
 - Create/update verifies referenced media exists and is not archived.
 - Stored lesson JSON is revalidated before it enters an API/UI DTO. Invalid stored
   content fails closed with a safe server error.
 - Publishing a lesson requires at least one block and published parent hierarchy.
+- Google Docs clipboard HTML and Mammoth DOCX output are never persisted directly. The
+  browser rebuilds an allowlisted semantic subset, strips active/unknown elements and unsafe
+  links, then validates the proposed paste/import document before mutation and again on save.
+- DOCX input is limited to `.docx`, 10 MB compressed, 2,000 ZIP entries, 20 MB per expanded
+  entry, and 50 MB total expanded content. External file access and embedded style maps are
+  disabled. Embedded images are omitted so imports cannot bypass managed-media validation.
 
 ## Upload and private Storage controls
 

@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, test, vi } from "vitest";
 
 import type { ContentBlock } from "@/features/content/schemas";
+import * as docxImport from "./docx-import";
 import { LessonEditor } from "./lesson-editor";
 
 const createObjectURL = vi.fn(() => "blob:lesson-image");
@@ -194,13 +195,186 @@ test("normalizes duplicate legacy IDs introduced by copy and paste", async () =>
   });
 });
 
-test("offers only allowlisted editor controls and no raw import or table surface", () => {
+test("offers only allowlisted editor controls plus DOCX import", () => {
   render(<LessonEditor initialBlocks={[]} />);
 
-  for (const name of ["Paragraph", "Heading 2", "Heading 3", "Heading 4", "Bold", "Italic", "Underline", "Strike", "Bulleted list", "Ordered list", "Block quote", "Add link", "Undo", "Redo", "Insert managed image"]) {
+  for (const name of ["Paragraph", "Heading 2", "Heading 3", "Heading 4", "Bold", "Italic", "Underline", "Strike", "Bulleted list", "Ordered list", "Indent list item", "Outdent list item", "Block quote", "Add link", "Undo", "Redo", "Insert managed image"]) {
     expect(screen.getByRole("button", { name })).toBeInTheDocument();
   }
-  expect(screen.queryByRole("button", { name: /table|html|docx|url image/i })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Import DOCX" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /table|html|url image/i })).not.toBeInTheDocument();
+});
+
+test("preserves nested Google Docs lists in rich content and deterministic fallback", async () => {
+  const { container } = render(<LessonEditor initialBlocks={[]} />);
+  const editor = screen.getByRole("textbox", { name: "Lesson rich text editor" });
+
+  fireEvent.paste(editor, {
+    clipboardData: {
+      getData: (type: string) => type === "text/html"
+        ? "<ul><li>Parent<ol><li>Child<ul><li>Grandchild</li></ul></li></ol></li></ul>"
+        : "",
+    },
+  });
+
+  await waitFor(() => {
+    const value = serialized(container);
+    expect(value.fallbackBlocks).toEqual([{ type: "bulletList", items: ["Parent\nChild\nGrandchild"] }]);
+    expect(JSON.stringify(value.richContent)).toContain('"type":"orderedList"');
+  });
+});
+
+test("indents and outdents list items with the toolbar", async () => {
+  const user = userEvent.setup();
+  const { container } = render(<LessonEditor initialBlocks={[]} />);
+  const editor = screen.getByRole("textbox", { name: "Lesson rich text editor" });
+
+  fireEvent.paste(editor, {
+    clipboardData: {
+      getData: (type: string) => type === "text/html" ? "<ul><li>Parent</li><li>Child</li></ul>" : "",
+    },
+  });
+  fireEvent.focus(editor);
+  fireEvent.keyDown(editor, { key: "End", code: "End", ctrlKey: true });
+
+  const indent = screen.getByRole("button", { name: "Indent list item" });
+  await waitFor(() => expect(indent).toBeEnabled());
+  await user.click(indent);
+  await waitFor(() => expect(JSON.stringify(serialized(container).richContent)).toContain('"type":"bulletList","content":[{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"Child"}]}]}]}'));
+
+  const outdent = screen.getByRole("button", { name: "Outdent list item" });
+  expect(outdent).toBeEnabled();
+  await user.click(outdent);
+  await waitFor(() => expect(serialized(container).fallbackBlocks).toEqual([{ type: "bulletList", items: ["Parent", "Child"] }]));
+});
+
+test("rejects pasted lists deeper than three levels without changing valid content", async () => {
+  const { container } = render(<LessonEditor initialBlocks={[{ type: "paragraph", text: "Keep this lesson" }]} />);
+  const editor = screen.getByRole("textbox", { name: "Lesson rich text editor" });
+
+  fireEvent.paste(editor, {
+    clipboardData: {
+      getData: (type: string) => type === "text/html"
+        ? "<ul><li>One<ul><li>Two<ul><li>Three<ul><li>Four</li></ul></li></ul></li></ul></li></ul>"
+        : "",
+    },
+  });
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("nested at most 3 levels");
+  expect(serialized(container).fallbackBlocks).toEqual([{ type: "paragraph", text: "Keep this lesson" }]);
+});
+
+test("normalizes rich content pasted from Google Docs", async () => {
+  const { container } = render(<LessonEditor initialBlocks={[]} />);
+  const editor = screen.getByRole("textbox", { name: "Lesson rich text editor" });
+
+  fireEvent.paste(editor, {
+    clipboardData: {
+      getData: (type: string) => type === "text/html"
+        ? '<h1>Cardiac cycle</h1><p><span style="font-weight: 700">Systole</span> <a href="javascript:alert(1)">unsafe</a></p><ul><li>Contraction</li></ul>'
+        : "",
+    },
+  });
+
+  await waitFor(() => {
+    const value = serialized(container);
+    expect(value.fallbackBlocks).toEqual([
+      { type: "heading", level: 2, text: "Cardiac cycle" },
+      { type: "paragraph", text: "Systole unsafe" },
+      { type: "bulletList", items: ["Contraction"] },
+    ]);
+    expect(JSON.stringify(value.richContent)).toContain('"type":"bold"');
+    expect(JSON.stringify(value.richContent)).not.toContain("javascript:");
+  });
+});
+
+test("leaves internal ProseMirror paste formatting to the editor", async () => {
+  const { container } = render(<LessonEditor initialBlocks={[]} />);
+  const editor = screen.getByRole("textbox", { name: "Lesson rich text editor" });
+
+  fireEvent.paste(editor, {
+    clipboardData: {
+      getData: (type: string) => type === "text/html"
+        ? '<p data-pm-slice="0 0 []" style="text-align: center">Centered text</p>'
+        : "Centered text",
+    },
+  });
+
+  await waitFor(() => expect(JSON.stringify(serialized(container).richContent)).toContain('"textAlign":"center"'));
+});
+
+test("imports a DOCX file into the existing editor and reports omitted images", async () => {
+  const user = userEvent.setup();
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  vi.spyOn(docxImport, "importDocxFile").mockResolvedValue({
+    html: "<h2>Imported anatomy</h2><p><strong>Reviewed copy</strong></p>",
+    messages: ["Embedded images were omitted. Add them with Insert managed image."],
+  });
+  const { container } = render(<LessonEditor initialBlocks={[{ type: "paragraph", text: "Replace me" }]} />);
+  const input = container.querySelector('input[type="file"][accept*=".docx"]') as HTMLInputElement;
+
+  await user.upload(input, new File(["PK\u0003\u0004docx"], "cardiac-cycle.docx", {
+    type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  }));
+
+  await waitFor(() => {
+    expect(serialized(container).fallbackBlocks).toEqual([
+      { type: "heading", level: 2, text: "Imported anatomy" },
+      { type: "paragraph", text: "Reviewed copy" },
+    ]);
+  });
+  expect(screen.getByRole("status")).toHaveTextContent("cardiac-cycle.docx");
+  expect(screen.getByRole("status")).toHaveTextContent("Embedded images were omitted");
+});
+
+test("keeps current content when DOCX import fails", async () => {
+  const user = userEvent.setup();
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  vi.spyOn(docxImport, "importDocxFile").mockRejectedValue(new Error("Choose a valid .docx file."));
+  const { container } = render(<LessonEditor initialBlocks={[{ type: "paragraph", text: "Keep this lesson" }]} />);
+  const input = container.querySelector('input[type="file"][accept*=".docx"]') as HTMLInputElement;
+
+  await user.upload(input, new File(["not a document"], "notes.docx", {
+    type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  }));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Choose a valid .docx file.");
+  expect(serialized(container).fallbackBlocks).toEqual([{ type: "paragraph", text: "Keep this lesson" }]);
+});
+
+test("does not replace edits made while a DOCX is converting", async () => {
+  const user = userEvent.setup();
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  let finishImport!: (result: { html: string; messages: string[] }) => void;
+  vi.spyOn(docxImport, "importDocxFile").mockReturnValue(new Promise((resolve) => { finishImport = resolve; }));
+  const { container } = render(<LessonEditor initialBlocks={[{ type: "paragraph", text: "Keep this" }]} />);
+  const input = container.querySelector('input[type="file"][accept*=".docx"]') as HTMLInputElement;
+
+  await user.upload(input, new File(["PK\u0003\u0004docx"], "slow.docx"));
+  expect(screen.getByRole("status")).toHaveTextContent("Importing slow.docx");
+  fireEvent.paste(screen.getByRole("textbox", { name: "Lesson rich text editor" }), {
+    clipboardData: { getData: (type: string) => type === "text/html" ? "<p>Edited while waiting</p>" : "Edited while waiting" },
+  });
+  await waitFor(() => expect(JSON.stringify(serialized(container).fallbackBlocks)).toContain("Edited while waiting"));
+  const editedBlocks = serialized(container).fallbackBlocks;
+  finishImport({ html: "<p>Imported replacement</p>", messages: [] });
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("changed while the DOCX was importing");
+  expect(serialized(container).fallbackBlocks).toEqual(editedBlocks);
+});
+
+test("keeps current content when imported DOCX content exceeds editor limits", async () => {
+  const user = userEvent.setup();
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  vi.spyOn(docxImport, "importDocxFile").mockResolvedValue({ html: `<p>${"x".repeat(100_001)}</p>`, messages: [] });
+  const { container } = render(<LessonEditor initialBlocks={[{ type: "paragraph", text: "Valid lesson" }]} />);
+  const input = container.querySelector('input[type="file"][accept*=".docx"]') as HTMLInputElement;
+
+  await user.upload(input, new File(["PK\u0003\u0004docx"], "too-long.docx"));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("exceeds the lesson editor limits");
+  expect(serialized(container).fallbackBlocks).toEqual([{ type: "paragraph", text: "Valid lesson" }]);
+  expect(screen.queryByText(/Imported too-long\.docx/)).not.toBeInTheDocument();
 });
 
 test("drops a managed image using a stable multipart name without serializing its blob URL", async () => {

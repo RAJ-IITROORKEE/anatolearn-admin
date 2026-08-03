@@ -286,7 +286,10 @@ JSON requests may alternatively send stored version 2 content containing strict
 `richContent` and its exact deterministic `fallbackBlocks`. The rich document accepts
 only the allowlisted document nodes, marks, links, colors, sizes, and alignments in the
 OpenAPI schemas; arbitrary nodes, attributes, and raw HTML are rejected. The server
-verifies that the supplied fallback exactly matches the rich document.
+verifies that the supplied fallback exactly matches the rich document. Bullet and ordered
+lists may be mixed up to three levels deep. Every list item begins with a paragraph and may
+then contain paragraphs or nested lists. Legacy fallback items preserve descendant text in
+preorder separated by newlines, but cannot preserve nested markers or indentation.
 
 Update accepts any non-empty subset of the corresponding create schema. Status is not
 accepted in a normal update. The resulting state is revalidated: updates cannot make a

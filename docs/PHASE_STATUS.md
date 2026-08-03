@@ -83,6 +83,54 @@ cron, and production deployment acceptance remain external gates.
 - Updated final README, setup, architecture, API, security, testing, plan, status, and
   machine-readable contract documentation from inspected code and diffs.
 
+### Lesson DOCX import follow-up (2026-08-02)
+
+- Added safe formatted paste from Google Docs and browser-local `.docx` import to the
+  continuous TipTap lesson editor. Imported headings shift into the supported H2-H4 range;
+  semantic paragraphs, flat lists, quotes, basic marks, and safe links are retained.
+- Added lazy Mammoth 1.12 conversion behind `.docx`, 10 MB compressed, 2,000-entry, 20 MB
+  per-entry, and 50 MB expanded ZIP limits. Converter/clipboard HTML is rebuilt through an
+  explicit allowlist; external files and embedded style maps are disabled. Embedded images
+  are omitted with guidance to use the existing private managed-image flow.
+- Import confirms replacement of non-empty content, exposes accessible pending/success/error
+  states, stops if the lesson changes during conversion, and validates the candidate against
+  the existing rich draft schema before replacing valid content. Existing server validation,
+  deterministic fallback generation, managed-media resolution, persistence, and audits are
+  unchanged.
+- Added importer and editor regressions for semantic normalization, active/unsafe markup,
+  internal TipTap paste, malformed/oversized/expanded archives, image omission, empty and
+  over-limit content, asynchronous edit protection, and user-visible import states. The
+  focused suite passes 28 tests.
+- Changed `components/lessons/docx-import.ts`, its test, the lesson editor and its test,
+  `package.json`/`package-lock.json`, and focused README/architecture/security/testing/plan/
+  status documentation. No API, OpenAPI, Prisma schema, migration, seed, environment,
+  storage, server-action, or production data change was required.
+- Verification: `npm run lint` passed; focused Vitest passed 2 files/28 tests; the full
+  Vitest run passed 175 files (3 skipped), 712 tests (15 skipped); `npm run build` passed;
+  `npm run typecheck`, and `npm run openapi:validate` passed all 115 operations. An active
+  dev process briefly retained an empty generated route manifest after the production build;
+  restarting `next dev` rebuilt the manifest and the final standalone typecheck passed.
+  `npm audit --audit-level=high` reports four existing high-severity advisories in dependency
+  paths including Next, PostCSS, Sharp, and `brace-expansion`; no forced or out-of-range
+  upgrade was applied.
+
+### Lesson nested-list and breadcrumb follow-up (2026-08-02)
+
+- Fixed breadcrumb construction for canonical lesson routes where the topic and lesson use
+  the same slug. Breadcrumbs now retain each pathname segment's source index, producing
+  unique React keys and the correct full lesson URL.
+- Added mixed bullet/ordered list nesting to the version 2 rich lesson contract, bounded to
+  three levels by the existing global depth limits and an explicit list-depth check. Legacy
+  fallback remains deterministic by flattening descendant item text in preorder with newline
+  separators; no Prisma schema or migration change was required.
+- Added accessible Indent/Outdent toolbar controls and bounded Tab/Shift+Tab behavior. Google
+  Docs paste and DOCX conversion retain safe nested lists, while a proposed over-depth paste
+  is rejected before it can replace valid serialized lesson content.
+- Added regressions for repeated breadcrumb slugs, three-level schema acceptance, fourth-level
+  rejection, deterministic fallback, nested Google Docs paste, toolbar indentation/outdent,
+  and non-mutating over-depth paste rejection. API and OpenAPI documentation now describe the
+  recursive list item contract.
+
 ### Admin UX follow-up (2026-07-20)
 
 - Made `/organ-systems/{systemSlug}/topics/{topicSlug}` the canonical browser editor

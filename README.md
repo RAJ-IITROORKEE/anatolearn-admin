@@ -51,8 +51,9 @@ is not a claim that the product is deployed. The current application includes:
   structured redacted error logging
 - Upstash REST rate-limiter support required in production, with a bounded in-memory
   fallback only in development/test; authentication uses separate client and account keys
-- A seven-block visual lesson editor with validated preview, keyboard/button reordering,
-  deletion confirmation, and dirty-navigation protection
+- A continuous rich lesson editor with validated preview, managed images, three-level
+  nested lists, safe formatted paste from Google Docs, local DOCX import, and
+  dirty-navigation protection
 - Recoverable Trash for organ systems, topics, lessons, flashcards, questions, feedback,
   and media:
   DELETE/archive aliases hide items immediately, use a 30-day database-clock retention
@@ -188,10 +189,15 @@ Supabase `anon`/`authenticated`, while retaining schema `USAGE` without `CREATE`
   snapshots. When Expo is disabled or incomplete, send mutations fail before campaign
   state changes; the cron worker returns zero work without mutation.
 
-The visual lesson editor emits the same strict seven-block JSON contract used by the API.
-Managed-media pickers select only unarchived assets and are integrated into content,
-flashcard, question, and option forms. Published DTOs retain legacy URL fields/media IDs;
-clients resolve eligible managed media through the authenticated published-media route.
+The visual lesson editor emits the same strict version 2 rich document and deterministic
+legacy fallback used by the API. Google Docs paste and DOCX files up to 10 MB are normalized
+in the browser before existing schema validation; DOCX import replaces current text after
+confirmation and omits embedded images so they can be added through the managed-image flow.
+Bullet and numbered lists support three levels through Indent/Outdent or Tab/Shift+Tab;
+legacy clients receive the same text in a deterministic flattened fallback.
+Managed media remains integrated into content, flashcard, question, and option forms.
+Published DTOs retain legacy URL fields/media IDs; clients resolve eligible managed media
+through the authenticated published-media route.
 
 ## Verification
 

@@ -85,9 +85,10 @@ export type RichTextNode = {
 const MAX_RICH_DEPTH = 8;
 const MAX_RICH_NODES = 2000;
 const MAX_RICH_TEXT = 100_000;
+export const MAX_RICH_LIST_DEPTH = 3;
 
 const richTextUnknownPreflight = z.unknown().superRefine((value, ctx) => {
-  const stack: Array<{ value: unknown; depth: number }> = [{ value, depth: 0 }];
+  const stack: Array<{ value: unknown; depth: number; listDepth: number }> = [{ value, depth: 0, listDepth: 0 }];
   let nodeCount = 0;
   let textLength = 0;
   while (stack.length) {
@@ -102,7 +103,12 @@ const richTextUnknownPreflight = z.unknown().superRefine((value, ctx) => {
       ctx.addIssue({ code: "custom", message: "Rich content nesting is too deep." });
       return;
     }
-    const node = current.value as { text?: unknown; content?: unknown };
+    const node = current.value as { type?: unknown; text?: unknown; content?: unknown };
+    const listDepth = current.listDepth + (node.type === "bulletList" || node.type === "orderedList" ? 1 : 0);
+    if (listDepth > MAX_RICH_LIST_DEPTH) {
+      ctx.addIssue({ code: "custom", message: `Rich lists may be nested at most ${MAX_RICH_LIST_DEPTH} levels.` });
+      return;
+    }
     if (typeof node.text === "string") {
       textLength += node.text.length;
       if (textLength > MAX_RICH_TEXT) {
@@ -112,7 +118,7 @@ const richTextUnknownPreflight = z.unknown().superRefine((value, ctx) => {
     }
     if (Array.isArray(node.content)) {
       for (let index = node.content.length - 1; index >= 0; index -= 1) {
-        stack.push({ value: node.content[index], depth: current.depth + 1 });
+        stack.push({ value: node.content[index], depth: current.depth + 1, listDepth });
       }
     }
   }
@@ -124,6 +130,12 @@ function inlineTextLength(content: RichTextText[] | undefined) {
 
 function paragraphSequenceLength(paragraphs: Array<{ content?: RichTextText[] }>) {
   return paragraphs.reduce((total, paragraph) => total + inlineTextLength(paragraph.content), 0) + Math.max(0, paragraphs.length - 1);
+}
+
+function richNodeText(node: RichTextNode): string {
+  if (typeof node.text === "string") return node.text;
+  const separator = ["blockquote", "listItem", "bulletList", "orderedList", "doc"].includes(node.type) ? "\n" : "";
+  return (node.content ?? []).map(richNodeText).join(separator);
 }
 
 function makeRichTextDocumentSchema(pendingImages: boolean) {
@@ -149,13 +161,13 @@ function makeRichTextDocumentSchema(pendingImages: boolean) {
   });
   const horizontalRule = z.object({ type: z.literal("horizontalRule"), attrs: z.object(legacyIdAttrs).strict().optional() }).strict();
 
-  const listItem: z.ZodType<RichTextNode> = z.object({
+  const listItem: z.ZodType<RichTextNode> = z.lazy(() => z.object({
     type: z.literal("listItem"),
-    content: z.array(paragraph).min(1).max(50),
+    content: z.array(z.union([paragraph, bulletList, orderedList])).min(1).max(50),
   }).strict().superRefine((node, ctx) => {
-    const length = paragraphSequenceLength(node.content);
-    if (length > 1000) ctx.addIssue({ code: "custom", path: ["content"], message: "List item text must be at most 1000 characters." });
-  });
+    if (node.content[0]?.type !== "paragraph") ctx.addIssue({ code: "custom", path: ["content", 0], message: "List items must begin with a paragraph." });
+    if (richNodeText(node).trim().length > 1000) ctx.addIssue({ code: "custom", path: ["content"], message: "List item text must be at most 1000 characters." });
+  }));
   const bulletList: z.ZodType<RichTextNode> = z.object({
     type: z.literal("bulletList"), attrs: z.object(legacyIdAttrs).strict().optional(),
     content: z.array(listItem).min(1).max(50),
@@ -211,12 +223,6 @@ export function legacyBlocksToRichContent(blocks: ContentBlock[]): RichTextDocum
     return { type: "horizontalRule", ...(block.id ? { attrs: legacyId } : {}) };
   });
   return richTextDocumentSchema.parse({ type: "doc", content });
-}
-
-function richNodeText(node: RichTextNode): string {
-  if (typeof node.text === "string") return node.text;
-  const separator = ["blockquote", "listItem", "bulletList", "orderedList", "doc"].includes(node.type) ? "\n" : "";
-  return (node.content ?? []).map(richNodeText).join(separator);
 }
 
 export function richContentToLegacyBlocks(document: RichTextDocument): ContentBlock[] {

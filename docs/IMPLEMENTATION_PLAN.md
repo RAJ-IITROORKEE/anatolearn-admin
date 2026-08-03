@@ -74,8 +74,10 @@ operations and are not a reason to describe the repository as bootstrap-pending.
 
 ## Phase 3: Core content administration
 
-**Status: complete.** The delivered UI uses a validated JSON lesson editor and
-managed-media UUID fields. Private signed previews are available to admins, and active
+**Status: complete.** The delivered UI uses a validated continuous rich lesson editor with
+managed-media UUID fields, three-level nested bullet/ordered lists, safe Google Docs paste,
+and browser-local DOCX import into the existing version 2 contract. Private signed previews
+are available to admins, and active
 authenticated users can resolve eligible published media through a dedicated
 300-second signed-URL endpoint. Final lint, typecheck, unit/component tests, E2E,
 build, and OpenAPI structural validation passed. Database-backed Storage/publication

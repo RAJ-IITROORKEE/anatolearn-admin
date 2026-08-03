@@ -90,10 +90,12 @@ describe("OpenAPI/runtime contract", () => {
     expect(listRefs).toEqual(["RichList"]);
 
     expect(schemaBlock("RichList")).toContain("type: { type: string, enum: [bulletList, orderedList] }");
+    expect(schemaBlock("RichListItem")).toContain("$ref: '#/components/schemas/RichList'");
     const examples = jsonExamples("RichList");
     expect(examples.map((example) => (example as { type?: unknown }).type)).toEqual(["bulletList", "orderedList"]);
     for (const example of examples) {
       expect(richTextDocumentSchema.safeParse({ type: "doc", content: [example] }).success).toBe(true);
+      expect(JSON.stringify(example)).toMatch(/\"type\":\"(?:bulletList|orderedList)\".*\"type\":\"(?:bulletList|orderedList)\"/);
     }
   });
 

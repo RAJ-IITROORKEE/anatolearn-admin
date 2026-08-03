@@ -11,17 +11,19 @@ import Link from "@tiptap/extension-link";
 import TextAlign from "@tiptap/extension-text-align";
 import { FontSize, TextStyle } from "@tiptap/extension-text-style";
 import Underline from "@tiptap/extension-underline";
+import { DOMParser as ProseMirrorDOMParser } from "@tiptap/pm/model";
 import { NodeSelection } from "@tiptap/pm/state";
 import { EditorContent, Extension, type JSONContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import {
-  AlignCenter, AlignLeft, AlignRight, Bold, ChevronDown, Eye, Highlighter, ImagePlus, Italic, Link2,
+  AlignCenter, AlignLeft, AlignRight, Bold, ChevronDown, Eye, FileUp, Highlighter, ImagePlus, IndentDecrease, IndentIncrease, Italic, Link2,
   List, ListOrdered, Quote, Redo2, RemoveFormatting, Strikethrough, UnderlineIcon, Undo2, X,
 } from "lucide-react";
 import { type CSSProperties, type DragEvent, type MouseEvent, type ReactNode, useEffect, useRef, useState } from "react";
 
 import {
   legacyBlocksToRichContent,
+  MAX_RICH_LIST_DEPTH,
   richContentToLegacyBlocks,
   richTextColors,
   richTextDraftDocumentSchema,
@@ -32,12 +34,14 @@ import {
   type RichTextNode,
 } from "@/features/content/schemas";
 import { Button } from "@/components/ui/button";
+import { importDocxFile, normalizeImportedHtml } from "./docx-import";
 
 type ExistingMedia = Record<string, { signedUrl: string; altText: string }>;
 type PendingMedia = { file: File; name: string; url: string };
 type PendingMediaMap = Map<string, PendingMedia>;
 type HoveredImage = { left: number; pos: number; top: number };
 type RichTextDraftDocument = ReturnType<typeof richTextDraftDocumentSchema.parse>;
+type LessonTiptapEditor = NonNullable<ReturnType<typeof useEditor>>;
 
 const acceptedImageTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
 const textColorOptions = [
@@ -92,6 +96,31 @@ const ManagedImage = Image.extend({
   },
 }).configure({ allowBase64: false, HTMLAttributes: { class: "mx-auto max-h-[28rem] max-w-full rounded-xl object-contain" } });
 
+function selectionListDepth(editor: LessonTiptapEditor) {
+  const { $from } = editor.state.selection;
+  let depth = 0;
+  for (let index = 0; index <= $from.depth; index += 1) {
+    const name = $from.node(index).type.name;
+    if (name === "bulletList" || name === "orderedList") depth += 1;
+  }
+  return depth;
+}
+
+const BoundedListNesting = Extension.create({
+  name: "boundedListNesting",
+  priority: 1000,
+  addKeyboardShortcuts() {
+    return {
+      Tab: () => {
+        if (!this.editor.isActive("listItem")) return false;
+        if (selectionListDepth(this.editor) >= MAX_RICH_LIST_DEPTH) return true;
+        return this.editor.commands.sinkListItem("listItem");
+      },
+      "Shift-Tab": () => this.editor.isActive("listItem") && this.editor.commands.liftListItem("listItem"),
+    };
+  },
+});
+
 const editorExtensions = [
   StarterKit.configure({
     code: false, codeBlock: false, hardBreak: false, heading: { levels: [2, 3, 4] }, link: false,
@@ -106,6 +135,7 @@ const editorExtensions = [
   TextAlign.configure({ types: ["heading", "paragraph"], alignments: ["left", "center", "right"] }),
   LegacyMetadata,
   ManagedImage,
+  BoundedListNesting,
 ];
 
 function cleanAttrs(attrs: Record<string, unknown> | undefined, names: string[]) {
@@ -145,6 +175,7 @@ function sanitizeNode(node: JSONContent): RichTextNode {
     const attrs = cleanAttrs(node.attrs, ["legacyId"]);
     return { type: node.type, ...(Object.keys(attrs).length ? { attrs } : {}), ...(content?.length ? { content } : {}) };
   }
+  if (node.type === "listItem") return { type: "listItem", content: content ?? [] };
   return { type: node.type ?? "listItem", ...(content?.length ? { content } : {}) };
 }
 
@@ -227,6 +258,9 @@ function ColorMenu({ activeColor, choices, clearLabel, icon, label, onSelect }: 
 
 function RichToolbar({ editor, onImage }: { editor: NonNullable<ReturnType<typeof useEditor>>; onImage: () => void }) {
   const chain = () => editor.chain().focus(undefined, { scrollIntoView: false });
+  const inListItem = editor.isActive("listItem");
+  const canIndentListItem = inListItem && selectionListDepth(editor) < MAX_RICH_LIST_DEPTH && editor.can().sinkListItem("listItem");
+  const canOutdentListItem = inListItem && editor.can().liftListItem("listItem");
   const setLink = () => {
     const current = editor.getAttributes("link").href as string | undefined;
     const href = window.prompt("Link URL (http, https, mailto, or /path)", current ?? "https://");
@@ -253,6 +287,8 @@ function RichToolbar({ editor, onImage }: { editor: NonNullable<ReturnType<typeo
     <ToolbarButton active={editor.isActive({ textAlign: "right" })} label="Align right" onClick={() => chain().setTextAlign("right").run()}><AlignRight className="size-4" /></ToolbarButton>
     <ToolbarButton active={editor.isActive("bulletList")} label="Bulleted list" onClick={() => chain().toggleBulletList().run()}><List className="size-4" /></ToolbarButton>
     <ToolbarButton active={editor.isActive("orderedList")} label="Ordered list" onClick={() => chain().toggleOrderedList().run()}><ListOrdered className="size-4" /></ToolbarButton>
+    <ToolbarButton disabled={!canIndentListItem} label="Indent list item" onClick={() => chain().sinkListItem("listItem").run()}><IndentIncrease className="size-4" /></ToolbarButton>
+    <ToolbarButton disabled={!canOutdentListItem} label="Outdent list item" onClick={() => chain().liftListItem("listItem").run()}><IndentDecrease className="size-4" /></ToolbarButton>
     <ToolbarButton active={editor.isActive("blockquote")} label="Block quote" onClick={() => chain().toggleBlockquote().run()}><Quote className="size-4" /></ToolbarButton>
     <ToolbarButton active={editor.isActive("link")} label="Add link" onClick={setLink}><Link2 className="size-4" /></ToolbarButton>
     <ToolbarButton label="Clear formatting" onClick={() => chain().unsetAllMarks().clearNodes().run()}><RemoveFormatting className="size-4" /></ToolbarButton>
@@ -313,10 +349,15 @@ export function LessonEditor({ initialBlocks, initialRichContent, existingMedia 
   const [richDocument, setRichDocument] = useState(initialDraft);
   const [serialized, setSerialized] = useState(() => serialize(initialDraft));
   const [editorError, setEditorError] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importFileName, setImportFileName] = useState<string | null>(null);
+  const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
   const [pendingMedia, setPendingMedia] = useState<PendingMediaMap>(new Map());
   const [editorRevision, setEditorRevision] = useState(0);
   const pendingRef = useRef(pendingMedia);
   const pickerRef = useRef<HTMLInputElement>(null);
+  const docxPickerRef = useRef<HTMLInputElement>(null);
   const serializedRef = useRef<HTMLInputElement>(null);
   const editorSurfaceRef = useRef<HTMLDivElement>(null);
   const mountedRef = useRef(false);
@@ -341,10 +382,10 @@ export function LessonEditor({ initialBlocks, initialRichContent, existingMedia 
      editorProps: {
        attributes: {
          "aria-label": "Lesson rich text editor",
-         class: "min-h-[28rem] px-5 py-6 text-[16px] leading-7 text-body outline-none sm:px-8 [&_blockquote]:border-l-4 [&_blockquote]:border-primary/30 [&_blockquote]:bg-primary-soft [&_blockquote]:px-4 [&_blockquote]:py-3 [&_h2]:text-2xl [&_h2]:font-bold [&_h3]:text-xl [&_h3]:font-bold [&_h4]:text-lg [&_h4]:font-bold [&_hr]:my-6 [&_li]:ml-6 [&_ol]:list-decimal [&_p]:min-h-6 [&_ul]:list-disc",
+          class: "min-h-[28rem] px-5 py-6 text-[16px] leading-7 text-body outline-none sm:px-8 [&_blockquote]:border-l-4 [&_blockquote]:border-primary/30 [&_blockquote]:bg-primary-soft [&_blockquote]:px-4 [&_blockquote]:py-3 [&_h2]:text-2xl [&_h2]:font-bold [&_h3]:text-xl [&_h3]:font-bold [&_h4]:text-lg [&_h4]:font-bold [&_hr]:my-6 [&_li]:my-1 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:min-h-6 [&_ul]:list-disc [&_ul]:pl-6",
          role: "textbox",
        },
-       handleDOMEvents: {
+        handleDOMEvents: {
          dragstart(view, event) {
            const target = event.target;
            if (!(target instanceof HTMLImageElement)) return false;
@@ -353,9 +394,27 @@ export function LessonEditor({ initialBlocks, initialRichContent, existingMedia 
            if (!node || node.type.name !== "image") return false;
            view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, position)));
            return false;
-         },
-       },
-     },
+          },
+        },
+        handlePaste(view, event) {
+          const html = event.clipboardData?.getData("text/html");
+          if (!html) return false;
+          if (html.includes("data-pm-slice")) return false;
+           const normalized = normalizeImportedHtml(html);
+           const container = document.createElement("div");
+           container.innerHTML = normalized.html;
+           const slice = ProseMirrorDOMParser.fromSchema(view.state.schema).parseSlice(container);
+           const transaction = view.state.tr.replaceSelection(slice).scrollIntoView();
+           const checked = richTextDraftDocumentSchema.safeParse(sanitizedDocumentValue(transaction.doc.toJSON()));
+           if (!checked.success) {
+             setEditorError(checked.error.issues[0]?.message ?? "Pasted content exceeds an editor limit.");
+             return true;
+           }
+           setEditorError(null);
+           view.dispatch(transaction);
+          return true;
+        },
+      },
     onUpdate({ editor: current }) {
       const raw = sanitizedDocumentValue(current.getJSON());
       const checked = richTextDraftDocumentSchema.safeParse(raw);
@@ -389,6 +448,34 @@ export function LessonEditor({ initialBlocks, initialRichContent, existingMedia 
     const pending = createPendingImage(file);
     if (!pending || !editor) return;
     editor.chain().focus(undefined, { scrollIntoView: false }).insertContent({ type: "image", attrs: { src: pending.value.url, uploadId: pending.uploadId, alt: "", caption: null, legacyId: pending.uploadId } }).run();
+  };
+  const importDocx = async (file: File) => {
+    if (!editor) return;
+    const hasContent = richDocument.content.some((node) => node.type !== "paragraph" || Boolean(node.content?.length));
+    if (hasContent && !window.confirm("Importing this DOCX will replace the current lesson content. Continue?")) return;
+
+    setImportError(null);
+    setImportFileName(file.name);
+    setImportStatus(null);
+    setIsImporting(true);
+    const contentBeforeImport = JSON.stringify(editor.getJSON());
+    try {
+      const result = await importDocxFile(file);
+      if (JSON.stringify(editor.getJSON()) !== contentBeforeImport) {
+        throw new Error("Lesson content changed while the DOCX was importing. Review your edits, then retry the import.");
+      }
+      const container = document.createElement("div");
+      container.innerHTML = result.html;
+      const candidate = sanitizedDocumentValue(ProseMirrorDOMParser.fromSchema(editor.schema).parse(container).toJSON());
+      const checked = richTextDraftDocumentSchema.safeParse(candidate);
+      if (!checked.success) throw new Error("The imported DOCX exceeds the lesson editor limits. Shorten or simplify it, then retry.");
+      editor.commands.setContent(checked.data, { emitUpdate: true });
+      setImportStatus(`Imported ${file.name}. Review the lesson before saving.${result.messages.length ? ` ${result.messages.join(" ")}` : ""}`);
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : "The DOCX could not be imported.");
+    } finally {
+      setIsImporting(false);
+    }
   };
   const dropImage = (event: DragEvent<HTMLDivElement>) => {
     const file = Array.from(event.dataTransfer.files).find((entry) => acceptedImageTypes.has(entry.type));
@@ -444,6 +531,9 @@ export function LessonEditor({ initialBlocks, initialRichContent, existingMedia 
     {[...pendingMedia.entries()].filter(([uploadId]) => activeUploadIds.has(uploadId)).map(([uploadId, media]) => <input accept="image/png,image/jpeg,image/webp" className="sr-only" key={uploadId} name={`lessonFile.${uploadId}`} ref={(input) => assignPendingFile(input, media.file)} tabIndex={-1} type="file" />)}
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0"><h3 className="text-lg font-bold text-foreground">Lesson content</h3><p className="mt-1 text-sm text-muted">Write and format one continuous learner page. Images remain private managed assets.</p></div>
+      <div className="flex flex-wrap gap-2">
+      <Button className="min-h-11" disabled={isImporting || !editor} onClick={() => docxPickerRef.current?.click()} type="button"><FileUp aria-hidden className="size-4" />{isImporting ? "Importing..." : "Import DOCX"}</Button>
+      <input accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="sr-only" disabled={isImporting} onChange={(event) => { const file = event.target.files?.[0]; if (file) void importDocx(file); event.target.value = ""; }} ref={docxPickerRef} tabIndex={-1} type="file" />
       <Dialog.Root>
         <Dialog.Trigger asChild><Button className="min-h-11" type="button"><Eye aria-hidden className="size-4" />Preview</Button></Dialog.Trigger>
         <Dialog.Portal>
@@ -456,9 +546,12 @@ export function LessonEditor({ initialBlocks, initialRichContent, existingMedia 
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+      </div>
     </div>
+    {importError ? <p className="rounded-xl border border-destructive/30 bg-destructive-soft p-4 text-sm font-semibold text-destructive" role="alert">{importError}</p> : null}
+    {isImporting || importStatus ? <p aria-live="polite" className="rounded-xl border border-primary/20 bg-primary-soft p-4 text-sm text-body" role="status">{isImporting ? `Importing ${importFileName ?? "DOCX"}. You can keep editing; the import will stop if content changes.` : importStatus}</p> : null}
     {editorError ? <p className="rounded-xl border border-destructive/30 bg-destructive-soft p-4 text-sm font-semibold text-destructive" role="alert">{editorError} Shorten or simplify the lesson before saving.</p> : null}
-    <section aria-label="Lesson rich text editor" className="min-w-0 max-w-full rounded-2xl border border-border bg-surface shadow-sm">
+    <section aria-busy={isImporting} aria-label="Lesson rich text editor" className="min-w-0 max-w-full rounded-2xl border border-border bg-surface shadow-sm">
       {editor ? <RichToolbar editor={editor} onImage={() => pickerRef.current?.click()} /> : <div className="border-b border-border bg-subtle p-3 text-sm text-muted">Loading editor...</div>}
       <input accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) insertImage(file); event.target.value = ""; }} ref={pickerRef} tabIndex={-1} type="file" />
       <div className="relative min-w-0 max-w-full overflow-x-auto" onDragOverCapture={(event) => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); }} onDropCapture={dropImage} onMouseLeave={() => setHoveredImage(null)} onMouseMove={updateHoveredImage} ref={editorSurfaceRef}>
@@ -470,6 +563,6 @@ export function LessonEditor({ initialBlocks, initialRichContent, existingMedia 
       <label className="grid gap-2 text-sm font-semibold">Image alt text <span className="font-normal text-muted">Optional</span><input className="min-h-11 rounded-xl border border-border bg-surface px-3" maxLength={300} onChange={(event) => editor.chain().focus(undefined, { scrollIntoView: false }).updateAttributes("image", { alt: event.target.value }).run()} value={String(selectedImage.alt ?? "")} /></label>
       <label className="grid gap-2 text-sm font-semibold">Caption <span className="font-normal text-muted">Optional</span><input className="min-h-11 rounded-xl border border-border bg-surface px-3" maxLength={500} onChange={(event) => editor.chain().focus(undefined, { scrollIntoView: false }).updateAttributes("image", { caption: event.target.value || null }).run()} value={String(selectedImage.caption ?? "")} /></label>
     </div> : null}
-    <p className="text-xs text-muted">Drop PNG, JPEG, or WebP files into the editor, or use Insert managed image. Upload validation runs again on save.</p>
+    <p className="text-xs text-muted">Paste formatted text from Google Docs, import a DOCX up to 10 MB, or write directly. Lists support three levels; use Indent/Outdent or Tab/Shift+Tab. DOCX import replaces current text and omits embedded images; add images through Insert managed image. Upload and content validation run again on save.</p>
   </div>;
 }

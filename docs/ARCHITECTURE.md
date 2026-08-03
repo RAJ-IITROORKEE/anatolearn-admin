@@ -20,6 +20,7 @@ SRS is present.
   Prisma profile is provisioned idempotently only after confirmation; password login can
   repair a marked identity after a transient provisioning failure.
 - Zod 4 request/content/environment validation
+- TipTap 3 rich lesson editing and lazy browser-side Mammoth 1.12 DOCX conversion
 - Vitest/React Testing Library and Playwright
 
 ## System boundary
@@ -524,11 +525,19 @@ and REST handlers validates fallback limits before upload, resolves images seque
 to managed-media UUIDs, strips pending IDs, regenerates the fallback, and validates the
 stored value. Client-supplied draft fallback data is never trusted.
 
-The admin UI now edits this contract visually rather than as raw JSON. It supports all
-seven block types, validated side-by-side learner preview, duplication, button and
-Alt+Up/Alt+Down reordering, confirmation before deleting non-empty content, and an
-unsaved-navigation/before-unload guard. The serialized server input still passes through
-the same strict schema; the editor does not broaden the API contract.
+The admin UI edits this contract as one continuous TipTap document rather than raw JSON.
+It supports the allowlisted headings, paragraphs, bullet/ordered lists nested to three
+levels, quotes, marks, links, managed images, formatting controls, a validated learner
+preview, and an unsaved-navigation/before-unload guard. List items can be moved with visible
+Indent/Outdent controls or Tab/Shift+Tab. The strict schema and proposed paste transaction
+are both validated before over-depth content can replace a valid editor document. Nested
+lists retain their rich structure while the deterministic legacy fallback flattens each
+top-level item in preorder with newline separators. Google Docs HTML paste is rebuilt as
+allowlisted semantic markup.
+DOCX import is lazy and browser-local through Mammoth, confirms replacement of non-empty
+content, and validates the candidate rich document before changing the editor. Embedded
+DOCX images are omitted and must use the existing managed-image flow. The serialized server
+input still passes through the same strict schema; neither import path broadens the API.
 
 The Media Library remains the server-action-backed, paginated/searchable management
 surface for unarchived assets. Resource forms use direct file inputs instead of selecting

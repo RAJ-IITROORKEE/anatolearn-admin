@@ -55,9 +55,18 @@ Install Chromium once with `npx playwright install chromium`.
 - every supported lesson block is accepted
 - raw HTML and malformed image blocks are rejected
 - rich lesson documents enforce allowlisted nodes/marks/attributes, bounded depth/node/
-  text limits, exact generated legacy fallbacks, and managed-media extraction
+  text limits, three-level mixed list nesting, exact flattened legacy fallbacks, and
+  managed-media extraction
 - rich text color and highlight enums stay synchronized with OpenAPI, and arbitrary color
   values remain rejected
+- Google Docs-style paste keeps semantic headings, lists, basic marks, and safe links while
+  stripping active markup and preserving TipTap's internal rich-copy path; over-depth lists
+  are rejected without replacing valid content
+- visible Indent/Outdent controls serialize nested items and restore flat items; the editor
+  also bounds Tab/Shift+Tab list movement to the same three-level server limit
+- browser-local DOCX import covers replacement, progress/error messaging, invalid names and
+  ZIP structures, 10 MB compressed and 50 MB expanded limits, embedded-image omission,
+  pre-replacement rich-schema limits, and edits made during asynchronous conversion
 - black-box admin lesson POST/PATCH coverage resolves stable rich `uploadId` multipart
   files, strips pending IDs, regenerates untrusted fallback data, and dispatches only
   validated managed-media UUIDs
@@ -68,7 +77,8 @@ Install Chromium once with `npx playwright install chromium`.
 - draft/published transitions and recoverable Trash behavior
 - published-state invariant validation for systems, topics, and lessons
 - collision-safe canonical lesson lookup across system/topic/lesson slugs, canonical list
-  links, UUID compatibility redirects, and operational-error propagation
+  links, UUID compatibility redirects, repeated-slug breadcrumb paths/keys, and
+  operational-error propagation
 - parent-list create redirects for systems, global/scoped topics, lessons, flashcards, and
   quiz/test questions; scoped topic creation overrides submitted parents and compensates
   uploads when the server-resolved parent is unavailable

@@ -138,6 +138,51 @@ describe("content administration schemas", () => {
     ]);
   });
 
+  it("accepts three nested mixed list levels and flattens them deterministically", () => {
+    const richContent = richTextDocumentSchema.parse({
+      type: "doc",
+      content: [{
+        type: "bulletList",
+        content: [{
+          type: "listItem",
+          content: [
+            { type: "paragraph", content: [{ type: "text", text: "Parent" }] },
+            {
+              type: "orderedList",
+              content: [{
+                type: "listItem",
+                content: [
+                  { type: "paragraph", content: [{ type: "text", text: "Child" }] },
+                  {
+                    type: "bulletList",
+                    content: [{ type: "listItem", content: [{ type: "paragraph", content: [{ type: "text", text: "Grandchild" }] }] }],
+                  },
+                ],
+              }],
+            },
+          ],
+        }],
+      }],
+    });
+
+    expect(richContentToLegacyBlocks(richContent)).toEqual([
+      { type: "bulletList", items: ["Parent\nChild\nGrandchild"] },
+    ]);
+  });
+
+  it("rejects rich lists deeper than three levels", () => {
+    const paragraph = (value: string) => ({ type: "paragraph", content: [{ type: "text", text: value }] });
+    const nestedList = (level: number): object => ({
+      type: level % 2 ? "bulletList" : "orderedList",
+      content: [{
+        type: "listItem",
+        content: [paragraph(`Level ${level}`), ...(level < 4 ? [nestedList(level + 1)] : [])],
+      }],
+    });
+
+    expect(richTextDocumentSchema.safeParse({ type: "doc", content: [nestedList(1)] }).success).toBe(false);
+  });
+
   it("collects and downconverts every managed media ID in a valid rich document", () => {
     const mediaIds = [crypto.randomUUID(), crypto.randomUUID()];
     const richContent = richTextDocumentSchema.parse({

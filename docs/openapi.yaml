@@ -3006,7 +3006,7 @@ components:
       type: object
       additionalProperties: false
       required: [type, content]
-      description: Strict TipTap-compatible AST. The server additionally limits total nodes to 2000, depth to 8, and total text to 100000 characters.
+      description: Strict TipTap-compatible AST. The server additionally limits total nodes to 2000, depth to 8, total text to 100000 characters, and mixed bullet/ordered lists to three levels.
       properties:
         type: { type: string, const: doc }
         content:
@@ -3135,7 +3135,7 @@ components:
     RichList:
       type: object
       additionalProperties: false
-      description: A bulletList renders unordered items; an orderedList renders the same item structure with ordinal markers.
+      description: A bulletList renders unordered items; an orderedList renders the same item structure with ordinal markers. Lists may be mixed up to three levels deep.
       required: [type, content]
       properties:
         type: { type: string, enum: [bulletList, orderedList] }
@@ -3145,12 +3145,12 @@ components:
           properties: { legacyId: { type: string, minLength: 1, maxLength: 100 } }
         content: { type: array, minItems: 1, maxItems: 50, items: { $ref: '#/components/schemas/RichListItem' } }
       examples:
-        - {"type":"bulletList","content":[{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"Vena cava"}]}]}]}
-        - {"type":"orderedList","content":[{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"Trace blood flow"}]}]}]}
+        - {"type":"bulletList","content":[{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"Vena cava"}]},{"type":"orderedList","content":[{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"Inferior vena cava"}]}]}]}]}]}
+        - {"type":"orderedList","content":[{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"Trace blood flow"}]},{"type":"bulletList","content":[{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"Identify each chamber"}]}]}]}]}]}
     RichListItem:
       type: object
       additionalProperties: false
-      description: Contains paragraphs only; combined text including paragraph separators is limited to 1000 characters.
+      description: Begins with a paragraph and may then contain paragraphs or nested bullet/ordered lists. The full flattened subtree is limited to 1000 characters; legacy fallback preserves descendant text in preorder with newline separators.
       required: [type, content]
       properties:
         type: { type: string, const: listItem }
@@ -3158,7 +3158,12 @@ components:
           type: array
           minItems: 1
           maxItems: 50
-          items: { $ref: '#/components/schemas/RichParagraph' }
+          prefixItems:
+            - { $ref: '#/components/schemas/RichParagraph' }
+          items:
+            oneOf:
+              - { $ref: '#/components/schemas/RichParagraph' }
+              - { $ref: '#/components/schemas/RichList' }
     RichHorizontalRule:
       type: object
       additionalProperties: false
