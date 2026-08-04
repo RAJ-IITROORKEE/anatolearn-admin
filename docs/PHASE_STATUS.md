@@ -15,15 +15,17 @@ cron, and production deployment acceptance remain external gates.
 
 ## Content Review publication incident (2026-08-05)
 
-- Content lesson publishing returned the generic action error because the configured database
-  had not received `20260721140000_add_in_app_notification_delivery_mode` and
-  `20260721150000_add_publication_notification_sources`, while the publication service was
-  already writing those notification records in the same transaction.
-- Applied both pending migrations with `npx prisma migrate deploy`; `npx prisma migrate status`
-  now reports no pending migrations. DOCX-edited lesson payloads were also checked against the
-  current strict rich-content schema; the existing parser accepts the generated documents.
-- Future deployments must run `prisma migrate deploy` before serving the publication-notification
-  application version.
+- Content lesson publishing returned the generic action error because the raw recipient
+  materialization insert omitted required Prisma-managed `NotificationRecipient.id` and
+  `updatedAt` columns. PostgreSQL returned `23502` inside the publication transaction, while
+  the action mapper safely hid the unexpected database detail.
+- Updated the insert to generate the recipient UUID and both timestamps in SQL, and added a
+  regression assertion for the complete insert shape. The configured database has both
+  publication-notification migrations deployed; future deployments must still run
+  `prisma migrate deploy` before serving the publication-notification application version.
+- DOCX-edited lesson payloads were checked against the current strict rich-content schema; the
+  existing parser accepts the generated documents, so no DOCX-specific persistence change was
+  required.
 
 ## In-app publication announcements follow-up (2026-08-03)
 

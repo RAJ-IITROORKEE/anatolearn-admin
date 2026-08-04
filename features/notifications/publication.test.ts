@@ -48,7 +48,9 @@ describe("publication notifications", () => {
       skipDuplicates: true,
     });
     const insert = mocks.executeRaw.mock.calls[0][0];
-    expect(insert.strings.join(" ")).toContain('INSERT INTO "NotificationRecipient"');
+    expect(insert.strings.join(" ")).toContain('INSERT INTO "NotificationRecipient" ("id", "campaignId", "userId", "createdAt", "updatedAt")');
+    expect(insert.strings.join(" ")).toContain("gen_random_uuid()");
+    expect(insert.strings.join(" ")).toContain("CURRENT_TIMESTAMP");
     expect(insert.strings.join(" ")).toContain('FROM "Profile"');
     expect(insert.values).toContain("campaign-id");
   });

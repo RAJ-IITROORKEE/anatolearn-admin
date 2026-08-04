@@ -44,8 +44,8 @@ export async function createPublicationNotification(
   });
   // Keep recipient materialization in the publishing transaction without loading every learner into Node.
   await tx.$executeRaw(Prisma.sql`
-    INSERT INTO "NotificationRecipient" ("campaignId", "userId")
-    SELECT ${campaign.id}::uuid, "id"
+    INSERT INTO "NotificationRecipient" ("id", "campaignId", "userId", "createdAt", "updatedAt")
+    SELECT gen_random_uuid(), ${campaign.id}::uuid, "id", CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
     FROM "Profile"
     WHERE "role" = 'USER'::"UserRole" AND "isActive" = true
     ON CONFLICT ("campaignId", "userId") DO NOTHING
