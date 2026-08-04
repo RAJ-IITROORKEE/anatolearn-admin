@@ -4,14 +4,26 @@
 
 **Phase 7: Hardening and delivery — repository implementation complete; external gates open**
 
-Date: 2026-07-16
+Date: 2026-08-05
 
-Phases 0-7 are implemented and all fourteen migrations are current in the configured
+Phases 0-7 are implemented and all sixteen migrations are current in the configured
 development database. The product is not claimed as fully deployed or production-ready.
 `npm run env:check` passes locally. The production Vercel project now has a free Upstash
 resource; the adapter accepts its standard `KV_REST_API_*` credentials as well as the
 self-managed `UPSTASH_REDIS_REST_*` pair. Provider, authenticated E2E, backup/restore,
 cron, and production deployment acceptance remain external gates.
+
+## Content Review publication incident (2026-08-05)
+
+- Content lesson publishing returned the generic action error because the configured database
+  had not received `20260721140000_add_in_app_notification_delivery_mode` and
+  `20260721150000_add_publication_notification_sources`, while the publication service was
+  already writing those notification records in the same transaction.
+- Applied both pending migrations with `npx prisma migrate deploy`; `npx prisma migrate status`
+  now reports no pending migrations. DOCX-edited lesson payloads were also checked against the
+  current strict rich-content schema; the existing parser accepts the generated documents.
+- Future deployments must run `prisma migrate deploy` before serving the publication-notification
+  application version.
 
 ## In-app publication announcements follow-up (2026-08-03)
 
